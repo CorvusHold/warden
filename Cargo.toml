@@ -1,0 +1,7 @@
+[package]
+name = "warden"
+description = "The worker daemon for Corvus"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]

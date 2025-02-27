@@ -1,6 +1,6 @@
 # PostgreSQL Backup and Restore
 
-A Rust library for managing PostgreSQL database backups and restores, inspired by Barman (Backup and Recovery Manager).
+A Rust library for managing PostgreSQL database backups and restores, inspired by Barman (Backup and Recovery Manager) documentation about best practices for managing backups and restores processes.
 
 ## Features
 
@@ -18,15 +18,6 @@ A Rust library for managing PostgreSQL database backups and restores, inspired b
 
 - PostgreSQL server (with `pg_basebackup` and `pg_dump` utilities)
 - Rust 1.56 or later
-
-## Installation
-
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-postgresql = { path = "/path/to/postgresql" }
-```
 
 ## Usage
 
@@ -124,7 +115,3 @@ This library is structured around several key components:
 3. **Restore Managers**: Specialized managers for different restore scenarios.
 4. **Wrappers**: Low-level wrappers around PostgreSQL utilities like `pg_basebackup` and `pg_dump`.
 5. **Catalog**: Tracking and management of backup metadata.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
