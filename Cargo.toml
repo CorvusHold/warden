@@ -4,4 +4,14 @@ description = "The worker daemon for Corvus"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = [
+    "console",
+    "overwatch",
+]
+
 [dependencies]
+clap = { version = "4.5.31", features = ["derive"] }
+tokio = { version = "1.36.0", features = ["full"] }
+anyhow = "1.0.85"
+console = { path = "./console" }
