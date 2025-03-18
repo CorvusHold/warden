@@ -5,13 +5,14 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [
-    "console",
-    "overwatch",
-]
+members = ["common", "console", "daemon", "overwatch"]
 
 [dependencies]
-clap = { version = "4.5.31", features = ["derive"] }
-tokio = { version = "1.36.0", features = ["full"] }
+clap = { version = "4.5.32", features = ["derive"] }
+tokio = { version = "1.44.1", features = ["full"] }
 anyhow = "1.0.85"
 console = { path = "./console" }
+daemon = { path = "./daemon" }
+env_logger = "0.11.7"
+log = "0.4.26"
+common = { path = "./common" }

@@ -22,6 +22,9 @@ enum Commands {
 
     /// Restart the warden daemon
     Restart,
+
+    /// Run the warden daemon in the foreground
+    Run,
 }
 
 #[derive(Subcommand, Debug)]
@@ -34,10 +37,21 @@ enum ConsoleCommands {
 
     /// Toggle the Warden service on or off
     Toggle(console::cli::commands::toggle::Toggle),
+
+    /// Manage the Warden configuration
+    Config(console::cli::commands::config::Config),
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    env_logger::Builder::from_default_env()
+        .format_timestamp(None)
+        .format_level(true)
+        .format_module_path(false)
+        .format_indent(Some(4))
+        .filter_level(log::LevelFilter::Info)
+        .try_init()?;
+
     let cli = Cli::parse();
 
     match cli.command {
@@ -51,18 +65,28 @@ async fn main() -> Result<()> {
             ConsoleCommands::Toggle(toggle) => {
                 toggle.run().await?;
             }
+            ConsoleCommands::Config(config) => {
+                config.run().await?;
+            }
         },
+        Commands::Run => {
+            log::info!("Running warden daemon in the foreground...");
+            daemon::cli::run::execute().await?
+        }
         Commands::Start => {
-            println!("Starting warden daemon...");
-            // TODO: Implement daemon start logic
+            log::info!("Starting daemonization process...");
+            daemon::cli::start::execute().await?
         }
         Commands::Stop => {
-            println!("Stopping warden daemon...");
-            // TODO: Implement daemon stop logic
+            log::info!("Stopping warden daemon...");
+            daemon::cli::stop::execute().await?
         }
         Commands::Restart => {
-            println!("Restarting warden daemon...");
-            // TODO: Implement daemon restart logic
+            log::info!("Restarting warden daemon...");
+            // First stop the daemon
+            daemon::cli::stop::execute().await?;
+            // Then start it again
+            daemon::cli::start::execute().await?
         }
     }
 
