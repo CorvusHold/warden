@@ -19,6 +19,8 @@ enum Commands {
     Status(console::cli::commands::status::Status),
     /// Toggle the Warden service on or off
     Toggle(console::cli::commands::toggle::Toggle),
+    /// Manage the Warden configuration
+    Config(console::cli::commands::config::Config),
 }
 
 #[tokio::main]
@@ -29,6 +31,7 @@ async fn main() -> Result<()> {
         Commands::Enroll(enroll) => enroll.run().await?,
         Commands::Status(status) => status.run().await?,
         Commands::Toggle(toggle) => toggle.run().await?,
+        Commands::Config(config) => config.run().await?,
     }
     Ok(())
 }

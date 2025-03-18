@@ -1,0 +1,11 @@
+[package]
+name = "common"
+description = "Common utilities for the Warden service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+config = "0.13.4"
+serde = { version = "1.0.218", features = ["derive"] }
+toml = "0.8.12"
+shellexpand = "3.1.0"

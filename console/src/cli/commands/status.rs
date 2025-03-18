@@ -16,6 +16,7 @@
 
 use anyhow::{anyhow, Result};
 use clap::Args;
+use common::config::load_config;
 use serde::Serialize;
 use serde_json;
 use serde_yaml;
@@ -39,19 +40,31 @@ struct WardenStatus {
 
 impl Status {
     pub async fn run(self) -> Result<()> {
-        println!("Getting status (fake API call)...");
+        println!("Getting status...");
 
-        // TODO: Implement the actual status logic here
-        // This is where you would call the API to get the status of the services
-        // For now, we'll just create some fake status information
+        // Load the configuration to get the feature status
+        let config = load_config()?;
+
+        // TODO: In the future, implement actual API calls to get real-time status
+        // For now, we'll use the configuration to determine the status
 
         let status = WardenStatus {
-            warden_version: "0.1.0".to_string(),
-            hold_version: "0.2.0".to_string(),
-            compatible: true,
-            last_sync: "2024-01-01T00:00:00Z".to_string(),
-            overwatch: "running".to_string(),
-            postgres_backup: "stopped".to_string(),
+            warden_version: env!("CARGO_PKG_VERSION").to_string(),
+            hold_version: "0.2.0".to_string(), // This would come from an API call in the future
+            compatible: true,                  // This would come from an API call in the future
+            last_sync: "2024-01-01T00:00:00Z".to_string(), // This would come from an API call
+            overwatch: if config.features.overwatch {
+                "running"
+            } else {
+                "stopped"
+            }
+            .to_string(),
+            postgres_backup: if config.features.postgres_backup {
+                "running"
+            } else {
+                "stopped"
+            }
+            .to_string(),
         };
 
         match self.format.as_str() {
