@@ -1,8 +1,8 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
-use log::{debug, error, info};
+use log::{error, info};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use crate::common::{Backup, PostgresConfig, Restore};

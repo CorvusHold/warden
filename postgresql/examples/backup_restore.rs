@@ -1,7 +1,6 @@
 use chrono::Utc;
 use postgresql::{PostgresConfig, PostgresManager};
 use std::path::PathBuf;
-use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

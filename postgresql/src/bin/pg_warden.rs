@@ -1,6 +1,5 @@
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use clap::{Parser, Subcommand};
-use log::info;
 use postgresql::{PostgresConfig, PostgresManager};
 use std::path::PathBuf;
 use std::str::FromStr;

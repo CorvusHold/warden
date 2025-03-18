@@ -1,8 +1,6 @@
 use chrono::Utc;
-use postgresql::common::{BackupStatus, BackupType, Backup, PostgresConfig, Restore};
+use postgresql::common::{Backup, BackupStatus, BackupType, PostgresConfig};
 use postgresql::manager::PostgresManager;
-use std::fs;
-use std::path::PathBuf;
 use tempfile::tempdir;
 use uuid::Uuid;
 
@@ -145,11 +143,13 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add a mock backup to the catalog
     let backup_id = Uuid::new_v4();
-    let backup_path = backup_dir.path().join(format!("snapshot_{}.sql", backup_id));
-    
+    let backup_path = backup_dir
+        .path()
+        .join(format!("snapshot_{}.sql", backup_id));
+
     // Create an empty backup file
     std::fs::write(&backup_path, "-- Mock backup file")?;
-    
+
     // Add the backup to the catalog
     let backup = Backup {
         id: backup_id,
@@ -165,9 +165,9 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
         server_version: "14.0".to_string(),
         error_message: None,
     };
-    
+
     let _ = manager.add_backup_to_catalog(backup.clone());
-    
+
     // Verify catalog file exists
     assert!(catalog_path.exists());
 
@@ -176,7 +176,7 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
 
     // Verify that the catalog was loaded correctly
     assert_eq!(manager2.list_backups().len(), manager.list_backups().len());
-    
+
     // Verify that the backup is in the catalog
     let backups = manager2.list_backups();
     assert!(backups.iter().any(|b| b.id == backup.id));

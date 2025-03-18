@@ -1,10 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::Utc;
 use log::{debug, error, info, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tokio_postgres::Client;
-use uuid::Uuid;
 
 use crate::common::{Backup, BackupCatalog, BackupType, PostgresConfig};
 use crate::PostgresError;

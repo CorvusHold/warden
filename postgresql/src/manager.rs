@@ -1,19 +1,12 @@
 use chrono::{DateTime, Utc};
-use log::{debug, error, info, warn};
+use log::{info, warn};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use uuid::Uuid;
 
-use crate::backup::{
-    full::FullBackupManager, incremental::IncrementalBackupManager,
-    snapshot::SnapshotBackupManager, BackupManagerFactory,
-};
+use crate::backup::BackupManagerFactory;
 use crate::common::{Backup, BackupCatalog, BackupType, PostgresConfig, Restore};
-use crate::restore::{
-    full::FullRestoreManager, incremental::IncrementalRestoreManager,
-    point_in_time::PointInTimeRestoreManager, snapshot::SnapshotRestoreManager,
-    RestoreManagerFactory,
-};
+use crate::restore::RestoreManagerFactory;
 use crate::PostgresError;
 
 /// Main manager for PostgreSQL backup and restore operations

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 
-use crate::common::{Backup, BackupCatalog, PostgresConfig, Restore, BackupType};
+use crate::common::{Backup, BackupType, PostgresConfig, Restore};
 use crate::PostgresError;
 
 /// Trait for restore managers
@@ -75,7 +75,9 @@ impl RestoreManagerFactory {
                 backup.id
             )));
         }
-        
-        Ok(snapshot::SnapshotRestoreManager::new(config, backup, target_dir))
+
+        Ok(snapshot::SnapshotRestoreManager::new(
+            config, backup, target_dir,
+        ))
     }
 }

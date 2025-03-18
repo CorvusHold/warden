@@ -1,6 +1,6 @@
-use crate::PostgresError;
 use crate::common::PostgresConfig;
-use log::{debug, error, info, warn};
+use crate::PostgresError;
+use log::{info, warn};
 use std::process::{Command, Stdio};
 use tokio_postgres::Client;
 

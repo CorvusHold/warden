@@ -1,10 +1,10 @@
 use chrono::Utc;
-use log::{debug, error, info};
+use log::{error, info};
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use crate::common::{Backup, BackupType, PostgresConfig, Restore, RestoreStatus};
+use crate::common::{Backup, PostgresConfig, Restore, RestoreStatus};
 use crate::wrapper::pg_restore::PgRestore;
 use crate::PostgresError;
 
@@ -17,13 +17,9 @@ pub struct SnapshotRestoreManager {
 
 impl SnapshotRestoreManager {
     /// Create a new snapshot restore manager
-    pub fn new(
-        config: PostgresConfig,
-        backup: Backup,
-        target_dir: PathBuf,
-    ) -> Self {
+    pub fn new(config: PostgresConfig, backup: Backup, target_dir: PathBuf) -> Self {
         // Verify backup type is handled in the factory method
-        
+
         // Create target directory if it doesn't exist
         if !target_dir.exists() {
             let _ = fs::create_dir_all(&target_dir);

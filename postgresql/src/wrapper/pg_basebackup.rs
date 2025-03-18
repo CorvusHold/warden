@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use log::{debug, info};
-use std::path::Path;
 use std::process::{Command, Stdio};
 
 /// Options for pg_basebackup command

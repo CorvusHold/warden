@@ -6,7 +6,6 @@ pub mod user;
 pub mod wrapper;
 
 use thiserror::Error;
-use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum PostgresError {
@@ -45,7 +44,6 @@ pub use manager::PostgresManager;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn it_works() {
