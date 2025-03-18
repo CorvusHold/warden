@@ -16,6 +16,8 @@ rustls-pemfile = "2.1.1"
 webpki-roots = "0.26.0"
 async-trait = "0.1.77"
 chrono = { version = "0.4.35", features = ["serde"] }
+anyhow = "1.0.80"
+log = "0.4.20"
 
 [dev-dependencies]
 tokio-test = "0.4.3"
