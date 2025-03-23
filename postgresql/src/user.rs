@@ -33,7 +33,7 @@ impl UserManager {
         self.client
             .execute(&create_user_sql, &[])
             .await
-            .map_err(|e| PostgresError::PostgresError(e))?;
+            .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
 
         // Grant necessary permissions
         self.grant_backup_permissions(username).await?;
@@ -51,7 +51,7 @@ impl UserManager {
             .client
             .query_one("SELECT current_setting('server_version_num')::int", &[])
             .await
-            .map_err(|e| PostgresError::PostgresError(e))?;
+            .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
 
         let version_num: i32 = row.get(0);
 
@@ -80,7 +80,7 @@ impl UserManager {
                 self.client
                     .execute(stmt, &[])
                     .await
-                    .map_err(|e| PostgresError::PostgresError(e))?;
+                    .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
             }
 
             // For PostgreSQL 15+, grant pg_checkpoint role
@@ -88,7 +88,7 @@ impl UserManager {
                 self.client
                     .execute(&format!("GRANT pg_checkpoint TO {}", username), &[])
                     .await
-                    .map_err(|e| PostgresError::PostgresError(e))?;
+                    .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
             }
         } else {
             // PostgreSQL 13 and below
@@ -115,7 +115,7 @@ impl UserManager {
                 self.client
                     .execute(stmt, &[])
                     .await
-                    .map_err(|e| PostgresError::PostgresError(e))?;
+                    .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
             }
         }
 
@@ -141,7 +141,7 @@ impl UserManager {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .map_err(|e| PostgresError::IoError(e))?;
+            .map_err(|e| PostgresError::Io(e.into()))?;
 
         let has_permissions = output.success();
 
@@ -163,14 +163,9 @@ impl UserManager {
         self.client
             .execute(&drop_user_sql, &[])
             .await
-            .map_err(|e| PostgresError::PostgresError(e))?;
+            .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
 
         info!("User dropped successfully: {}", username);
         Ok(())
     }
-}
-
-// Add warning function for logging
-fn warn(msg: &str) {
-    eprintln!("WARNING: {}", msg);
 }

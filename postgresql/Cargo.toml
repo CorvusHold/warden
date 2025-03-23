@@ -22,6 +22,7 @@ tar = "0.4.38"
 flate2 = "1.0.26"
 regex = "1.8.1"
 clap = { version = "4.2.4", features = ["derive"] }
+serial_test = "2.0.0"
 
 [[bin]]
 name = "pg_warden"

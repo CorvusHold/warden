@@ -11,7 +11,7 @@ use crate::PostgresError;
 
 /// Main manager for PostgreSQL backup and restore operations
 pub struct PostgresManager {
-    config: PostgresConfig,
+    pub config: PostgresConfig,
     backup_dir: PathBuf,
     catalog_path: PathBuf,
     catalog: BackupCatalog,
@@ -22,7 +22,7 @@ impl PostgresManager {
     pub fn new(config: PostgresConfig, backup_dir: PathBuf) -> Result<Self, PostgresError> {
         // Create backup directory if it doesn't exist
         if !backup_dir.exists() {
-            fs::create_dir_all(&backup_dir).map_err(|e| PostgresError::IoError(e))?;
+            fs::create_dir_all(&backup_dir).map_err(|e| PostgresError::Io(e))?;
         }
 
         let catalog_path = backup_dir.join("backup_catalog.json");
@@ -337,7 +337,7 @@ impl PostgresManager {
         info!("Saving backup catalog to {}", self.catalog_path.display());
         self.catalog
             .save_to_file(&self.catalog_path)
-            .map_err(|e| PostgresError::IoError(e))?;
+            .map_err(|e| PostgresError::Io(e))?;
         Ok(())
     }
 

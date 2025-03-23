@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod cli;
 pub mod common;
 pub mod manager;
 pub mod restore;
@@ -6,6 +7,7 @@ pub mod user;
 pub mod wrapper;
 
 use thiserror::Error;
+use anyhow;
 
 #[derive(Error, Debug)]
 pub enum PostgresError {
@@ -28,10 +30,34 @@ pub enum PostgresError {
     PermissionError(String),
 
     #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    Io(std::io::Error),
 
     #[error("Postgres error: {0}")]
-    PostgresError(#[from] tokio_postgres::Error),
+    Postgres(tokio_postgres::Error),
+
+    #[error("Missing password")]
+    MissingPassword,
+
+    #[error("Anyhow error: {0}")]
+    Anyhow(anyhow::Error),
+}
+
+impl From<std::io::Error> for PostgresError {
+    fn from(err: std::io::Error) -> Self {
+        PostgresError::Io(err)
+    }
+}
+
+impl From<tokio_postgres::Error> for PostgresError {
+    fn from(err: tokio_postgres::Error) -> Self {
+        PostgresError::Postgres(err)
+    }
+}
+
+impl From<anyhow::Error> for PostgresError {
+    fn from(err: anyhow::Error) -> Self {
+        PostgresError::Anyhow(err)
+    }
 }
 
 pub type Result<T> = std::result::Result<T, PostgresError>;

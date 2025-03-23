@@ -53,7 +53,7 @@ impl SnapshotRestoreManager {
 
         // Get snapshot file path
         let snapshot_file =
-            Path::new(&self.backup.backup_path).join(format!("snapshot_{}.sql", self.backup.id));
+            Path::new(&self.backup.backup_path).join(format!("snapshot_{}.dump", self.backup.id));
 
         if !snapshot_file.exists() {
             let error_msg = format!("Snapshot file does not exist: {:?}", snapshot_file);
@@ -101,7 +101,7 @@ impl SnapshotRestoreManager {
 
         // Get snapshot file path
         let snapshot_file =
-            Path::new(&self.backup.backup_path).join(format!("snapshot_{}.sql", self.backup.id));
+            Path::new(&self.backup.backup_path).join(format!("snapshot_{}.dump", self.backup.id));
 
         if !snapshot_file.exists() {
             return Err(PostgresError::RestoreError(format!(

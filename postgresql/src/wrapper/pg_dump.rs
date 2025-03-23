@@ -47,7 +47,7 @@ impl Default for PgDumpOptions {
             port: 5432,
             username: "postgres".to_string(),
             database: "postgres".to_string(),
-            file: "dump.sql".to_string(),
+            file: "dump.dump".to_string(),
             format: PgDumpFormat::Custom,
             compress: Some(9),
             schema_only: false,

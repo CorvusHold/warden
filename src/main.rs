@@ -14,6 +14,10 @@ enum Commands {
     #[clap(subcommand)]
     Console(ConsoleCommands),
 
+    /// PostgreSQL backup and restore commands
+    #[clap(subcommand)]
+    Postgresql(postgresql::cli::PostgresqlCommands),
+
     /// Start the warden daemon
     Start,
 
@@ -67,6 +71,201 @@ async fn main() -> Result<()> {
             }
             ConsoleCommands::Config(config) => {
                 config.run().await?;
+            }
+        },
+        Commands::Postgresql(postgresql_command) => match postgresql_command {
+            postgresql::cli::PostgresqlCommands::FullBackup {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+            } => {
+                postgresql::cli::commands::full_backup(
+                    host, port, database, user, password, ssl_mode, backup_dir,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::IncrementalBackup {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+            } => {
+                postgresql::cli::commands::incremental_backup(
+                    host, port, database, user, password, ssl_mode, backup_dir,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::SnapshotBackup {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+            } => {
+                postgresql::cli::commands::snapshot_backup(
+                    host, port, database, user, password, ssl_mode, backup_dir,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::ListBackups {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+            } => {
+                postgresql::cli::commands::list_backups(
+                    host, port, database, user, password, ssl_mode, backup_dir,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::RestoreFull {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+                backup_id,
+                target_dir,
+                container_id,
+                container_type,
+                auto_restart,
+            } => {
+                postgresql::cli::commands::restore_full(
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    backup_id,
+                    target_dir,
+                    container_id,
+                    container_type,
+                    auto_restart,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::RestoreIncremental {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+                full_backup_id,
+                target_dir,
+                container_id,
+                container_type,
+                auto_restart,
+            } => {
+                postgresql::cli::commands::restore_incremental(
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    full_backup_id,
+                    target_dir,
+                    container_id,
+                    container_type,
+                    auto_restart,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::RestorePointInTime {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+                full_backup_id,
+                target_dir,
+                target_time,
+                container_id,
+                container_type,
+                auto_restart,
+            } => {
+                postgresql::cli::commands::restore_point_in_time(
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    full_backup_id,
+                    target_dir,
+                    target_time,
+                    container_id,
+                    container_type,
+                    auto_restart,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::RestoreSnapshot {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+                backup_id,
+                target_dir,
+                container_id,
+                container_type,
+                auto_restart,
+            } => {
+                postgresql::cli::commands::restore_snapshot(
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    backup_id,
+                    target_dir,
+                    container_id,
+                    container_type,
+                    auto_restart,
+                )
+                .await?
+            }
+            postgresql::cli::PostgresqlCommands::ListSnapshotContents {
+                host,
+                port,
+                database,
+                user,
+                password,
+                ssl_mode,
+                backup_dir,
+                backup_id,
+            } => {
+                postgresql::cli::commands::list_snapshot_contents(
+                    host, port, database, user, password, ssl_mode, backup_dir, backup_id,
+                )
+                .await?
             }
         },
         Commands::Run => {

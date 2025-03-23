@@ -27,7 +27,7 @@ impl FullBackupManager {
 
         // Create backup directory if it doesn't exist
         if !self.backup_dir.exists() {
-            fs::create_dir_all(&self.backup_dir).map_err(|e| PostgresError::IoError(e))?;
+            fs::create_dir_all(&self.backup_dir).map_err(|e| PostgresError::Io(e))?;
         }
 
         // Connect to PostgreSQL to get server version
@@ -50,7 +50,7 @@ impl FullBackupManager {
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
         let backup_path = self.backup_dir.join(format!("full_backup_{}", timestamp));
 
-        fs::create_dir_all(&backup_path).map_err(|e| PostgresError::IoError(e))?;
+        fs::create_dir_all(&backup_path).map_err(|e| PostgresError::Io(e))?;
 
         let mut backup = Backup::new(BackupType::Full, backup_path.clone(), server_version, None);
 
@@ -64,7 +64,7 @@ impl FullBackupManager {
             port: self.config.port,
             username: self.config.user.clone(),
             pgdata: backup_path.to_string_lossy().to_string(),
-            format: "plain".to_string(),
+            format: "t".to_string(),
             checkpoint: "fast".to_string(),
             wal_method: "stream".to_string(),
             compress: Some("9".to_string()),
@@ -75,7 +75,15 @@ impl FullBackupManager {
 
         match PgBaseBackup::run(&options) {
             Ok(_) => {
-                info!("Full backup completed successfully");
+                info!("Physical backup completed successfully");
+
+                // Create a logical backup (SQL dump) of the database
+                if let Err(e) = self.create_logical_backup(&backup_path).await {
+                    error!("Failed to create logical backup: {}", e);
+                    // Continue with the physical backup even if logical backup fails
+                } else {
+                    info!("Logical backup completed successfully");
+                }
 
                 // Get current WAL position after backup
                 let wal_end = self.get_current_wal_position(&client).await?;
@@ -104,7 +112,7 @@ impl FullBackupManager {
         let row = client
             .query_one("SELECT version()", &[])
             .await
-            .map_err(|e| PostgresError::PostgresError(e))?;
+            .map_err(|e| PostgresError::Postgres(e))?;
 
         let version: String = row.get(0);
         debug!("PostgreSQL server version: {}", version);
@@ -115,9 +123,9 @@ impl FullBackupManager {
     /// Get current WAL position
     async fn get_current_wal_position(&self, client: &Client) -> Result<String, PostgresError> {
         let row = client
-            .query_one("SELECT pg_current_wal_lsn()", &[])
+            .query_one("SELECT pg_current_wal_lsn()::TEXT", &[])
             .await
-            .map_err(|e| PostgresError::PostgresError(e))?;
+            .map_err(|e| PostgresError::Postgres(e))?;
 
         let wal_position: String = row.get(0);
         debug!("Current WAL position: {}", wal_position);
@@ -130,17 +138,94 @@ impl FullBackupManager {
         let mut total_size = 0;
 
         for entry in walkdir::WalkDir::new(backup_path) {
-            let entry = entry.map_err(|e| PostgresError::IoError(e.into()))?;
+            let entry = entry.map_err(|e| PostgresError::Io(e.into()))?;
             if entry.file_type().is_file() {
-                total_size += entry
-                    .metadata()
-                    .map_err(|e| PostgresError::IoError(e.into()))?
-                    .len();
+                total_size += entry.metadata().map_err(|e| PostgresError::Io(e.into()))?.len();
             }
         }
 
         debug!("Backup size: {} bytes", total_size);
 
         Ok(total_size)
+    }
+
+    /// Create a logical backup (SQL dump) of the database
+    async fn create_logical_backup(&self, backup_path: &Path) -> Result<(), PostgresError> {
+        use std::process::{Command, Stdio};
+
+        info!("Creating logical backup (SQL dump) of the database");
+
+        let db_name = &self.config.database;
+        let host = &self.config.host;
+        let port = self.config.port;
+        let user = &self.config.user;
+
+        // Create dump file path
+        let dump_file = backup_path.join(format!("{}.dump", db_name));
+
+        // Use pg_dump to create a custom-format backup
+        let result = Command::new("pg_dump")
+            .args([
+                "-h",
+                host,
+                "-p",
+                &port.to_string(),
+                "-U",
+                user,
+                "-F",
+                "c", // custom format
+                "-f",
+                dump_file.to_str().unwrap(),
+                "-v", // verbose
+                "-Z",
+                "9", // compression level
+                db_name,
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .map_err(|e| PostgresError::BackupError(format!("Failed to execute pg_dump: {}", e)))?;
+
+        if !result.success() {
+            return Err(PostgresError::BackupError(
+                "pg_dump command failed".to_string(),
+            ));
+        }
+
+        // Also create a plain SQL backup for flexibility
+        let sql_file = backup_path.join(format!("{}.sql", db_name));
+
+        let result = Command::new("pg_dump")
+            .args([
+                "-h",
+                host,
+                "-p",
+                &port.to_string(),
+                "-U",
+                user,
+                "-F",
+                "p", // plain format
+                "-f",
+                sql_file.to_str().unwrap(),
+                db_name,
+            ])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .map_err(|e| {
+                PostgresError::BackupError(format!("Failed to execute pg_dump for SQL: {}", e))
+            })?;
+
+        if !result.success() {
+            return Err(PostgresError::BackupError(
+                "pg_dump SQL command failed".to_string(),
+            ));
+        }
+
+        info!(
+            "Logical backup created successfully at {:?} and {:?}",
+            dump_file, sql_file
+        );
+        Ok(())
     }
 }
