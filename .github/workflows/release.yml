@@ -18,7 +18,7 @@ jobs:
     outputs:
       is_prerelease: ${{ steps.release_type.outputs.is_prerelease }}
       draft: ${{ steps.release_type.outputs.draft }}
-      changelog: ${{ steps.changelog.outputs.changelog }}
+      # changelog: ${{ steps.changelog.outputs.changelog }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,20 +35,20 @@ jobs:
             echo "draft=false" >> $GITHUB_OUTPUT
           fi
       
-      - name: Generate Changelog
-        id: changelog
-        uses: mikepenz/release-changelog-builder-action@v4
-        with:
-          configuration: ".github/changelog-config.json"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Generate Changelog
+      #   id: changelog
+      #   uses: mikepenz/release-changelog-builder-action@v4
+      #   with:
+      #     configuration: ".github/changelog-config.json"
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           draft: ${{ steps.release_type.outputs.draft }}
           prerelease: ${{ steps.release_type.outputs.is_prerelease }}
-          body: ${{ steps.changelog.outputs.changelog }}
+          # body: ${{ steps.changelog.outputs.changelog }}
           name: ${{ steps.release_type.outputs.is_prerelease == 'true' && format('Pre-release {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -197,7 +197,7 @@ jobs:
         with:
           name: ${{ needs.create-release.outputs.is_prerelease == 'true' && format('Pre-release {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
           prerelease: ${{ needs.create-release.outputs.is_prerelease }}
-          body: ${{ needs.create-release.outputs.changelog }}
+          # body: ${{ needs.create-release.outputs.changelog }}
           draft: ${{ needs.create-release.outputs.draft }}
           files: |
             ${{ env.BINARY_NAME }}-${{ matrix.asset_suffix }}.tar.gz
