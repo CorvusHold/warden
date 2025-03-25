@@ -140,7 +140,10 @@ impl FullBackupManager {
         for entry in walkdir::WalkDir::new(backup_path) {
             let entry = entry.map_err(|e| PostgresError::Io(e.into()))?;
             if entry.file_type().is_file() {
-                total_size += entry.metadata().map_err(|e| PostgresError::Io(e.into()))?.len();
+                total_size += entry
+                    .metadata()
+                    .map_err(|e| PostgresError::Io(e.into()))?
+                    .len();
             }
         }
 

@@ -202,7 +202,8 @@ impl FullRestoreManager {
                 info!("Successfully copied backup files using cp command");
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
-                fs::write(dummy_file, "Restore completed successfully").map_err(|e| PostgresError::Io(e))?;
+                fs::write(dummy_file, "Restore completed successfully")
+                    .map_err(|e| PostgresError::Io(e))?;
                 return Ok(());
             }
         }
@@ -222,7 +223,8 @@ impl FullRestoreManager {
                 info!("Successfully copied backup files using cp command with wildcards");
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
-                fs::write(dummy_file, "Restore completed successfully").map_err(|e| PostgresError::Io(e))?;
+                fs::write(dummy_file, "Restore completed successfully")
+                    .map_err(|e| PostgresError::Io(e))?;
                 return Ok(());
             }
         }
@@ -237,7 +239,8 @@ impl FullRestoreManager {
                 warn!("Failed to read backup directory: {}", e);
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
-                fs::write(dummy_file, "Restore completed successfully").map_err(|e| PostgresError::Io(e))?;
+                fs::write(dummy_file, "Restore completed successfully")
+                    .map_err(|e| PostgresError::Io(e))?;
                 return Ok(());
             }
         };
@@ -263,7 +266,8 @@ impl FullRestoreManager {
 
         // Always create a dummy file to ensure the directory is not empty (for test verification)
         let dummy_file = self.target_dir.join(".restore_complete");
-        fs::write(dummy_file, "Restore completed successfully").map_err(|e| PostgresError::Io(e))?;
+        fs::write(dummy_file, "Restore completed successfully")
+            .map_err(|e| PostgresError::Io(e))?;
 
         if !has_files {
             warn!("No files found in backup directory, but created .restore_complete file");

@@ -6,8 +6,8 @@ pub mod restore;
 pub mod user;
 pub mod wrapper;
 
-use thiserror::Error;
 use anyhow;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum PostgresError {
