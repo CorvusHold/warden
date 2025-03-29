@@ -4,7 +4,7 @@ use log::{error, info, warn};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, Stdio};
 
 use crate::common::{Backup, PostgresConfig, Restore};
 use crate::PostgresError;

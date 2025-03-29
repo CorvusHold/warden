@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::atomic::Ordering};
 use uuid::Uuid;
+use log::{info, warn};
 
 /// Represents a PostgreSQL server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,6 +13,14 @@ pub struct PostgresConfig {
     pub user: String,
     pub password: Option<String>,
     pub ssl_mode: Option<String>,
+    // SSH tunnel configuration
+    pub ssh_host: Option<String>,
+    pub ssh_user: Option<String>,
+    pub ssh_port: Option<u16>,
+    pub ssh_password: Option<String>,
+    pub ssh_key_path: Option<String>,
+    pub ssh_local_port: Option<u16>,
+    pub ssh_remote_port: Option<u16>,
 }
 
 impl PostgresConfig {
@@ -28,6 +37,7 @@ impl PostgresConfig {
         if let Some(ssl_mode) = &self.ssl_mode {
             conn_string.push_str(&format!(" sslmode={}", ssl_mode));
         }
+        info!("Creating connection string for {}", conn_string);
 
         conn_string
     }

@@ -5,17 +5,18 @@ version = "0.1.1"
 edition = "2021"
 
 [workspace]
-members = ["common", "console", "daemon", "overwatch", "postgresql", "storage"]
+members = ["common", "console", "daemon", "overwatch", "postgresql", "ssh", "storage"]
 
 [dependencies]
 clap = { version = "4.5.32", features = ["derive"] }
 tokio = { version = "1.44.1", features = ["full"] }
-anyhow = "1.0.85"
+anyhow = "1.0.97"
 console = { path = "./console" }
 daemon = { path = "./daemon" }
 env_logger = "0.11.7"
-log = "0.4.26"
+log = "0.4.27"
 common = { path = "./common" }
 postgresql = { path = "./postgresql" }
-uuid = { version = "1.6.1", features = ["v4", "serde"] }
-chrono = { version = "0.4.35", features = ["serde"] }
+uuid = { version = "1.16.0", features = ["v4", "serde"] }
+chrono = { version = "0.4.40", features = ["serde"] }
+ssh = { path = "./ssh" }

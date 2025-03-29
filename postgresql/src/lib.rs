@@ -1,13 +1,15 @@
-pub mod backup;
 pub mod cli;
+pub mod backup;
 pub mod common;
 pub mod manager;
 pub mod restore;
+pub mod tunnel_keeper;
 pub mod user;
 pub mod wrapper;
 
 use anyhow;
 use thiserror::Error;
+use ssh::SshError;
 
 #[derive(Error, Debug)]
 pub enum PostgresError {
@@ -40,6 +42,9 @@ pub enum PostgresError {
 
     #[error("Anyhow error: {0}")]
     Anyhow(anyhow::Error),
+
+    #[error("SSH error: {0}")]
+    Ssh(SshError),
 }
 
 impl From<std::io::Error> for PostgresError {

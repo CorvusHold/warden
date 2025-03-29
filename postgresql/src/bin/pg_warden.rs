@@ -132,6 +132,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         user: cli.user,
         password: cli.password,
         ssl_mode: cli.ssl_mode,
+        ssh_host: None,
+        ssh_user: None,
+        ssh_port: None,
+        ssh_password: None,
+        ssh_key_path: None,
+        ssh_local_port: None,
     };
 
     // Create PostgreSQL manager

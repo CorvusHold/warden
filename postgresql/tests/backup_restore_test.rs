@@ -17,6 +17,12 @@ fn create_test_config() -> PostgresConfig {
         user: "hipe_dev".to_string(),
         password: Some("please".to_string()),
         ssl_mode: None,
+        ssh_host: None,
+        ssh_user: None,
+        ssh_port: None,
+        ssh_password: None,
+        ssh_key_path: None,
+        ssh_local_port: None,
     }
 }
 

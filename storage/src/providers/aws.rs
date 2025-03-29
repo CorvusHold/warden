@@ -3,7 +3,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
-use aws_sdk_s3::config::{Region};
+use chrono;
+use aws_sdk_s3::config::Region;
 use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_s3::{
     operation::{
@@ -67,7 +68,14 @@ impl S3Provider {
 
         // Add custom endpoint if provided
         if let Some(endpoint) = endpoint.clone() {
+            info!("Using custom endpoint: {}", endpoint);
             config_builder = config_builder.endpoint_url(endpoint);
+        } else {
+            info!("Using default AWS endpoint for region: {}", region_str);
+            // Explicitly construct the endpoint URL for the region
+            let default_endpoint = format!("https://s3.{}.amazonaws.com", region_str);
+            info!("Constructed default endpoint URL: {}", default_endpoint);
+            config_builder = config_builder.endpoint_url(default_endpoint);
         }
 
         // Build the config
@@ -91,10 +99,14 @@ impl S3Provider {
         StorageObject {
             key: obj.key().unwrap_or_default().to_string(),
             size: match obj.size() {
-                Some(size) => size.try_into().unwrap_or(0),
-                None => 0,
+                Some(size) => Some(size.try_into().unwrap_or(0)),
+                None => None,
             },
-            last_modified: obj.last_modified().map(|t| to_system_time(t)),
+            last_modified: obj.last_modified().map(|t| {
+                let secs = t.secs();
+                let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
+                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(|| chrono::Utc::now())
+            }),
             etag: obj.e_tag().map(|s| s.to_string()),
             storage_class: obj.storage_class().map(|s| s.as_str().to_string()),
         }
@@ -186,13 +198,35 @@ impl StorageProvider for S3Provider {
     }
 
     async fn bucket_exists(&self, bucket: &str) -> Result<bool, StorageError> {
-        match self.client.head_bucket().bucket(bucket).send().await {
-            Ok(_) => Ok(true),
+        info!("Checking if bucket exists: {}", bucket);
+        info!("Using region: {}", self.region);
+        if let Some(endpoint) = &self.endpoint {
+            info!("Using endpoint: {}", endpoint);
+        }
+        
+        let head_bucket_request = self.client.head_bucket().bucket(bucket);
+        info!("Sending head_bucket request to AWS S3");
+        
+        match head_bucket_request.send().await {
+            Ok(_) => {
+                info!("Bucket {} exists", bucket);
+                Ok(true)
+            },
             Err(e) => {
-                if e.to_string().contains("404") {
+                let error_string = e.to_string();
+                info!("Received error response: {}", error_string);
+                
+                if error_string.contains("404") {
+                    info!("Bucket {} does not exist (404 Not Found)", bucket);
                     Ok(false)
+                } else if error_string.contains("403") {
+                    info!("Bucket {} exists but access is forbidden (403 Forbidden)", bucket);
+                    // For S3, a 403 means the bucket exists but we don't have permission to access it
+                    // We'll treat this as the bucket existing
+                    Ok(true)
                 } else {
-                    error!("Error checking if bucket exists: {}", e);
+                    let error_msg = format!("Error checking if bucket exists: {}", e);
+                    error!("{}", error_msg);
                     Err(StorageError::AwsSdk(e.to_string()))
                 }
             }
@@ -448,10 +482,14 @@ impl StorageProvider for S3Provider {
         let metadata = ObjectMetadata {
             key: key.to_string(),
             size: match head_object_result.content_length() {
-                Some(size) => size.try_into().unwrap_or(0),
-                None => 0,
+                Some(size) => Some(size.try_into().unwrap_or(0)),
+                None => None,
             },
-            last_modified: head_object_result.last_modified().map(|t| to_system_time(t)),
+            last_modified: head_object_result.last_modified().map(|t| {
+                let secs = t.secs();
+                let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
+                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(|| chrono::Utc::now())
+            }),
             etag: head_object_result.e_tag().map(|s| s.to_string()),
             content_type: head_object_result.content_type().map(|s| s.to_string()),
             storage_class: head_object_result

@@ -18,6 +18,12 @@ enum Commands {
     #[clap(subcommand)]
     Postgresql(postgresql::cli::PostgresqlCommands),
 
+    /// Commands for interacting with SSH.
+    Ssh {
+        #[clap(subcommand)]
+        command: SshCommands,
+    },
+
     /// Start the warden daemon
     Start,
 
@@ -44,6 +50,15 @@ enum ConsoleCommands {
 
     /// Manage the Warden configuration
     Config(console::cli::commands::config::Config),
+}
+
+#[derive(Subcommand, Debug)]
+enum SshCommands {
+    /// Forwards a remote port to a local port over SSH.
+    Forward {
+        #[clap(flatten)]
+        cmd: ssh::cli::forward::ForwardCommand,
+    },
 }
 
 #[tokio::main]
@@ -81,10 +96,28 @@ async fn main() -> Result<()> {
                 user,
                 password,
                 ssl_mode,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
                 backup_dir,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::full_backup(
                     host, port, database, user, password, ssl_mode, backup_dir,
+                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port,
+                    remote_storage, storage_provider, storage_bucket, storage_prefix,
+                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
                 )
                 .await?
             }
@@ -96,9 +129,27 @@ async fn main() -> Result<()> {
                 password,
                 ssl_mode,
                 backup_dir,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::incremental_backup(
                     host, port, database, user, password, ssl_mode, backup_dir,
+                    remote_storage, storage_provider, storage_bucket, storage_prefix,
+                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
+                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port
                 )
                 .await?
             }
@@ -110,9 +161,27 @@ async fn main() -> Result<()> {
                 password,
                 ssl_mode,
                 backup_dir,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::snapshot_backup(
                     host, port, database, user, password, ssl_mode, backup_dir,
+                    remote_storage, storage_provider, storage_bucket, storage_prefix,
+                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
+                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port
                 )
                 .await?
             }
@@ -124,9 +193,27 @@ async fn main() -> Result<()> {
                 password,
                 ssl_mode,
                 backup_dir,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::list_backups(
                     host, port, database, user, password, ssl_mode, backup_dir,
+                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port,
+                    remote_storage, storage_provider, storage_bucket, storage_prefix,
+                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
                 )
                 .await?
             }
@@ -138,11 +225,26 @@ async fn main() -> Result<()> {
                 password,
                 ssl_mode,
                 backup_dir,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
                 backup_id,
                 target_dir,
                 container_id,
                 container_type,
                 auto_restart,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::restore_full(
                     host,
@@ -157,6 +259,21 @@ async fn main() -> Result<()> {
                     container_id,
                     container_type,
                     auto_restart,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
                 )
                 .await?
             }
@@ -173,6 +290,21 @@ async fn main() -> Result<()> {
                 container_id,
                 container_type,
                 auto_restart,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::restore_incremental(
                     host,
@@ -187,6 +319,21 @@ async fn main() -> Result<()> {
                     container_id,
                     container_type,
                     auto_restart,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
                 )
                 .await?
             }
@@ -204,6 +351,21 @@ async fn main() -> Result<()> {
                 container_id,
                 container_type,
                 auto_restart,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::restore_point_in_time(
                     host,
@@ -219,6 +381,21 @@ async fn main() -> Result<()> {
                     container_id,
                     container_type,
                     auto_restart,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
                 )
                 .await?
             }
@@ -235,6 +412,21 @@ async fn main() -> Result<()> {
                 container_id,
                 container_type,
                 auto_restart,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::restore_snapshot(
                     host,
@@ -249,6 +441,21 @@ async fn main() -> Result<()> {
                     container_id,
                     container_type,
                     auto_restart,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
                 )
                 .await?
             }
@@ -261,12 +468,33 @@ async fn main() -> Result<()> {
                 ssl_mode,
                 backup_dir,
                 backup_id,
+                ssh_host,
+                ssh_user,
+                ssh_port,
+                ssh_password,
+                ssh_key_path,
+                ssh_local_port,
+                ssh_remote_port,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
             } => {
                 postgresql::cli::commands::list_snapshot_contents(
                     host, port, database, user, password, ssl_mode, backup_dir, backup_id,
+                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port,
+                    ssh_remote_port, remote_storage, storage_provider, storage_bucket, storage_prefix,
+                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
                 )
                 .await?
             }
+        },
+        Commands::Ssh { command: SshCommands::Forward { cmd } } => {
+            ssh::cli::forward::forward(cmd).await?;
         },
         Commands::Run => {
             log::info!("Running warden daemon in the foreground...");

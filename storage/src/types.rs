@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
+use chrono::{DateTime, Utc};
 
 /// Represents a storage bucket
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,9 +20,9 @@ pub struct StorageObject {
     /// Key (path) of the object
     pub key: String,
     /// Size of the object in bytes
-    pub size: u64,
+    pub size: Option<u64>,
     /// Last modified time
-    pub last_modified: Option<SystemTime>,
+    pub last_modified: Option<DateTime<Utc>>,
     /// ETag of the object
     pub etag: Option<String>,
     /// Storage class of the object
@@ -34,9 +35,9 @@ pub struct ObjectMetadata {
     /// Key (path) of the object
     pub key: String,
     /// Size of the object in bytes
-    pub size: u64,
+    pub size: Option<u64>,
     /// Last modified time
-    pub last_modified: Option<SystemTime>,
+    pub last_modified: Option<DateTime<Utc>>,
     /// ETag of the object
     pub etag: Option<String>,
     /// Content type of the object
@@ -49,6 +50,32 @@ pub struct ObjectMetadata {
 
 /// Custom metadata for objects
 pub type Metadata = HashMap<String, String>;
+
+/// Type of backup
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BackupType {
+    /// Full backup
+    Full,
+    /// Incremental backup
+    Incremental,
+    /// Snapshot backup
+    Snapshot,
+}
+
+/// Information about a backup
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupInfo {
+    /// Backup ID
+    pub id: String,
+    /// Type of backup
+    pub backup_type: BackupType,
+    /// Timestamp when the backup was created
+    pub timestamp: DateTime<Utc>,
+    /// Size of the backup in bytes
+    pub size: u64,
+    /// Parent backup ID (for incremental backups)
+    pub parent_id: Option<String>,
+}
 
 /// Storage provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

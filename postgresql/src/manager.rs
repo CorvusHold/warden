@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::backup::BackupManagerFactory;
 use crate::common::{Backup, BackupCatalog, BackupType, PostgresConfig, Restore};
 use crate::restore::RestoreManagerFactory;
+
 use crate::PostgresError;
 
 /// Main manager for PostgreSQL backup and restore operations
@@ -17,7 +18,10 @@ pub struct PostgresManager {
     catalog: BackupCatalog,
 }
 
+// SSH tunneling is now handled by the tunnel_wrapper module
+
 impl PostgresManager {
+
     /// Create a new PostgreSQL manager
     pub fn new(config: PostgresConfig, backup_dir: PathBuf) -> Result<Self, PostgresError> {
         // Create backup directory if it doesn't exist
@@ -55,12 +59,16 @@ impl PostgresManager {
             catalog
         };
 
-        Ok(Self {
+        let manager = Self {
             config,
             backup_dir,
             catalog_path,
             catalog,
-        })
+        };
+
+        // SSH tunneling is now handled by the tunnel_wrapper module
+
+        Ok(manager)
     }
 
     /// Perform a full backup
@@ -72,6 +80,7 @@ impl PostgresManager {
             self.backup_dir.clone(),
         );
 
+        // Perform the backup operation
         let backup = manager.backup().await?;
 
         // Add backup to catalog
@@ -94,6 +103,7 @@ impl PostgresManager {
             self.catalog.clone(),
         );
 
+        // Perform the backup operation
         let backup = manager.backup().await?;
 
         // Add backup to catalog
@@ -108,6 +118,7 @@ impl PostgresManager {
 
     /// Perform a snapshot backup
     pub async fn snapshot_backup(&mut self) -> Result<Backup, PostgresError> {
+        info!("Starting snapshot backup function");
         info!("Starting snapshot backup");
 
         let manager = BackupManagerFactory::create_snapshot_backup_manager(
@@ -115,6 +126,7 @@ impl PostgresManager {
             self.backup_dir.clone(),
         );
 
+        // Perform the backup operation
         let backup = manager.backup().await?;
 
         // Add backup to catalog
@@ -129,7 +141,7 @@ impl PostgresManager {
 
     /// Restore from a full backup
     pub async fn restore_full_backup(
-        &self,
+        &mut self,
         backup_id: &Uuid,
         target_dir: PathBuf,
     ) -> Result<Restore, PostgresError> {
@@ -162,13 +174,15 @@ impl PostgresManager {
 
         let restore = manager.restore().await?;
 
+        // SSH tunneling is now handled by the tunnel_wrapper module
+
         info!("Full backup restore completed: {}", restore.id);
         Ok(restore)
     }
 
     /// Restore from incremental backups
     pub async fn restore_incremental_backup(
-        &self,
+        &mut self,
         full_backup_id: &Uuid,
         target_dir: PathBuf,
     ) -> Result<Restore, PostgresError> {
@@ -213,13 +227,15 @@ impl PostgresManager {
 
         let restore = manager.restore().await?;
 
+        // SSH tunneling is now handled by the tunnel_wrapper module
+
         info!("Incremental backup restore completed: {}", restore.id);
         Ok(restore)
     }
 
     /// Restore to a point in time
     pub async fn restore_point_in_time(
-        &self,
+        &mut self,
         full_backup_id: &Uuid,
         target_dir: PathBuf,
         target_time: DateTime<Utc>,
@@ -266,13 +282,15 @@ impl PostgresManager {
 
         let restore = manager.restore().await?;
 
+        // SSH tunneling is now handled by the tunnel_wrapper module
+
         info!("Point-in-time restore completed: {}", restore.id);
         Ok(restore)
     }
 
     /// Restore from a snapshot backup
     pub async fn restore_snapshot_backup(
-        &self,
+        &mut self,
         backup_id: &Uuid,
         target_dir: PathBuf,
     ) -> Result<Restore, PostgresError> {
@@ -291,6 +309,8 @@ impl PostgresManager {
         )?;
 
         let restore = manager.restore().await?;
+
+        // SSH tunneling is now handled by the tunnel_wrapper module
 
         info!("Snapshot backup restore completed: {}", restore.id);
         Ok(restore)
