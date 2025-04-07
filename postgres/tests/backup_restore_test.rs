@@ -1,9 +1,6 @@
 use chrono::Utc;
-use postgresql::common::{Backup, BackupStatus, BackupType, PostgresConfig, RestoreStatus};
-use postgresql::manager::PostgresManager;
-use postgresql::restore::full::FullRestoreManager;
-use std::env;
-use std::path::PathBuf;
+use postgres::common::{Backup, BackupStatus, BackupType, PostgresConfig, RestoreStatus};
+use postgres::manager::PostgresManager;
 use tempfile::tempdir;
 use tokio_postgres::{connect, NoTls};
 use uuid::Uuid;
@@ -23,6 +20,7 @@ fn create_test_config() -> PostgresConfig {
         ssh_password: None,
         ssh_key_path: None,
         ssh_local_port: None,
+        ssh_remote_port: None,
     }
 }
 

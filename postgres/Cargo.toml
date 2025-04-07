@@ -1,5 +1,5 @@
 [package]
-name = "postgresql"
+name = "postgres"
 version = "0.1.0"
 edition = "2021"
 
@@ -26,10 +26,7 @@ storage = { path = "../storage" }
 serial_test = "2.0.0"
 
 ssh = { path = "../ssh" }
-[[bin]]
-name = "pg_warden"
-path = "src/bin/pg_warden.rs"
 
 [lib]
-name = "postgresql"
+name = "postgres"
 path = "src/lib.rs"

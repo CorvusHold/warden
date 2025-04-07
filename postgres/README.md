@@ -24,7 +24,7 @@ A Rust library for managing PostgreSQL database backups and restores, inspired b
 ### Configuration
 
 ```rust
-use postgresql::{PostgresConfig, PostgresManager};
+use postgres::{PostgresConfig, PostgresManager};
 use std::path::PathBuf;
 
 // Configure PostgreSQL connection

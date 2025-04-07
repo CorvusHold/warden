@@ -18,11 +18,7 @@ pub struct PostgresManager {
     catalog: BackupCatalog,
 }
 
-// SSH tunneling is now handled by the tunnel_wrapper module
-
 impl PostgresManager {
-
-    /// Create a new PostgreSQL manager
     pub fn new(config: PostgresConfig, backup_dir: PathBuf) -> Result<Self, PostgresError> {
         // Create backup directory if it doesn't exist
         if !backup_dir.exists() {
@@ -65,9 +61,6 @@ impl PostgresManager {
             catalog_path,
             catalog,
         };
-
-        // SSH tunneling is now handled by the tunnel_wrapper module
-
         Ok(manager)
     }
 
@@ -175,7 +168,6 @@ impl PostgresManager {
         let restore = manager.restore().await?;
 
         // SSH tunneling is now handled by the tunnel_wrapper module
-
         info!("Full backup restore completed: {}", restore.id);
         Ok(restore)
     }
@@ -228,7 +220,6 @@ impl PostgresManager {
         let restore = manager.restore().await?;
 
         // SSH tunneling is now handled by the tunnel_wrapper module
-
         info!("Incremental backup restore completed: {}", restore.id);
         Ok(restore)
     }

@@ -196,7 +196,7 @@ pub async fn handle_command(
                 }
             } else {
                 // Call PostgreSQL backup functionality
-                // match postgresql::backup::full::create_backup().await {
+                // match postgres::backup::full::create_backup().await {
                 //     Ok(backup_info) => {
                 //         ResponsePayload {
                 //             success: true,
@@ -231,7 +231,7 @@ pub async fn handle_command(
                 if let Some(backup_id) = args.get("backup_id") {
                     if let Some(backup_id) = backup_id.as_str() {
                         // Call PostgreSQL restore functionality
-                        // match postgresql::backup::restore_backup(backup_id).await {
+                        // match postgres::backup::restore_backup(backup_id).await {
                         //     Ok(_) => {
                         //         ResponsePayload {
                         //             success: true,

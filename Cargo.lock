@@ -1523,7 +1523,7 @@ dependencies = [
  "log",
  "nix",
  "overwatch",
- "postgresql",
+ "postgres",
  "serde",
  "serde_json",
  "shellexpand",
@@ -3793,6 +3793,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "postgres"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "env_logger",
+ "flate2",
+ "futures",
+ "log",
+ "regex",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "ssh",
+ "storage",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-postgres",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "postgres-protocol"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3821,33 +3848,6 @@ dependencies = [
  "fallible-iterator",
  "postgres-protocol",
  "uuid",
-]
-
-[[package]]
-name = "postgresql"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "clap",
- "env_logger",
- "flate2",
- "futures",
- "log",
- "regex",
- "serde",
- "serde_json",
- "serial_test",
- "ssh",
- "storage",
- "tar",
- "tempfile",
- "thiserror 2.0.12",
- "tokio",
- "tokio-postgres",
- "uuid",
- "walkdir",
 ]
 
 [[package]]
@@ -5821,7 +5821,7 @@ dependencies = [
 
 [[package]]
 name = "warden"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5831,7 +5831,7 @@ dependencies = [
  "daemon",
  "env_logger",
  "log",
- "postgresql",
+ "postgres",
  "ssh",
  "tokio",
  "uuid",

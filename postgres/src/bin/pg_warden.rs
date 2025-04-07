@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use clap::{Parser, Subcommand};
-use postgresql::{PostgresConfig, PostgresManager};
+use postgres::{PostgresConfig, PostgresManager};
 use std::path::PathBuf;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -138,6 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ssh_password: None,
         ssh_key_path: None,
         ssh_local_port: None,
+        ssh_remote_port: None,
     };
 
     // Create PostgreSQL manager

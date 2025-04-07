@@ -174,7 +174,7 @@ async fn handle_postgres_event(event: &EventPayload, client: &Arc<AmqpClient>) -
                     info!("Creating emergency backup for database: {}", db_name);
 
                     // Call PostgreSQL backup functionality
-                    //     match postgresql::backup::create_backup().await {
+                    //     match postgres::backup::create_backup().await {
                     //         Ok(backup_info) => {
                     //             info!("Emergency backup created successfully");
 
