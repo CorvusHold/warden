@@ -26,6 +26,7 @@ pub struct PgDumpOptions {
     pub host: String,
     pub port: u16,
     pub username: String,
+    pub password: String,
     pub database: String,
     pub file: String,
     pub format: PgDumpFormat,
@@ -46,6 +47,7 @@ impl Default for PgDumpOptions {
             host: "localhost".to_string(),
             port: 5432,
             username: "postgres".to_string(),
+            password: "".to_string(),
             database: "postgres".to_string(),
             file: "dump.dump".to_string(),
             format: PgDumpFormat::Custom,
@@ -69,6 +71,9 @@ impl PgDump {
     /// Run pg_dump with the given options
     pub fn run(options: &PgDumpOptions) -> Result<()> {
         let mut cmd = Command::new("pg_dump");
+
+        // Set PGPASSWORD environment variable
+        cmd.env("PGPASSWORD", &options.password);
 
         cmd.arg("--host")
             .arg(&options.host)

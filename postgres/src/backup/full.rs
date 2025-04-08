@@ -63,6 +63,7 @@ impl FullBackupManager {
             host: self.config.host.clone(),
             port: self.config.port,
             username: self.config.user.clone(),
+            password: self.config.password.clone().expect("Password is required"),
             pgdata: backup_path.to_string_lossy().to_string(),
             format: "t".to_string(),
             checkpoint: "fast".to_string(),

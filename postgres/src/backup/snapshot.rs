@@ -117,10 +117,11 @@ impl SnapshotBackupManager {
         backup.wal_start = Some(wal_start);
 
         // Perform the backup using pg_dump
-        let options = PgDumpOptions {
+        let options = PgDumpOptions {   
             host: self.config.host.clone(),
             port: self.config.port,
             username: self.config.user.clone(),
+            password: self.config.password.clone().expect("Password is required"),
             database: self.config.database.clone(),
             file: dump_file.to_string_lossy().to_string(),
             format: PgDumpFormat::Custom,

@@ -7,6 +7,7 @@ pub struct PgBaseBackupOptions {
     pub host: String,
     pub port: u16,
     pub username: String,
+    pub password: String,
     pub pgdata: String,
     pub format: String,
     pub checkpoint: String,
@@ -23,6 +24,7 @@ impl Default for PgBaseBackupOptions {
             host: "localhost".to_string(),
             port: 5432,
             username: "postgres".to_string(),
+            password: "".to_string(),
             pgdata: ".".to_string(),
             format: "plain".to_string(),
             checkpoint: "fast".to_string(),
@@ -42,6 +44,8 @@ impl PgBaseBackup {
     /// Run pg_basebackup with the given options
     pub fn run(options: &PgBaseBackupOptions) -> Result<()> {
         let mut cmd = Command::new("pg_basebackup");
+        // Set PGPASSWORD environment variable
+        cmd.env("PGPASSWORD", &options.password);
 
         cmd.arg("--host")
             .arg(&options.host)
