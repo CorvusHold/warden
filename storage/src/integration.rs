@@ -1,4 +1,7 @@
-use crate::{BackupInfo, BackupType, Metadata, StorageError, StorageProvider, StorageProviderFactory, StorageProviderType};
+use crate::{
+    BackupInfo, BackupType, Metadata, StorageError, StorageProvider, StorageProviderFactory,
+    StorageProviderType,
+};
 use log::{error, info};
 use std::path::Path;
 use std::time::Duration;
@@ -32,7 +35,8 @@ impl PostgresBackupStorage {
         // Create the appropriate storage provider
         let provider = match provider_type {
             StorageProviderType::S3 => {
-                StorageProviderFactory::create_s3_provider(region, endpoint, access_key, secret_key).await?
+                StorageProviderFactory::create_s3_provider(region, endpoint, access_key, secret_key)
+                    .await?
             }
         };
 
@@ -43,7 +47,9 @@ impl PostgresBackupStorage {
             Ok(_) => info!("Successfully created bucket {}", bucket),
             Err(e) => {
                 // If bucket already exists, that's fine
-                if e.to_string().contains("BucketAlreadyOwnedByYou") || e.to_string().contains("BucketAlreadyExists") {
+                if e.to_string().contains("BucketAlreadyOwnedByYou")
+                    || e.to_string().contains("BucketAlreadyExists")
+                {
                     info!("Bucket {} already exists", bucket);
                 } else {
                     // Log the error but continue - we'll try to use the bucket anyway
@@ -67,7 +73,11 @@ impl PostgresBackupStorage {
         backup_path: &Path,
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
-        info!("Uploading backup {} from {}", backup_id, backup_path.display());
+        info!(
+            "Uploading backup {} from {}",
+            backup_id,
+            backup_path.display()
+        );
 
         // Create the backup prefix
         let backup_prefix = if self.prefix.is_empty() {
@@ -90,7 +100,7 @@ impl PostgresBackupStorage {
                     .map_err(|e| StorageError::Unexpected(e.to_string()))?;
 
                 let key = format!("{}/{}", backup_prefix, rel_path.to_string_lossy());
-                
+
                 // Determine content type based on file extension
                 let content_type = match rel_path.extension().and_then(|e| e.to_str()) {
                     Some("sql") => Some("text/plain"),
@@ -101,7 +111,13 @@ impl PostgresBackupStorage {
                 };
 
                 self.provider
-                    .upload_file(&self.bucket, &key, entry.path(), content_type, metadata.clone())
+                    .upload_file(
+                        &self.bucket,
+                        &key,
+                        entry.path(),
+                        content_type,
+                        metadata.clone(),
+                    )
                     .await?;
             }
         }
@@ -163,8 +179,12 @@ impl PostgresBackupStorage {
         backup_path: &Path,
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
-        info!("Uploading physical backup {} from {}", backup_id, backup_path.display());
-        
+        info!(
+            "Uploading physical backup {} from {}",
+            backup_id,
+            backup_path.display()
+        );
+
         // Check if the backup path exists
         if !backup_path.exists() {
             error!("Backup path does not exist: {}", backup_path.display());
@@ -173,7 +193,7 @@ impl PostgresBackupStorage {
                 format!("Backup path does not exist: {}", backup_path.display()),
             )));
         }
-        
+
         // Check if the backup path is a directory
         if !backup_path.is_dir() {
             error!("Backup path is not a directory: {}", backup_path.display());
@@ -182,16 +202,20 @@ impl PostgresBackupStorage {
                 format!("Backup path is not a directory: {}", backup_path.display()),
             )));
         }
-        
+
         // List all files in the backup directory
         let backup_files = match std::fs::read_dir(backup_path) {
             Ok(files) => files,
             Err(e) => {
-                error!("Failed to read backup directory {}: {}", backup_path.display(), e);
+                error!(
+                    "Failed to read backup directory {}: {}",
+                    backup_path.display(),
+                    e
+                );
                 return Err(StorageError::Io(e));
             }
         };
-        
+
         // Upload each file in the backup directory
         for file_result in backup_files {
             let file = match file_result {
@@ -201,12 +225,15 @@ impl PostgresBackupStorage {
                     return Err(StorageError::Io(e));
                 }
             };
-            
+
             let file_path = file.path();
             if file_path.is_file() {
                 let file_name = file.file_name().to_string_lossy().to_string();
                 info!("Uploading file: {} ({})", file_name, file_path.display());
-                match self.upload_backup_stream(backup_id, &file_name, &file_path, metadata.clone()).await {
+                match self
+                    .upload_backup_stream(backup_id, &file_name, &file_path, metadata.clone())
+                    .await
+                {
                     Ok(_) => info!("Successfully uploaded file: {}", file_name),
                     Err(e) => {
                         error!("Failed to upload file {}: {}", file_name, e);
@@ -215,7 +242,7 @@ impl PostgresBackupStorage {
                 }
             }
         }
-        
+
         info!("Physical backup {} uploaded successfully", backup_id);
         Ok(())
     }
@@ -227,7 +254,8 @@ impl PostgresBackupStorage {
         dump_file: &Path,
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
-        self.upload_backup_stream(backup_id, "pg_dump.dump", dump_file, metadata).await
+        self.upload_backup_stream(backup_id, "pg_dump.dump", dump_file, metadata)
+            .await
     }
 
     /// Downloads a backup to a local directory
@@ -367,7 +395,7 @@ impl PostgresBackupStorage {
                     } else {
                         format!("{}/{}/metadata.json", self.prefix, backup_id)
                     };
-                    
+
                     let backup_type = if key.contains("snapshot") {
                         BackupType::Snapshot
                     } else if key.contains("incremental") {
@@ -375,9 +403,9 @@ impl PostgresBackupStorage {
                     } else {
                         BackupType::Full
                     };
-                    
+
                     let timestamp = obj.last_modified.unwrap_or_else(|| chrono::Utc::now());
-                    
+
                     backup_infos.push(BackupInfo {
                         id: backup_id,
                         backup_type,
@@ -391,13 +419,16 @@ impl PostgresBackupStorage {
 
         Ok(backup_infos)
     }
-    
+
     /// Lists all backups that have a specific backup as an ancestor
-    pub async fn list_backups_with_ancestor(&self, _ancestor_id: &str) -> Result<Vec<String>, StorageError> {
+    pub async fn list_backups_with_ancestor(
+        &self,
+        _ancestor_id: &str,
+    ) -> Result<Vec<String>, StorageError> {
         // Get all backups
         let all_backups = self.list_backups().await?;
         let mut incremental_backups = Vec::new();
-        
+
         // For a proper implementation, we would need to parse metadata files to determine ancestry
         // This is a simplified version that just returns all incremental backups
         for backup in all_backups {
@@ -405,7 +436,7 @@ impl PostgresBackupStorage {
                 incremental_backups.push(backup.id);
             }
         }
-        
+
         Ok(incremental_backups)
     }
 

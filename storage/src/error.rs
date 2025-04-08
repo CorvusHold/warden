@@ -60,8 +60,12 @@ impl From<std::io::Error> for StorageError {
     }
 }
 
-impl From<aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::create_bucket::CreateBucketError>> for StorageError {
-    fn from(err: aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::create_bucket::CreateBucketError>) -> Self {
+impl From<aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::create_bucket::CreateBucketError>>
+    for StorageError
+{
+    fn from(
+        err: aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::create_bucket::CreateBucketError>,
+    ) -> Self {
         StorageError::Aws(err.to_string())
     }
 }

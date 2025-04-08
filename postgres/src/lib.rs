@@ -1,5 +1,5 @@
-pub mod cli;
 pub mod backup;
+pub mod cli;
 pub mod common;
 pub mod manager;
 pub mod restore;
@@ -8,8 +8,8 @@ pub mod user;
 pub mod wrapper;
 
 use anyhow;
-use thiserror::Error;
 use ssh::SshError;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum PostgresError {

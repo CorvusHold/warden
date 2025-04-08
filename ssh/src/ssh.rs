@@ -1,9 +1,11 @@
-use tokio::net::TcpStream;
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
-use log;
-use russh::*;
 use russh::keys::*;
+use russh::*;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 
 pub struct SSHTunnel {
@@ -72,7 +74,8 @@ impl SSHTunnel {
         let config = client::Config::default();
         let config = Arc::new(config);
 
-        let mut session = client::connect(config, (self.host.as_str(), self.port.unwrap()), Client).await?;
+        let mut session =
+            client::connect(config, (self.host.as_str(), self.port.unwrap()), Client).await?;
 
         let auth_res = session
             .authenticate_publickey(
@@ -113,7 +116,9 @@ impl SSHTunnel {
                                 remote_port,
                                 local_port,
                                 running,
-                            ).await {
+                            )
+                            .await
+                            {
                                 log::error!("Forwarding error: {}", e);
                             }
                         });

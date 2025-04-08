@@ -1,11 +1,8 @@
-use crate::{
-    Bucket, Metadata, ObjectMetadata, StorageError, StorageObject, StorageProvider,
-};
+use crate::{Bucket, Metadata, ObjectMetadata, StorageError, StorageObject, StorageProvider};
 use async_trait::async_trait;
 use aws_config::BehaviorVersion;
-use chrono;
-use aws_sdk_s3::config::Region;
 use aws_credential_types::provider::SharedCredentialsProvider;
+use aws_sdk_s3::config::Region;
 use aws_sdk_s3::{
     operation::{
         create_bucket::CreateBucketOutput, delete_object::DeleteObjectOutput,
@@ -17,17 +14,18 @@ use aws_sdk_s3::{
     Client,
 };
 use aws_smithy_types::DateTime;
+use chrono;
 
 use bytes::Bytes;
 use futures::Stream;
 use futures::StreamExt;
 use log::{error, info};
+use std::convert::TryFrom;
 use std::path::Path;
 use std::pin::Pin;
 use std::time::{Duration, SystemTime};
-use std::convert::TryFrom;
-use tokio::{fs::File, io::AsyncReadExt};
 use tokio::io::AsyncWriteExt;
+use tokio::{fs::File, io::AsyncReadExt};
 
 /// AWS S3 storage provider
 pub struct S3Provider {
@@ -63,7 +61,8 @@ impl S3Provider {
                 None,
                 "static-credentials-provider",
             );
-            config_builder = config_builder.credentials_provider(SharedCredentialsProvider::new(credentials));
+            config_builder =
+                config_builder.credentials_provider(SharedCredentialsProvider::new(credentials));
         }
 
         // Add custom endpoint if provided
@@ -92,10 +91,7 @@ impl S3Provider {
     }
 
     /// Converts an S3 object to a StorageObject
-    fn convert_s3_object(
-        &self,
-        obj: &aws_sdk_s3::types::Object,
-    ) -> StorageObject {
+    fn convert_s3_object(&self, obj: &aws_sdk_s3::types::Object) -> StorageObject {
         StorageObject {
             key: obj.key().unwrap_or_default().to_string(),
             size: match obj.size() {
@@ -203,24 +199,27 @@ impl StorageProvider for S3Provider {
         if let Some(endpoint) = &self.endpoint {
             info!("Using endpoint: {}", endpoint);
         }
-        
+
         let head_bucket_request = self.client.head_bucket().bucket(bucket);
         info!("Sending head_bucket request to AWS S3");
-        
+
         match head_bucket_request.send().await {
             Ok(_) => {
                 info!("Bucket {} exists", bucket);
                 Ok(true)
-            },
+            }
             Err(e) => {
                 let error_string = e.to_string();
                 info!("Received error response: {}", error_string);
-                
+
                 if error_string.contains("404") {
                     info!("Bucket {} does not exist (404 Not Found)", bucket);
                     Ok(false)
                 } else if error_string.contains("403") {
-                    info!("Bucket {} exists but access is forbidden (403 Forbidden)", bucket);
+                    info!(
+                        "Bucket {} exists but access is forbidden (403 Forbidden)",
+                        bucket
+                    );
                     // For S3, a 403 means the bucket exists but we don't have permission to access it
                     // We'll treat this as the bucket existing
                     Ok(true)
@@ -234,10 +233,11 @@ impl StorageProvider for S3Provider {
     }
 
     async fn list_buckets(&self) -> Result<Vec<Bucket>, StorageError> {
-        let list_buckets_result: ListBucketsOutput = self.client.list_buckets().send().await.map_err(|e| {
-            error!("Failed to list buckets: {}", e);
-            StorageError::Aws(e.to_string())
-        })?;
+        let list_buckets_result: ListBucketsOutput =
+            self.client.list_buckets().send().await.map_err(|e| {
+                error!("Failed to list buckets: {}", e);
+                StorageError::Aws(e.to_string())
+            })?;
 
         // Get the buckets or use an empty vec if None
         let buckets = list_buckets_result.buckets();
@@ -265,10 +265,11 @@ impl StorageProvider for S3Provider {
             list_objects_request = list_objects_request.prefix(prefix);
         }
 
-        let list_objects_result: ListObjectsV2Output = list_objects_request.send().await.map_err(|e| {
-            error!("Failed to list objects in bucket {}: {}", bucket, e);
-            StorageError::Aws(e.to_string())
-        })?;
+        let list_objects_result: ListObjectsV2Output =
+            list_objects_request.send().await.map_err(|e| {
+                error!("Failed to list objects in bucket {}: {}", bucket, e);
+                StorageError::Aws(e.to_string())
+            })?;
 
         let objects = list_objects_result
             .contents()
@@ -292,10 +293,14 @@ impl StorageProvider for S3Provider {
             StorageError::Io(e)
         })?;
 
-        let file_size = file.metadata().await.map_err(|e| {
-            error!("Failed to get file metadata: {}", e);
-            StorageError::Io(e)
-        })?.len();
+        let file_size = file
+            .metadata()
+            .await
+            .map_err(|e| {
+                error!("Failed to get file metadata: {}", e);
+                StorageError::Io(e)
+            })?
+            .len();
 
         // Read the file into a buffer
         let mut buffer = Vec::new();
@@ -307,10 +312,15 @@ impl StorageProvider for S3Provider {
             error!("Failed to read file {}: {}", file_path.display(), e);
             StorageError::Io(e)
         })?;
-        
+
         // Create a ByteStream from the buffer
         let stream = ByteStream::from(buffer);
-        let mut put_object_request = self.client.put_object().bucket(bucket).key(key).body(stream);
+        let mut put_object_request = self
+            .client
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(stream);
 
         if let Some(content_type) = content_type {
             put_object_request = put_object_request.content_type(content_type);
@@ -327,7 +337,13 @@ impl StorageProvider for S3Provider {
             StorageError::Aws(e.to_string())
         })?;
 
-        info!("Uploaded file {} to {}/{} ({} bytes)", file_path.display(), bucket, key, file_size);
+        info!(
+            "Uploaded file {} to {}/{} ({} bytes)",
+            file_path.display(),
+            bucket,
+            key,
+            file_size
+        );
         Ok(())
     }
 
@@ -425,7 +441,8 @@ impl StorageProvider for S3Provider {
         &self,
         bucket: &str,
         key: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>, StorageError> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>, StorageError>
+    {
         let get_object_result: GetObjectOutput = self
             .client
             .get_object()
@@ -444,17 +461,18 @@ impl StorageProvider for S3Provider {
 
         // Convert ByteStream to our expected return type
         let byte_stream = get_object_result.body;
-        
+
         // Create a stream that collects all bytes and then yields them
-        let collected_stream = byte_stream.collect().await
-            .map_err(|e| {
-                error!("Failed to collect stream: {}", e);
-                StorageError::Aws(e.to_string())
-            })?;
-        
+        let collected_stream = byte_stream.collect().await.map_err(|e| {
+            error!("Failed to collect stream: {}", e);
+            StorageError::Aws(e.to_string())
+        })?;
+
         // Create a once stream that yields the collected bytes
-        let once_stream = futures::stream::once(futures::future::ok::<Bytes, std::io::Error>(collected_stream.into_bytes()));
-        
+        let once_stream = futures::stream::once(futures::future::ok::<Bytes, std::io::Error>(
+            collected_stream.into_bytes(),
+        ));
+
         Ok(Box::pin(once_stream))
     }
 
@@ -519,7 +537,14 @@ impl StorageProvider for S3Provider {
     }
 
     async fn object_exists(&self, bucket: &str, key: &str) -> Result<bool, StorageError> {
-        match self.client.head_object().bucket(bucket).key(key).send().await {
+        match self
+            .client
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+        {
             Ok(_) => Ok(true),
             Err(e) => {
                 if e.to_string().contains("404") {
@@ -572,23 +597,28 @@ impl StorageProvider for S3Provider {
         // Collect all bytes from the stream into a single buffer
         let mut buffer = Vec::new();
         let mut stream = stream;
-        
+
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(chunk) => {
                     buffer.extend_from_slice(&chunk);
-                },
+                }
                 Err(e) => {
                     error!("Stream error: {}", e);
                     return Err(StorageError::Io(e));
                 }
             }
         }
-        
+
         // Create a ByteStream from the collected buffer
         let byte_stream = ByteStream::from(buffer);
 
-        let mut put_object_request = self.client.put_object().bucket(bucket).key(key).body(byte_stream);
+        let mut put_object_request = self
+            .client
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .body(byte_stream);
 
         if let Some(content_type) = content_type {
             put_object_request = put_object_request.content_type(content_type);

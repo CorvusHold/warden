@@ -114,10 +114,28 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 postgres::cli::commands::full_backup(
-                    host, port, database, user, password, ssl_mode, backup_dir,
-                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port,
-                    remote_storage, storage_provider, storage_bucket, storage_prefix,
-                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
                 )
                 .await?
             }
@@ -146,10 +164,28 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 postgres::cli::commands::incremental_backup(
-                    host, port, database, user, password, ssl_mode, backup_dir,
-                    remote_storage, storage_provider, storage_bucket, storage_prefix,
-                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
-                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
                 )
                 .await?
             }
@@ -178,10 +214,28 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 postgres::cli::commands::snapshot_backup(
-                    host, port, database, user, password, ssl_mode, backup_dir,
-                    remote_storage, storage_provider, storage_bucket, storage_prefix,
-                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
-                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
                 )
                 .await?
             }
@@ -210,10 +264,28 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 postgres::cli::commands::list_backups(
-                    host, port, database, user, password, ssl_mode, backup_dir,
-                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port, ssh_remote_port,
-                    remote_storage, storage_provider, storage_bucket, storage_prefix,
-                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
                 )
                 .await?
             }
@@ -485,17 +557,38 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 postgres::cli::commands::list_snapshot_contents(
-                    host, port, database, user, password, ssl_mode, backup_dir, backup_id,
-                    ssh_host, ssh_user, ssh_port, ssh_password, ssh_key_path, ssh_local_port,
-                    ssh_remote_port, remote_storage, storage_provider, storage_bucket, storage_prefix,
-                    storage_region, storage_endpoint, storage_access_key, storage_secret_key,
+                    host,
+                    port,
+                    database,
+                    user,
+                    password,
+                    ssl_mode,
+                    backup_dir,
+                    backup_id,
+                    ssh_host,
+                    ssh_user,
+                    ssh_port,
+                    ssh_password,
+                    ssh_key_path,
+                    ssh_local_port,
+                    ssh_remote_port,
+                    remote_storage,
+                    storage_provider,
+                    storage_bucket,
+                    storage_prefix,
+                    storage_region,
+                    storage_endpoint,
+                    storage_access_key,
+                    storage_secret_key,
                 )
                 .await?
             }
         },
-        Commands::Ssh { command: SshCommands::Forward { cmd } } => {
+        Commands::Ssh {
+            command: SshCommands::Forward { cmd },
+        } => {
             ssh::cli::forward::forward(cmd).await?;
-        },
+        }
         Commands::Run => {
             log::info!("Running warden daemon in the foreground...");
             daemon::cli::run::execute().await?

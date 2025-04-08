@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-mod ssh;
 pub mod cli;
+mod ssh;
 
 pub use ssh::SSHTunnel;
 

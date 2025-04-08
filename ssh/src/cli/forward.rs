@@ -1,14 +1,17 @@
+use crate::ssh::SSHTunnel;
+use crate::SshError;
 use anyhow::Result;
 use clap::Parser;
-use crate::ssh::SSHTunnel;
-use log::{info, warn};
-use crate::SshError;
-use std::{thread, net::TcpListener, sync::Arc};
 use ctrlc;
+use log::{info, warn};
+use std::{net::TcpListener, sync::Arc, thread};
 
 /// Forward a remote port to a local port over SSH.
 #[derive(Parser, Debug)]
-#[clap(name = "forward", about = "Forward a remote port to a local port over SSH")]
+#[clap(
+    name = "forward",
+    about = "Forward a remote port to a local port over SSH"
+)]
 pub struct ForwardCommand {
     /// The SSH username.
     #[clap(short = 'U', long, default_value = "root")]
@@ -49,16 +52,32 @@ pub fn find_available_port() -> Option<u16> {
 }
 
 pub async fn forward(cmd: ForwardCommand) -> Result<()> {
-    let ForwardCommand { ssh_user, ssh_host, ssh_port, local_port, remote_host, remote_port, remote_password, remote_key_path } = cmd;
+    let ForwardCommand {
+        ssh_user,
+        ssh_host,
+        ssh_port,
+        local_port,
+        remote_host,
+        remote_port,
+        remote_password,
+        remote_key_path,
+    } = cmd;
 
     // Get local port (either specified or find available)
-    let local_port = local_port.unwrap_or_else(|| find_available_port().expect("No available ports found"));
+    let local_port =
+        local_port.unwrap_or_else(|| find_available_port().expect("No available ports found"));
 
-    println!("Forwarding remote port {} on {} to local port {}", remote_port, remote_host, local_port);
+    println!(
+        "Forwarding remote port {} on {} to local port {}",
+        remote_port, remote_host, local_port
+    );
 
     let mut tunnel = SSHTunnel::new(ssh_host.clone(), ssh_user.clone(), Some(ssh_port));
 
-    info!("Attempting SSH tunnel to {}@{}:{}", ssh_user, ssh_host, ssh_port);
+    info!(
+        "Attempting SSH tunnel to {}@{}:{}",
+        ssh_user, ssh_host, ssh_port
+    );
 
     // Set authentication
     if let Some(password) = &remote_password {
@@ -69,14 +88,15 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
         tunnel = tunnel.with_private_key_path(key_path.clone());
     } else {
         return Err(SshError::ConfigurationError(
-            "Either SSH password or key path must be specified".to_string()
-        ).into());
+            "Either SSH password or key path must be specified".to_string(),
+        )
+        .into());
     }
 
     // Get a reference to the tunnel's running flag
     let tunnel_ref = Arc::new(tunnel);
     let tunnel_weak = Arc::downgrade(&tunnel_ref);
-    
+
     // Set up Ctrl+C handler that will stop the tunnel
     ctrlc::set_handler(move || {
         info!("Received Ctrl+C, shutting down tunnel...");
@@ -87,23 +107,33 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
                 info!("SSH tunnel closed successfully");
             }
         }
-    }).expect("Error setting Ctrl+C handler");
+    })
+    .expect("Error setting Ctrl+C handler");
 
     // Forward the port
-    info!("Forwarding port {} to {}:{}", local_port, remote_host, remote_port);
-    match tunnel_ref.forward_port(local_port, remote_port, remote_host.clone()).await {
+    info!(
+        "Forwarding port {} to {}:{}",
+        local_port, remote_host, remote_port
+    );
+    match tunnel_ref
+        .forward_port(local_port, remote_port, remote_host.clone())
+        .await
+    {
         Ok(_) => {
             println!("SSH tunnel established successfully");
-            println!("Connect to localhost:{} to access {}:{}", local_port, remote_host, remote_port);
-            
+            println!(
+                "Connect to localhost:{} to access {}:{}",
+                local_port, remote_host, remote_port
+            );
+
             // Keep the tunnel running until it's stopped (e.g., by Ctrl+C)
             while tunnel_ref.is_running() {
                 thread::sleep(std::time::Duration::from_secs(1));
             }
-            
+
             info!("SSH tunnel has been closed");
             Ok(())
-        },
+        }
         Err(e) => {
             warn!("SSH tunnel error: {}", e);
             Err(SshError::TunnelError(e.to_string()).into())

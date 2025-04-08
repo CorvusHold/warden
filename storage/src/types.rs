@@ -1,7 +1,7 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
-use chrono::{DateTime, Utc};
 
 /// Represents a storage bucket
 #[derive(Debug, Clone, Serialize, Deserialize)]

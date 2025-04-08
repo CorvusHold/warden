@@ -83,17 +83,32 @@ impl TunnelKeeper {
 
             // Store original connection details
             self.original_host = host.clone();
-            self.original_port = config.ssh_remote_port.clone().ok_or(SshError::ConfigurationError("SSH remote port must be specified".to_string()))?;;
+            self.original_port =
+                config
+                    .ssh_remote_port
+                    .clone()
+                    .ok_or(SshError::ConfigurationError(
+                        "SSH remote port must be specified".to_string(),
+                    ))?;
 
             let host = config.host.clone();
-            let port = config.ssh_remote_port.clone().ok_or(SshError::ConfigurationError("SSH remote port must be specified".to_string()))?;
-            let ssh_host = config.ssh_host.clone().ok_or(SshError::ConfigurationError("SSH host must be specified".to_string()))?;
-            let ssh_user = config.ssh_user.clone().ok_or(SshError::ConfigurationError("SSH user must be specified".to_string()))?;
+            let port = config
+                .ssh_remote_port
+                .clone()
+                .ok_or(SshError::ConfigurationError(
+                    "SSH remote port must be specified".to_string(),
+                ))?;
+            let ssh_host = config.ssh_host.clone().ok_or(SshError::ConfigurationError(
+                "SSH host must be specified".to_string(),
+            ))?;
+            let ssh_user = config.ssh_user.clone().ok_or(SshError::ConfigurationError(
+                "SSH user must be specified".to_string(),
+            ))?;
             let ssh_port = config.ssh_port;
             let ssh_password = config.ssh_password.clone();
             let ssh_key_path = config.ssh_key_path.clone();
             // Before creating the tunnel, clone the values for logging
-            
+
             // Start tunnel in background thread
             let handle = thread::spawn(move || {
                 let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -103,8 +118,10 @@ impl TunnelKeeper {
                     let ssh_host_clone = ssh_host.clone();
 
                     // Use the cloned values in the info macro
-                    info!("Setting up SSH tunnel from localhost:{} to {}:{} via {}@{}", 
-                        local_port, host, port, ssh_user_clone, ssh_host_clone);
+                    info!(
+                        "Setting up SSH tunnel from localhost:{} to {}:{} via {}@{}",
+                        local_port, host, port, ssh_user_clone, ssh_host_clone
+                    );
 
                     // Create the tunnel with the original values
                     let mut tunnel = SSHTunnel::new(ssh_host.clone(), ssh_user.clone(), ssh_port);
@@ -115,18 +132,25 @@ impl TunnelKeeper {
                     }
 
                     // In the tunnel setup, before starting the tunnel:
-                    info!("Setting up SSH tunnel from localhost:{} to {}:{} via {}@{}", 
-                    local_port, host, port, ssh_user_clone, ssh_host_clone);
+                    info!(
+                        "Setting up SSH tunnel from localhost:{} to {}:{} via {}@{}",
+                        local_port, host, port, ssh_user_clone, ssh_host_clone
+                    );
 
                     // In the tunnel forward_port call, add more detailed logging:
-                    info!("Forwarding local port {} to remote {}:{}", local_port, host, port);
-                    Ok(if let Err(e) = tunnel.forward_port(local_port, port, host).await {
-                    error!("SSH tunnel forwarding failed: {}", e);
-                    return Err(SshError::TunnelError(format!(
-                        "Failed to forward port: {}",
-                        e
-                    )));
-                    })
+                    info!(
+                        "Forwarding local port {} to remote {}:{}",
+                        local_port, host, port
+                    );
+                    Ok(
+                        if let Err(e) = tunnel.forward_port(local_port, port, host).await {
+                            error!("SSH tunnel forwarding failed: {}", e);
+                            return Err(SshError::TunnelError(format!(
+                                "Failed to forward port: {}",
+                                e
+                            )));
+                        },
+                    )
                 });
             });
 
@@ -159,12 +183,12 @@ impl TunnelKeeper {
         if !self.is_active.load(Ordering::SeqCst) {
             return Err(SshError::TunnelError("Tunnel is not active".to_string()));
         }
-    
+
         let mut attempts = 3;
         while attempts > 0 {
             tokio::time::sleep(Duration::from_millis(1000)).await;
             info!("Verifying tunnel connection (attempt {})", 4 - attempts);
-    
+
             // Use pg_isready to check server availability
             let status = std::process::Command::new("pg_isready")
                 .arg("-h")
@@ -177,18 +201,20 @@ impl TunnelKeeper {
                 Ok(exit_status) if exit_status.success() => {
                     info!("Successfully verified PostgreSQL server availability");
                     return Ok(());
-                },
+                }
                 Ok(_) => {
                     warn!("PostgreSQL server not ready");
                     attempts -= 1;
-                },
+                }
                 Err(e) => {
                     warn!("Failed to run pg_isready: {}", e);
                     attempts -= 1;
                 }
             }
         }
-        Err(SshError::TunnelError("Failed to verify PostgreSQL server availability".to_string()))
+        Err(SshError::TunnelError(
+            "Failed to verify PostgreSQL server availability".to_string(),
+        ))
     }
 
     pub async fn close(&mut self) -> Result<(), SshError> {

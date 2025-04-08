@@ -126,7 +126,8 @@ impl StorageProviderFactory {
         access_key: Option<String>,
         secret_key: Option<String>,
     ) -> Result<Box<dyn StorageProvider>, StorageError> {
-        let provider = providers::aws::S3Provider::new(region, endpoint, access_key, secret_key).await?;
+        let provider =
+            providers::aws::S3Provider::new(region, endpoint, access_key, secret_key).await?;
         Ok(Box::new(provider))
     }
 }

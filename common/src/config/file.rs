@@ -42,7 +42,7 @@ pub struct FeaturesConfig {
 }
 
 pub fn load_config() -> Result<WardenConfig, ConfigError> {
-    let config_paths = vec![
+    let config_paths = [
         "/etc/warden/warden.toml",
         "~/.config/warden/warden.toml",
         "warden.toml",
@@ -86,7 +86,7 @@ pub fn load_config() -> Result<WardenConfig, ConfigError> {
 /// 2. ~/.config/warden/warden.toml
 /// 3. /etc/warden/warden.toml (if writable)
 pub fn update_config(config: &WardenConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let config_paths = vec![
+    let config_paths = [
         "/etc/warden/warden.toml",
         "~/.config/warden/warden.toml",
         "warden.toml",

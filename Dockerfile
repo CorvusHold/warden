@@ -23,7 +23,7 @@ WORKDIR ${APP_DIR}
 
 # Copy the built binary from the release artifact
 # This expects the binary name to match the one in your Cargo.toml
-COPY --chown=${APP_USER}:${APP_USER} ./dist/* ${APP_DIR}/
+COPY --chown=${APP_USER}:${APP_USER} warden ${APP_DIR}/
 
 # Set the binary as executable just to be safe
 RUN chmod +x ${APP_DIR}/*
@@ -31,4 +31,4 @@ RUN chmod +x ${APP_DIR}/*
 # Switch to non-root user
 USER ${APP_USER}
 
-CMD ["./BINARY_NAME"]
+CMD ["./warden"]

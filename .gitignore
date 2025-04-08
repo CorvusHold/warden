@@ -1,3 +1,4 @@
 **/target
 backups
 .DS_Store
+.dist

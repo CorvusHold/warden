@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::atomic::Ordering};
 use uuid::Uuid;
-use log::{info, warn};
 
 /// Represents a PostgreSQL server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
