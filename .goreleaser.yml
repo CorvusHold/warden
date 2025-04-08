@@ -53,13 +53,13 @@ builds:
     # Default: "--release".
     flags:
       - --release
-      - -p=postgres
-      - -p=common
-      - -p=console
-      - -p=daemon
-      - -p=overwatch
-      - -p=ssh
-      - -p=storage
+      - -p=warden
+      # - -p=common
+      # - -p=console
+      # - -p=daemon
+      # - -p=overwatch
+      # - -p=ssh
+      # - -p=storage
 
     # Custom environment variables to be set during the builds.
     # Invalid environment variables will be ignored.
