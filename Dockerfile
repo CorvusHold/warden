@@ -8,13 +8,13 @@ RUN groupadd -r ${APP_USER} && \
     mkdir -p ${APP_DIR} && \
     chown -R ${APP_USER}:${APP_USER} ${APP_DIR}
 
-RUN apt update && \
+RUN apt update && apt upgrade -y && \
     apt install -y --no-install-recommends \
     ca-certificates \
     postgresql-common \
     libssl3 && \
     apt update && \
-    apt install -y postgresql-client-15 && \
+    apt install -y postgresql-client-16 && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
