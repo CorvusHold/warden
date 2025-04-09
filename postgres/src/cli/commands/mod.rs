@@ -539,23 +539,69 @@ pub async fn snapshot_backup(
             metadata.insert("database".to_string(), database.clone());
             metadata.insert("start_time".to_string(), backup.start_time.to_string());
 
-            // Upload snapshot backup files
-            let backup_path = backup_dir.join(backup.id.to_string());
-            storage
-                .upload_backup(&backup.id.to_string(), &backup_path, Some(metadata.clone()))
-                .await
-                .map_err(|e| anyhow!("Failed to upload snapshot backup: {}", e))?;
+            // Find the actual backup directory (which has a timestamp format)
+            let mut actual_backup_path = PathBuf::new();
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        if path.is_dir()
+                            && path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .contains("snapshot_backup_")
+                        {
+                            actual_backup_path = path;
+                            break;
+                        }
+                    }
+                }
+            }
 
-            // Upload logical backup if available (snapshots typically include a logical backup)
-            let dump_file = backup_path.join("pg_dump.dump");
+            info!("Using backup directory: {}", actual_backup_path.display());
+
+            // Upload physical backup files
+            storage
+                .upload_physical_backup(
+                    &backup.id.to_string(),
+                    &actual_backup_path,
+                    Some(metadata.clone()),
+                )
+                .await
+                .map_err(|e| anyhow!("Failed to upload physical backup: {}", e))?;
+
+            // Upload logical backup if available
+            let dump_file = actual_backup_path.join(format!("{}.dump", database));
             if dump_file.exists() {
+                info!("Uploading logical backup from: {}", dump_file.display());
                 storage
                     .upload_logical_backup(&backup.id.to_string(), &dump_file, Some(metadata))
                     .await
                     .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
+            } else {
+                info!("Logical backup file not found at: {}", dump_file.display());
+                // Try alternative locations
+                let alt_dump_file = actual_backup_path.join("pg_dump.dump");
+                if alt_dump_file.exists() {
+                    info!(
+                        "Uploading logical backup from alternative location: {}",
+                        alt_dump_file.display()
+                    );
+                    storage
+                        .upload_logical_backup(
+                            &backup.id.to_string(),
+                            &alt_dump_file,
+                            Some(metadata),
+                        )
+                        .await
+                        .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
+                } else {
+                    info!("No logical backup file found to upload");
+                }
             }
 
-            println!("Snapshot backup successfully uploaded to remote storage");
+            info!("Backup successfully uploaded to remote storage");
         }
     }
 

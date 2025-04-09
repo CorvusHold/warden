@@ -27,6 +27,7 @@ impl FullBackupManager {
 
         // Create backup directory if it doesn't exist
         if !self.backup_dir.exists() {
+            info!("Creating base backup directory: {:?}", self.backup_dir);
             fs::create_dir_all(&self.backup_dir).map_err(|e| PostgresError::Io(e))?;
         }
 
@@ -49,8 +50,6 @@ impl FullBackupManager {
         // Create backup metadata
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
         let backup_path = self.backup_dir.join(format!("full_backup_{}", timestamp));
-
-        fs::create_dir_all(&backup_path).map_err(|e| PostgresError::Io(e))?;
 
         let mut backup = Backup::new(BackupType::Full, backup_path.clone(), server_version, None);
 

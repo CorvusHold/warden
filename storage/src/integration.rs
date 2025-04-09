@@ -44,7 +44,7 @@ impl PostgresBackupStorage {
         // This is a workaround for the "service error" issue
         info!("Attempting to create bucket {} if it doesn't exist", bucket);
         match provider.create_bucket(&bucket).await {
-            Ok(_) => info!("Successfully created bucket {}", bucket),
+            Ok(_) => {}
             Err(e) => {
                 // If bucket already exists, that's fine
                 if e.to_string().contains("BucketAlreadyOwnedByYou")
@@ -110,6 +110,7 @@ impl PostgresBackupStorage {
                     _ => None,
                 };
 
+                info!("Uploading file: {} ({})", rel_path.display(), key);
                 self.provider
                     .upload_file(
                         &self.bucket,
@@ -242,8 +243,6 @@ impl PostgresBackupStorage {
                 }
             }
         }
-
-        info!("Physical backup {} uploaded successfully", backup_id);
         Ok(())
     }
 

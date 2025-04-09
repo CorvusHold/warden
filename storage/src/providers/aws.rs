@@ -171,26 +171,43 @@ impl StorageProvider for S3Provider {
     }
 
     async fn create_bucket(&self, bucket: &str) -> Result<(), StorageError> {
-        let create_bucket_result: CreateBucketOutput = self
-            .client
-            .create_bucket()
-            .bucket(bucket)
-            .create_bucket_configuration(
-                aws_sdk_s3::types::CreateBucketConfiguration::builder()
-                    .location_constraint(aws_sdk_s3::types::BucketLocationConstraint::from(
-                        self.region.as_str(),
-                    ))
-                    .build(),
-            )
-            .send()
-            .await
-            .map_err(|e| {
-                error!("Failed to create bucket {}: {}", bucket, e);
-                StorageError::Aws(e.to_string())
-            })?;
+        // First check if bucket exists
+        match self.client.head_bucket().bucket(bucket).send().await {
+            Ok(_) => {
+                info!("Bucket {} already exists", bucket);
+                return Ok(());
+            }
+            Err(e)
+                if e.as_service_error()
+                    .map(|e| e.is_not_found())
+                    .unwrap_or(false) =>
+            {
+                let create_bucket_result = self
+                    .client
+                    .create_bucket()
+                    .bucket(bucket)
+                    .create_bucket_configuration(
+                        aws_sdk_s3::types::CreateBucketConfiguration::builder()
+                            .location_constraint(aws_sdk_s3::types::BucketLocationConstraint::from(
+                                self.region.as_str(),
+                            ))
+                            .build(),
+                    )
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to create bucket {}: {}", bucket, e);
+                        StorageError::Aws(e.to_string())
+                    })?;
 
-        info!("Created bucket: {:?}", create_bucket_result.location());
-        Ok(())
+                info!("Created bucket: {:?}", create_bucket_result.location());
+                return Ok(());
+            }
+            Err(e) => {
+                error!("Error checking bucket existence: {}", e);
+                return Err(StorageError::Aws(e.to_string()));
+            }
+        }
     }
 
     async fn bucket_exists(&self, bucket: &str) -> Result<bool, StorageError> {

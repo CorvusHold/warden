@@ -42,50 +42,6 @@ impl SnapshotBackupManager {
             )));
         }
 
-        // Create timestamped backup directory
-        let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
-        let backup_path = self
-            .backup_dir
-            .join(format!("snapshot_backup_{}", timestamp));
-
-        info!("Creating backup directory: {:?}", backup_path);
-        fs::create_dir_all(&backup_path).map_err(|e| PostgresError::Io(e))?;
-
-        // Set permissions to 755
-        fs::set_permissions(&backup_path, fs::Permissions::from_mode(0o755))
-            .map_err(|e| PostgresError::Io(e))?;
-
-        // Verify directory was created with correct permissions
-        let metadata = fs::metadata(&backup_path).map_err(|e| PostgresError::Io(e))?;
-        if !metadata.is_dir() || metadata.permissions().mode() & 0o777 != 0o755 {
-            return Err(PostgresError::BackupError(format!(
-                "Failed to create backup directory with correct permissions: {:?}",
-                backup_path
-            )));
-        }
-
-        // Add delay and retry for directory creation
-        let mut retries = 3;
-        while retries > 0 && !backup_path.exists() {
-            info!(
-                "Waiting for backup directory creation ({} retries left)",
-                retries
-            );
-            sleep(Duration::from_millis(500)).await;
-            retries -= 1;
-        }
-
-        if !backup_path.exists() {
-            error!(
-                "Failed to create backup directory after retries: {:?}",
-                backup_path
-            );
-            return Err(PostgresError::BackupError(format!(
-                "Failed to create backup directory: {:?}",
-                backup_path
-            )));
-        }
-
         // Connect to PostgreSQL to get server version
         let conn_string = self.config.connection_string();
         let (client, connection) = tokio_postgres::connect(&conn_string, tokio_postgres::NoTls)
@@ -103,13 +59,25 @@ impl SnapshotBackupManager {
         let server_version = self.get_server_version(&client).await?;
 
         // Create backup metadata
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        let backup_path = self
+            .backup_dir
+            .join(format!("snapshot_backup_{}", timestamp));
+
+        // Create backup directory
+        if !backup_path.exists() {
+            fs::create_dir_all(&backup_path).map_err(|e| PostgresError::Io(e))?;
+            fs::set_permissions(&backup_path, PermissionsExt::from_mode(0o755))
+                .map_err(|e| PostgresError::Io(e))?;
+        }
+
         let mut backup = Backup::new(
             BackupType::Snapshot,
             backup_path.clone(),
             server_version,
             None,
         );
-        let dump_file = backup_path.join(format!("snapshot_{}.dump", backup.id));
+        let dump_file = backup_path.join(format!("{}.dump", self.config.database));
 
         // Temporarily use a placeholder for WAL position to bypass the pg_lsn type issue
         let wal_start = "0/0000000".to_string();
@@ -117,7 +85,7 @@ impl SnapshotBackupManager {
         backup.wal_start = Some(wal_start);
 
         // Perform the backup using pg_dump
-        let options = PgDumpOptions {   
+        let options = PgDumpOptions {
             host: self.config.host.clone(),
             port: self.config.port,
             username: self.config.user.clone(),
@@ -139,6 +107,14 @@ impl SnapshotBackupManager {
         match PgDump::run(&options) {
             Ok(_) => {
                 info!("Snapshot backup completed successfully");
+
+                // // Create a logical backup (SQL dump) of the database
+                // if let Err(e) = self.create_logical_backup(&backup_path).await {
+                //     error!("Failed to create logical backup: {}", e);
+                //     // Continue with the physical backup even if logical backup fails
+                // } else {
+                //     info!("Logical backup completed successfully");
+                // }
 
                 // Temporarily use a placeholder for WAL position to bypass the pg_lsn type issue
                 let wal_end = "0/0000000".to_string();

@@ -111,7 +111,6 @@ impl PostgresManager {
 
     /// Perform a snapshot backup
     pub async fn snapshot_backup(&mut self) -> Result<Backup, PostgresError> {
-        info!("Starting snapshot backup function");
         info!("Starting snapshot backup");
 
         let manager = BackupManagerFactory::create_snapshot_backup_manager(
