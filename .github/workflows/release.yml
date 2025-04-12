@@ -48,8 +48,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install LibC
-        run: sudo apt-get install -y libc6-dev
+      - name: Install cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+          sudo apt-get install -y gcc-multilib g++-multilib
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross
+          sudo apt-get install -y mingw-w64
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          target: x86_64-unknown-linux-gnu,x86_64-apple-darwin,x86_64-pc-windows-gnu,aarch64-unknown-linux-gnu,aarch64-apple-darwin
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
