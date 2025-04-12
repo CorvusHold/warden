@@ -50,9 +50,7 @@ jobs:
           prerelease: ${{ steps.release_type.outputs.is_prerelease }}
           body: ${{ steps.changelog.outputs.changelog }}
           name: ${{ steps.release_type.outputs.is_prerelease == 'true' && format('Pre-release {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          token: ${{ secrets.GITHUB_TOKEN }}
   release:
     needs: create-release
     name: Release for ${{ matrix.target }}
