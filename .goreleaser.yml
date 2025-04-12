@@ -21,10 +21,10 @@ builds:
     # Default: [ "x86_64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-pc-windows-gnu", "aarch64-unknown-linux-gnu", "aarch64-apple-darwin" ]
     targets:
       - x86_64-unknown-linux-gnu
-      # - x86_64-apple-darwin
-      # - x86_64-pc-windows-gnu
-      # - aarch64-unknown-linux-gnu
-      # - aarch64-apple-darwin
+      - x86_64-apple-darwin
+      - x86_64-pc-windows-gnu
+      - aarch64-unknown-linux-gnu
+      - aarch64-apple-darwin
 
     # Path to project's (sub)directory containing the code.
     # This is the working directory for the cargo build command(s).

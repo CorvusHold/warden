@@ -8,12 +8,12 @@ edition = "2021"
 members = ["common", "console", "daemon", "overwatch", "postgres", "ssh", "storage"]
 
 [dependencies]
-clap = { version = "4.5.32", features = ["derive"] }
-tokio = { version = "1.44.1", features = ["full"] }
+clap = { version = "4.5.36", features = ["derive"] }
+tokio = { version = "1.44.2", features = ["full"] }
 anyhow = "1.0.97"
 console = { path = "./console" }
 daemon = { path = "./daemon" }
-env_logger = "0.11.7"
+env_logger = "0.11.8"
 log = "0.4.27"
 common = { path = "./common" }
 postgres = { path = "./postgres" }
