@@ -131,7 +131,7 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
     let (client, connection) = connect(&manager.config.connection_string(), NoTls).await?;
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("Connection error: {}", e);
+            error("Connection error: {}", e);
         }
     });
     let rows = client.query("SELECT 1", &[]).await?;

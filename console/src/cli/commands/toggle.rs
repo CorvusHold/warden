@@ -7,6 +7,7 @@
 
 use anyhow::Result;
 use clap::Args;
+use log::info;
 
 #[derive(Debug, Args)]
 pub struct Toggle {
@@ -17,18 +18,18 @@ pub struct Toggle {
 
 impl Toggle {
     pub async fn run(self) -> Result<()> {
-        println!("Toggling warden (fake API call)...");
-        println!("  On: {}", self.on);
+        info!("Toggling warden (fake API call)...");
+        info!("  On: {}", self.on);
 
         // TODO: Implement the actual toggle logic here
         // This is where you would call the API to toggle the warden
         // For now, we'll just print a message
 
-        println!(
+        info!(
             "Warden is now {}",
-            if self.on { "enabled" } else { "disabled" }
+            if self.on { "enabled" } else { "disabled" },
         );
-        println!("Hold is aligned: yes");
+        info!("Hold is aligned: yes");
 
         Ok(())
     }

@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // List objects in a bucket
     let objects = s3_provider.list_objects("my-bucket", None).await?;
     for object in objects {
-        println!("Object: {}", object.key);
+        info!("Object: {}", object.key);
     }
     
     Ok(())
@@ -95,14 +95,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // List all backups
     let backups = storage.list_backups().await?;
     for backup in backups {
-        println!("Backup: {}", backup);
+        info!("Backup: {}", backup);
     }
     
     // Generate a pre-signed URL for a backup file (e.g., for sharing)
     let url = storage
         .generate_backup_file_url(backup_id, "base.tar.gz", Duration::from_secs(3600))
         .await?;
-    println!("Pre-signed URL: {}", url);
+    info!("Pre-signed URL: {}", url);
     
     // Download a backup
     let target_dir = Path::new("/path/to/restore/directory");
@@ -235,13 +235,13 @@ The library provides a comprehensive `StorageError` type for handling errors:
 use storage::StorageError;
 
 match result {
-    Ok(_) => println!("Operation succeeded"),
-    Err(StorageError::NotFound(msg)) => println!("Not found: {}", msg),
-    Err(StorageError::AlreadyExists(msg)) => println!("Already exists: {}", msg),
-    Err(StorageError::AccessDenied(msg)) => println!("Access denied: {}", msg),
-    Err(StorageError::Configuration(msg)) => println!("Configuration error: {}", msg),
-    Err(StorageError::Io(err)) => println!("IO error: {}", err),
-    Err(StorageError::Unexpected(msg)) => println!("Unexpected error: {}", msg),
+    Ok(_) => info!("Operation succeeded"),
+    Err(StorageError::NotFound(msg)) => info!("Not found: {}", msg),
+    Err(StorageError::AlreadyExists(msg)) => info!("Already exists: {}", msg),
+    Err(StorageError::AccessDenied(msg)) => info!("Access denied: {}", msg),
+    Err(StorageError::Configuration(msg)) => info!("Configuration error: {}", msg),
+    Err(StorageError::Io(err)) => info!("IO error: {}", err),
+    Err(StorageError::Unexpected(msg)) => info!("Unexpected error: {}", msg),
 }
 ```
 

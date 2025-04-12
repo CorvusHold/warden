@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use log::{error, info};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WardenConfig {
@@ -105,7 +106,7 @@ pub fn update_config(config: &WardenConfig) -> Result<(), Box<dyn std::error::Er
             if !parent.exists() {
                 if let Err(e) = fs::create_dir_all(parent) {
                     // If we can't create the directory, try the next path
-                    eprintln!("Failed to create directory {}: {}", parent.display(), e);
+                    error!("Failed to create directory {}: {}", parent.display(), e);
                     continue;
                 }
             }
@@ -115,15 +116,15 @@ pub fn update_config(config: &WardenConfig) -> Result<(), Box<dyn std::error::Er
         match fs::File::create(path_obj) {
             Ok(mut file) => {
                 if let Err(e) = file.write_all(toml_string.as_bytes()) {
-                    eprintln!("Failed to write to {}: {}", expanded_path, e);
+                    error!("Failed to write to {}: {}", expanded_path, e);
                     continue;
                 }
 
-                println!("Configuration updated successfully at {}", expanded_path);
+                info!("Configuration updated successfully at {}", expanded_path);
                 return Ok(());
             }
             Err(e) => {
-                eprintln!("Failed to create file {}: {}", expanded_path, e);
+                error!("Failed to create file {}: {}", expanded_path, e);
                 continue;
             }
         }

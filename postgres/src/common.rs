@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use log::{info, warn};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::atomic::Ordering};
 use uuid::Uuid;

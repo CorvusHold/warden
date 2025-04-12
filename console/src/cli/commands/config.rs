@@ -3,6 +3,7 @@ use clap::{Args, Subcommand};
 use common::config::{load_config, update_config};
 use serde_json;
 use serde_yaml;
+use log::info;
 
 #[derive(Debug, Args)]
 pub struct Config {
@@ -36,39 +37,39 @@ impl Config {
                 match format.as_str() {
                     "json" => {
                         let json = serde_json::to_string_pretty(&config)?;
-                        println!("{}", json);
+                        info!("{}", json);
                     }
                     "yaml" => {
                         let yaml = serde_yaml::to_string(&config)?;
-                        println!("{}", yaml);
+                        info!("{}", yaml);
                     }
                     "toml" => {
                         let toml = toml::to_string_pretty(&config)?;
-                        println!("{}", toml);
+                        info!("{}", toml);
                     }
                     "text" => {
-                        println!("Warden Configuration:");
-                        println!("  C2 Server: {}", config.c2_server);
-                        println!("  C2 Auth:");
-                        println!(
+                        info!("Warden Configuration:");
+                        info!("  C2 Server: {}", config.c2_server);
+                        info!("  C2 Auth:");
+                        info!(
                             "    ID: {}",
                             if config.c2_auth.id.is_empty() {
                                 "<not set>"
                             } else {
                                 &config.c2_auth.id
-                            }
+                            },
                         );
-                        println!(
+                        info!(
                             "    Secret: {}",
                             if config.c2_auth.secret.is_empty() {
                                 "<not set>"
                             } else {
                                 "<set>"
-                            }
+                            },
                         );
-                        println!("  Features:");
-                        println!("    Overwatch: {}", config.features.overwatch);
-                        println!("    PostgresBackup: {}", config.features.postgres_backup);
+                        info!("  Features:");
+                        info!("    Overwatch: {}", config.features.overwatch);
+                        info!("    PostgresBackup: {}", config.features.postgres_backup);
                     }
                     _ => {
                         return Err(anyhow!("Invalid format: {}", format));
@@ -111,7 +112,7 @@ impl Config {
                 // Save the updated configuration
                 update_config(&config)
                     .map_err(|e| anyhow!("Failed to update configuration: {}", e))?;
-                println!("Configuration updated successfully.");
+                info!("Configuration updated successfully.");
             }
         }
 

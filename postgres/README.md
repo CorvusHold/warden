@@ -62,13 +62,13 @@ let snapshot_backup = manager.snapshot_backup().await?;
 ```rust
 // List all backups
 for backup in manager.list_backups() {
-    println!("Backup ID: {}, Type: {:?}, Status: {:?}, Time: {}", 
+    info!("Backup ID: {}, Type: {:?}, Status: {:?}, Time: {}", 
              backup.id, backup.backup_type, backup.status, backup.start_time);
 }
 
 // Get the latest full backup
 if let Some(latest_full) = manager.get_latest_full_backup() {
-    println!("Latest full backup: {}", latest_full.id);
+    info!("Latest full backup: {}", latest_full.id);
 }
 ```
 
@@ -94,7 +94,7 @@ let restore = manager.restore_snapshot_backup(&snapshot_backup_id, restore_dir).
 
 // List contents of a snapshot backup
 let contents = manager.list_snapshot_contents(&snapshot_backup_id).await?;
-println!("Snapshot contents: {}", contents);
+info!("Snapshot contents: {}", contents);
 ```
 
 ## Examples

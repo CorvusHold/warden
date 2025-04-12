@@ -20,6 +20,7 @@ use common::config::load_config;
 use serde::Serialize;
 use serde_json;
 use serde_yaml;
+use log::info;
 
 #[derive(Debug, Args)]
 pub struct Status {
@@ -40,7 +41,7 @@ struct WardenStatus {
 
 impl Status {
     pub async fn run(self) -> Result<()> {
-        println!("Getting status...");
+        info!("Getting status...");
 
         // Load the configuration to get the feature status
         let config = load_config()?;
@@ -70,21 +71,21 @@ impl Status {
         match self.format.as_str() {
             "json" => {
                 let json = serde_json::to_string_pretty(&status)?;
-                println!("{}", json);
+                info!("{}", json);
             }
             "yaml" => {
                 let yaml = serde_yaml::to_string(&status)?;
-                println!("{}", yaml);
+                info!("{}", yaml);
             }
             "text" | "color" => {
-                println!("Warden version: {}", status.warden_version);
-                println!("Hold version: {}", status.hold_version);
-                println!("Compatible: {}", status.compatible);
-                println!("Daemon last sync: {}", status.last_sync);
+                info!("Warden version: {}", status.warden_version);
+                info!("Hold version: {}", status.hold_version);
+                info!("Compatible: {}", status.compatible);
+                info!("Daemon last sync: {}", status.last_sync);
 
-                println!("\nWarden services:");
-                println!("  Overwatch: {}", status.overwatch);
-                println!("  Postgres backup: {}", status.postgres_backup);
+                info!("\nWarden services:");
+                info!("  Overwatch: {}", status.overwatch);
+                info!("  Postgres backup: {}", status.postgres_backup);
             }
             _ => {
                 return Err(anyhow!("Invalid format: {}", self.format));

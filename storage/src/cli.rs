@@ -111,7 +111,7 @@
 
 //             // Cleanup
 //             std::fs::remove_dir_all(&backup_dir)?;
-//             println!("Backup {} completed successfully", backup_id);
+//             info!("Backup {} completed successfully", backup_id);
 //         }
 //     }
 

@@ -7,6 +7,7 @@
 
 use anyhow::Result;
 use clap::Args;
+use log::info;
 
 #[derive(Debug, Args)]
 pub struct Enroll {
@@ -24,19 +25,19 @@ pub struct Enroll {
 
 impl Enroll {
     pub async fn run(self) -> Result<()> {
-        println!("Enrolling with token: {}", self.enrollment_token);
+        info!("Enrolling with token: {}", self.enrollment_token);
         if let Some(name) = self.name {
-            println!("  Name: {}", name);
+            info!("  Name: {}", name);
         }
         if let Some(tags) = self.tags {
-            println!("  Tags: {}", tags);
+            info!("  Tags: {}", tags);
         }
 
         // TODO: Implement the actual enrollment logic here
         // This is where you would call the API to enroll the device
         // For now, we'll just print a message
 
-        println!("Enrollment successful (fake API call)");
+        info!("Enrollment successful (fake API call)");
 
         Ok(())
     }

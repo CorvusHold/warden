@@ -13,3 +13,4 @@ anyhow = "1.0.85"
 serde_yaml = "0.9.34"
 toml = "0.8.12"
 common = { path = "../common" }
+log = "0.4.27"

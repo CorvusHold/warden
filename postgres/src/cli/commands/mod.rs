@@ -368,7 +368,7 @@ pub async fn incremental_backup(
 
     // Create PostgreSQL manager with the possibly modified config
     let mut manager = PostgresManager::new(config_clone, backup_dir.clone())?;
-    println!("Performing incremental backup...");
+    info!("Performing incremental backup...");
 
     // Perform the backup operation
     let backup_result = manager.incremental_backup().await;
@@ -380,18 +380,18 @@ pub async fn incremental_backup(
         let mut keeper = keeper_instance.lock().unwrap();
         if keeper.is_active.load(Ordering::SeqCst) {
             if let Err(e) = keeper.close().await {
-                eprintln!("Warning: Error closing SSH tunnel: {}", e);
+                error!("Warning: Error closing SSH tunnel: {}", e);
             }
         }
     }
 
     // Now handle the backup result
     let backup = backup_result.map_err(|e| anyhow!(e))?;
-    println!("Incremental backup completed: {}", backup.id);
+    info!("Incremental backup completed: {}", backup.id);
 
     // Upload to remote storage if requested
     if remote_storage {
-        println!("Uploading incremental backup to remote storage...");
+        info!("Uploading incremental backup to remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -427,7 +427,7 @@ pub async fn incremental_backup(
                 .await
                 .map_err(|e| anyhow!("Failed to upload incremental backup: {}", e))?;
 
-            println!("Incremental backup successfully uploaded to remote storage");
+            info!("Incremental backup successfully uploaded to remote storage");
         }
     }
 
@@ -490,7 +490,7 @@ pub async fn snapshot_backup(
 
     // Create PostgreSQL manager with the possibly modified config
     let mut manager = PostgresManager::new(config_clone, backup_dir.clone())?;
-    println!("Performing snapshot backup...");
+    info!("Performing snapshot backup...");
 
     // Perform the backup operation
     let backup_result = manager.snapshot_backup().await;
@@ -502,18 +502,18 @@ pub async fn snapshot_backup(
         let mut keeper = keeper_instance.lock().unwrap();
         if keeper.is_active.load(Ordering::SeqCst) {
             if let Err(e) = keeper.close().await {
-                eprintln!("Warning: Error closing SSH tunnel: {}", e);
+                error!("Warning: Error closing SSH tunnel: {}", e);
             }
         }
     }
 
     // Now handle the backup result
     let backup = backup_result.map_err(|e| anyhow!(e))?;
-    println!("Snapshot backup completed: {}", backup.id);
+    info!("Snapshot backup completed: {}", backup.id);
 
     // Upload to remote storage if requested
     if remote_storage {
-        println!("Uploading snapshot backup to remote storage...");
+        info!("Uploading snapshot backup to remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -560,8 +560,6 @@ pub async fn snapshot_backup(
             }
 
             info!("Using backup directory: {}", actual_backup_path.display());
-
-            // Upload physical backup files
             storage
                 .upload_physical_backup(
                     &backup.id.to_string(),
@@ -569,38 +567,7 @@ pub async fn snapshot_backup(
                     Some(metadata.clone()),
                 )
                 .await
-                .map_err(|e| anyhow!("Failed to upload physical backup: {}", e))?;
-
-            // Upload logical backup if available
-            let dump_file = actual_backup_path.join(format!("{}.dump", database));
-            if dump_file.exists() {
-                info!("Uploading logical backup from: {}", dump_file.display());
-                storage
-                    .upload_logical_backup(&backup.id.to_string(), &dump_file, Some(metadata))
-                    .await
-                    .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
-            } else {
-                info!("Logical backup file not found at: {}", dump_file.display());
-                // Try alternative locations
-                let alt_dump_file = actual_backup_path.join("pg_dump.dump");
-                if alt_dump_file.exists() {
-                    info!(
-                        "Uploading logical backup from alternative location: {}",
-                        alt_dump_file.display()
-                    );
-                    storage
-                        .upload_logical_backup(
-                            &backup.id.to_string(),
-                            &alt_dump_file,
-                            Some(metadata),
-                        )
-                        .await
-                        .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
-                } else {
-                    info!("No logical backup file found to upload");
-                }
-            }
-
+                .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
             info!("Backup successfully uploaded to remote storage");
         }
     }
@@ -636,7 +603,7 @@ pub async fn list_backups(
 ) -> Result<()> {
     // If listing from remote storage, fetch the backup list from there
     if remote_storage {
-        println!("Listing backups from remote storage...");
+        info!("Listing backups from remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -658,9 +625,9 @@ pub async fn list_backups(
                 .await
                 .map_err(|e| anyhow!("Failed to list backups from remote storage: {}", e))?;
 
-            println!("All backups in remote storage:");
+            info!("All backups in remote storage:");
             for backup in backups {
-                println!(
+                info!(
                     "Backup ID: {}, Type: {:?}, Time: {}",
                     backup.id, backup.backup_type, backup.timestamp
                 );
@@ -686,9 +653,9 @@ pub async fn list_backups(
         ssh_remote_port,
     };
     let manager = PostgresManager::new(config, backup_dir)?;
-    println!("All backups:");
+    info!("All backups:");
     for backup in manager.list_backups() {
-        println!(
+        info!(
             "Backup ID: {}, Type: {:?}, Status: {:?}, Time: {}",
             backup.id, backup.backup_type, backup.status, backup.start_time
         );
@@ -729,7 +696,7 @@ pub async fn restore_full(
 ) -> Result<()> {
     // If restoring from remote storage, download the backup first
     if remote_storage {
-        println!("Downloading backup {} from remote storage...", backup_id);
+        info!("Downloading backup {} from remote storage...", backup_id);
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -758,13 +725,13 @@ pub async fn restore_full(
                 .await
                 .map_err(|e| anyhow!("Failed to download backup: {}", e))?;
 
-            println!("Backup downloaded successfully");
+            info!("Backup downloaded successfully");
         }
     }
 
     // If restoring from remote storage, download the backup first
     if remote_storage {
-        println!("Downloading incremental backups from remote storage...");
+        info!("Downloading incremental backups from remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -793,7 +760,7 @@ pub async fn restore_full(
                 .await
                 .map_err(|e| anyhow!("Failed to download full backup: {}", e))?;
 
-            println!("Full backup downloaded successfully");
+            info!("Full backup downloaded successfully");
 
             // Now we need to find and download all incremental backups
             // List all backups that have this full backup as ancestor
@@ -804,7 +771,7 @@ pub async fn restore_full(
 
             // Download each incremental backup
             for backup_id in incremental_backups {
-                println!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {}...", backup_id);
 
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
@@ -818,7 +785,7 @@ pub async fn restore_full(
                     .map_err(|e| anyhow!("Failed to download incremental backup: {}", e))?;
             }
 
-            println!("All incremental backups downloaded successfully");
+            info!("All incremental backups downloaded successfully");
         }
     }
 
@@ -838,7 +805,7 @@ pub async fn restore_full(
         ssh_remote_port,
     };
     let mut manager = PostgresManager::new(config, backup_dir)?;
-    println!(
+    info!(
         "Restoring from full backup {} to {:?}...",
         backup_id, target_dir
     );
@@ -847,7 +814,7 @@ pub async fn restore_full(
         .restore_full_backup(&backup_id, target_dir)
         .await
         .map_err(|e| anyhow!(e))?;
-    println!("Restore completed: {}", restore.id);
+    info!("Restore completed: {}", restore.id);
 
     // Handle PostgreSQL restart if requested
     if auto_restart {
@@ -890,7 +857,7 @@ pub async fn restore_incremental(
 ) -> Result<()> {
     // If restoring from remote storage, download the backup first
     if remote_storage {
-        println!("Downloading incremental backups from remote storage...");
+        info!("Downloading incremental backups from remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -919,7 +886,7 @@ pub async fn restore_incremental(
                 .await
                 .map_err(|e| anyhow!("Failed to download full backup: {}", e))?;
 
-            println!("Full backup downloaded successfully");
+            info!("Full backup downloaded successfully");
 
             // Now we need to find and download all incremental backups
             // List all backups that have this full backup as ancestor
@@ -930,7 +897,7 @@ pub async fn restore_incremental(
 
             // Download each incremental backup
             for backup_id in incremental_backups {
-                println!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {}...", backup_id);
 
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
@@ -944,7 +911,7 @@ pub async fn restore_incremental(
                     .map_err(|e| anyhow!("Failed to download incremental backup: {}", e))?;
             }
 
-            println!("All incremental backups downloaded successfully");
+            info!("All incremental backups downloaded successfully");
         }
     }
 
@@ -964,7 +931,7 @@ pub async fn restore_incremental(
         ssh_remote_port,
     };
     let mut manager = PostgresManager::new(config, backup_dir)?;
-    println!(
+    info!(
         "Restoring with incremental backups from {} to {:?}...",
         full_backup_id, target_dir
     );
@@ -973,7 +940,7 @@ pub async fn restore_incremental(
         .restore_incremental_backup(&full_backup_id, target_dir)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
-    println!("Restore completed: {}", restore.id);
+    info!("Restore completed: {}", restore.id);
 
     // Handle PostgreSQL restart if requested
     if auto_restart {
@@ -1017,7 +984,7 @@ pub async fn restore_point_in_time(
 ) -> Result<()> {
     // If restoring from remote storage, download the backup first
     if remote_storage {
-        println!("Downloading incremental backups from remote storage...");
+        info!("Downloading incremental backups from remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -1046,7 +1013,7 @@ pub async fn restore_point_in_time(
                 .await
                 .map_err(|e| anyhow!("Failed to download full backup: {}", e))?;
 
-            println!("Full backup downloaded successfully");
+            info!("Full backup downloaded successfully");
 
             // Now we need to find and download all incremental backups
             // List all backups that have this full backup as ancestor
@@ -1057,7 +1024,7 @@ pub async fn restore_point_in_time(
 
             // Download each incremental backup
             for backup_id in incremental_backups {
-                println!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {}...", backup_id);
 
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
@@ -1071,7 +1038,7 @@ pub async fn restore_point_in_time(
                     .map_err(|e| anyhow!("Failed to download incremental backup: {}", e))?;
             }
 
-            println!("All incremental backups downloaded successfully");
+            info!("All incremental backups downloaded successfully");
         }
     }
 
@@ -1096,7 +1063,7 @@ pub async fn restore_point_in_time(
         .map_err(|e| anyhow::anyhow!("Invalid target time format: {}", e))?
         .with_timezone(&chrono::Utc);
 
-    println!(
+    info!(
         "Restoring to point in time {} from {} to {:?}...",
         target_time, full_backup_id, target_dir
     );
@@ -1105,7 +1072,7 @@ pub async fn restore_point_in_time(
         .restore_point_in_time(&full_backup_id, target_dir, target_time)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
-    println!("Restore completed: {}", restore.id);
+    info!("Restore completed: {}", restore.id);
 
     // Handle PostgreSQL restart if requested
     if auto_restart {
@@ -1148,7 +1115,7 @@ pub async fn restore_snapshot(
 ) -> Result<()> {
     // If restoring from remote storage, download the backup first
     if remote_storage {
-        println!("Downloading incremental backups from remote storage...");
+        info!("Downloading incremental backups from remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -1177,7 +1144,7 @@ pub async fn restore_snapshot(
                 .await
                 .map_err(|e| anyhow!("Failed to download full backup: {}", e))?;
 
-            println!("Full backup downloaded successfully");
+            info!("Full backup downloaded successfully");
 
             // Now we need to find and download all incremental backups
             // List all backups that have this full backup as ancestor
@@ -1188,7 +1155,7 @@ pub async fn restore_snapshot(
 
             // Download each incremental backup
             for backup_id in incremental_backups {
-                println!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {}...", backup_id);
 
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
@@ -1202,7 +1169,7 @@ pub async fn restore_snapshot(
                     .map_err(|e| anyhow!("Failed to download incremental backup: {}", e))?;
             }
 
-            println!("All incremental backups downloaded successfully");
+            info!("All incremental backups downloaded successfully");
         }
     }
 
@@ -1222,7 +1189,7 @@ pub async fn restore_snapshot(
         ssh_remote_port,
     };
     let mut manager = PostgresManager::new(config, backup_dir)?;
-    println!(
+    info!(
         "Restoring from snapshot backup {} to {:?}...",
         backup_id, target_dir
     );
@@ -1231,7 +1198,7 @@ pub async fn restore_snapshot(
         .restore_snapshot_backup(&backup_id, target_dir)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
-    println!("Restore completed: {}", restore.id);
+    info!("Restore completed: {}", restore.id);
 
     // Handle PostgreSQL restart if requested
     if auto_restart {
@@ -1248,7 +1215,7 @@ async fn restart_postgresql(
 ) -> Result<()> {
     match (container_id, container_type.as_deref()) {
         (Some(id), Some("docker")) => {
-            println!("Restarting PostgreSQL in Docker container {}...", id);
+            info!("Restarting PostgreSQL in Docker container {}...", id);
             // Execute Docker command to restart PostgreSQL
             let output = std::process::Command::new("docker")
                 .args([
@@ -1272,10 +1239,10 @@ async fn restart_postgresql(
                 ));
             }
 
-            println!("PostgreSQL successfully restarted in Docker container");
+            info!("PostgreSQL successfully restarted in Docker container");
         }
         (Some(id), Some("kubernetes")) => {
-            println!("Restarting PostgreSQL in Kubernetes pod {}...", id);
+            info!("Restarting PostgreSQL in Kubernetes pod {}...", id);
             // Execute kubectl command to restart PostgreSQL
             let output = std::process::Command::new("kubectl")
                 .args([
@@ -1300,7 +1267,7 @@ async fn restart_postgresql(
                 ));
             }
 
-            println!("PostgreSQL successfully restarted in Kubernetes pod");
+            info!("PostgreSQL successfully restarted in Kubernetes pod");
         }
         (Some(_), Some(invalid_type)) => {
             return Err(anyhow::anyhow!(
@@ -1316,7 +1283,7 @@ async fn restart_postgresql(
         }
         (None, None) => {
             // Attempt to restart local PostgreSQL instance
-            println!("Attempting to restart local PostgreSQL instance...");
+            info!("Attempting to restart local PostgreSQL instance...");
 
             // Detect operating system
             let os = std::env::consts::OS;
@@ -1324,7 +1291,7 @@ async fn restart_postgresql(
                 "macos" => restart_postgresql_macos().await?,
                 "linux" => restart_postgresql_linux().await?,
                 _ => {
-                    println!("Auto-restart not supported on {} operating system. Please restart PostgreSQL manually.", os);
+                    info!("Auto-restart not supported on {} operating system. Please restart PostgreSQL manually.", os);
                 }
             }
         }
@@ -1343,7 +1310,7 @@ async fn restart_postgresql_macos() -> Result<()> {
         .output()
     {
         if output.status.success() {
-            println!("PostgreSQL successfully restarted using Homebrew services");
+            info!("PostgreSQL successfully restarted using Homebrew services");
             return Ok(());
         }
     }
@@ -1364,7 +1331,7 @@ async fn restart_postgresql_macos() -> Result<()> {
                 .output()
             {
                 if output.status.success() {
-                    println!(
+                    info!(
                         "PostgreSQL successfully restarted using pg_ctl with data directory: {}",
                         data_dir
                     );
@@ -1391,14 +1358,14 @@ async fn restart_postgresql_macos() -> Result<()> {
                 .output()
             {
                 if output.status.success() {
-                    println!("PostgreSQL successfully restarted using launchctl");
+                    info!("PostgreSQL successfully restarted using launchctl");
                     return Ok(());
                 }
             }
         }
     }
 
-    println!("Could not automatically restart PostgreSQL on macOS. Please restart it manually.");
+    info!("Could not automatically restart PostgreSQL on macOS. Please restart it manually.");
     Ok(())
 }
 
@@ -1412,7 +1379,7 @@ async fn restart_postgresql_linux() -> Result<()> {
         .output()
     {
         if output.status.success() {
-            println!("PostgreSQL successfully restarted using systemctl");
+            info!("PostgreSQL successfully restarted using systemctl");
             return Ok(());
         }
     }
@@ -1425,7 +1392,7 @@ async fn restart_postgresql_linux() -> Result<()> {
             .output()
         {
             if output.status.success() {
-                println!(
+                info!(
                     "PostgreSQL {} successfully restarted using systemctl",
                     version
                 );
@@ -1440,7 +1407,7 @@ async fn restart_postgresql_linux() -> Result<()> {
         .output()
     {
         if output.status.success() {
-            println!("PostgreSQL successfully restarted using service command");
+            info!("PostgreSQL successfully restarted using service command");
             return Ok(());
         }
     }
@@ -1460,7 +1427,7 @@ async fn restart_postgresql_linux() -> Result<()> {
                 .output()
             {
                 if output.status.success() {
-                    println!(
+                    info!(
                         "PostgreSQL successfully restarted using pg_ctl with data directory: {}",
                         data_dir
                     );
@@ -1470,7 +1437,7 @@ async fn restart_postgresql_linux() -> Result<()> {
         }
     }
 
-    println!("Could not automatically restart PostgreSQL on Linux. Please restart it manually.");
+    info!("Could not automatically restart PostgreSQL on Linux. Please restart it manually.");
     Ok(())
 }
 
@@ -1503,7 +1470,7 @@ pub async fn list_snapshot_contents(
 ) -> Result<()> {
     // If restoring from remote storage, download the backup first
     if remote_storage {
-        println!("Downloading incremental backups from remote storage...");
+        info!("Downloading incremental backups from remote storage...");
 
         // Create storage provider
         let storage = create_storage_provider(
@@ -1532,7 +1499,7 @@ pub async fn list_snapshot_contents(
                 .await
                 .map_err(|e| anyhow!("Failed to download full backup: {}", e))?;
 
-            println!("Full backup downloaded successfully");
+            info!("Full backup downloaded successfully");
 
             // Now we need to find and download all incremental backups
             // List all backups that have this full backup as ancestor
@@ -1543,7 +1510,7 @@ pub async fn list_snapshot_contents(
 
             // Download each incremental backup
             for backup_id in incremental_backups {
-                println!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {}...", backup_id);
 
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
@@ -1557,7 +1524,7 @@ pub async fn list_snapshot_contents(
                     .map_err(|e| anyhow!("Failed to download incremental backup: {}", e))?;
             }
 
-            println!("All incremental backups downloaded successfully");
+            info!("All incremental backups downloaded successfully");
         }
     }
 
@@ -1577,14 +1544,14 @@ pub async fn list_snapshot_contents(
         ssh_remote_port,
     };
     let manager = PostgresManager::new(config, backup_dir)?;
-    println!("Snapshot backup contents for {}:", backup_id);
+    info!("Snapshot backup contents for {}:", backup_id);
     let backup_id = Uuid::parse_str(&backup_id).map_err(|e| anyhow::anyhow!(e))?;
     let contents = manager
         .list_snapshot_contents(&backup_id)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
     for item in contents.split('\n').filter(|s| !s.is_empty()) {
-        println!("{}", item);
+        info!("{}", item);
     }
     Ok(())
 }

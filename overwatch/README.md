@@ -56,17 +56,17 @@ async fn main() {
     // Execute the monitoring check
     match http_service.exec().await {
         Ok(result) => {
-            println!("Monitoring successful: {}", result.success);
-            println!("Response time: {}ms", result.response_time);
+            info!("Monitoring successful: {}", result.success);
+            info!("Response time: {}ms", result.response_time);
             if let Some(details) = result.details {
-                println!("Details: {}", details);
+                info!("Details: {}", details);
             }
             if let Some(error) = result.error {
-                println!("Error: {}", error);
+                info!("Error: {}", error);
             }
         },
         Err(e) => {
-            println!("Failed to execute monitoring: {}", e);
+            info!("Failed to execute monitoring: {}", e);
         }
     }
 }

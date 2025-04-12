@@ -72,7 +72,7 @@ async fn upload_example(storage: &PostgresBackupStorage) -> Result<(), Box<dyn s
     // Upload the backup
     storage.upload_backup(backup_id, backup_dir, None).await?;
     
-    println!("Backup uploaded successfully: {}", backup_id);
+    info!("Backup uploaded successfully: {}", backup_id);
     Ok(())
 }
 ```
@@ -83,9 +83,9 @@ async fn upload_example(storage: &PostgresBackupStorage) -> Result<(), Box<dyn s
 async fn list_backups_example(storage: &PostgresBackupStorage) -> Result<(), Box<dyn std::error::Error>> {
     let backups = storage.list_backups().await?;
     
-    println!("Available backups:");
+    info!("Available backups:");
     for (i, backup) in backups.iter().enumerate() {
-        println!("{}. {}", i + 1, backup);
+        info!("{}. {}", i + 1, backup);
     }
     
     Ok(())
@@ -103,7 +103,7 @@ async fn generate_url_example(storage: &PostgresBackupStorage, backup_id: &str) 
         .generate_backup_file_url(backup_id, "backup_metadata.json", Duration::from_secs(3600))
         .await?;
     
-    println!("Pre-signed URL (valid for 1 hour): {}", url);
+    info!("Pre-signed URL (valid for 1 hour): {}", url);
     Ok(())
 }
 ```
@@ -119,7 +119,7 @@ async fn download_example(storage: &PostgresBackupStorage, backup_id: &str) -> R
     // Download the backup
     storage.download_backup(backup_id, restore_dir).await?;
     
-    println!("Backup downloaded successfully to: {}", restore_dir.display());
+    info!("Backup downloaded successfully to: {}", restore_dir.display());
     Ok(())
 }
 ```
@@ -131,7 +131,7 @@ async fn delete_example(storage: &PostgresBackupStorage, backup_id: &str) -> Res
     // Delete the backup
     storage.delete_backup(backup_id).await?;
     
-    println!("Backup deleted successfully: {}", backup_id);
+    info!("Backup deleted successfully: {}", backup_id);
     Ok(())
 }
 ```
@@ -437,15 +437,15 @@ async fn handle_errors() -> Result<(), StorageError> {
     let storage = PostgresBackupStorage::new(/* ... */).await?;
     
     match storage.upload_backup("backup-id", &Path::new("/path/to/backup"), None).await {
-        Ok(_) => println!("Backup uploaded successfully"),
+        Ok(_) => info!("Backup uploaded successfully"),
         Err(StorageError::BucketNotFound(bucket)) => {
-            println!("Bucket '{}' not found", bucket);
+            info!("Bucket '{}' not found", bucket);
             // Create the bucket and retry
         },
         Err(StorageError::ObjectNotFound { bucket, key }) => {
-            println!("Object '{}' not found in bucket '{}'", key, bucket);
+            info!("Object '{}' not found in bucket '{}'", key, bucket);
         },
-        Err(e) => println!("Error: {}", e),
+        Err(e) => info!("Error: {}", e),
     }
     
     Ok(())

@@ -56,7 +56,7 @@
 //     delete_backup(&provider, &backup_id).await;
 //     fs::remove_dir_all(&temp_dir).await.expect("Failed to clean up test directories");
 
-//     println!("PostgreSQL backup integration test completed successfully");
+//     info!("PostgreSQL backup integration test completed successfully");
 // }
 
 // async fn create_mock_backup_files(backup_dir: &Path, backup_id: &str) {
@@ -122,7 +122,7 @@
 
 // async fn upload_backup(provider: &Box<dyn StorageProvider>, backup_id: &str, backup_dir: &Path) {
 //     let bucket_name = env::var("TEST_BUCKET_NAME").unwrap_or_else(|_| "test-postgres-backups".to_string());
-//     println!("Uploading backup to storage...");
+//     info!("Uploading backup to storage...");
 
 //     // Upload main backup files
 //     let files = ["base.tar.gz", "pg_dump.sql", "pg_dump.dump", "backup_metadata.json"];
@@ -161,12 +161,12 @@
 //         }
 //     }
 
-//     println!("Backup uploaded successfully");
+//     info!("Backup uploaded successfully");
 // }
 
 // async fn download_backup(provider: &Box<dyn StorageProvider>, backup_id: &str, restore_dir: &Path) {
 //     let bucket_name = env::var("TEST_BUCKET_NAME").unwrap_or_else(|_| "test-postgres-backups".to_string());
-//     println!("Downloading backup from storage...");
+//     info!("Downloading backup from storage...");
 
 //     // List all objects for this backup
 //     let prefix = format!("{}/", backup_id);
@@ -190,7 +190,7 @@
 //         ).await.expect(&format!("Failed to download {}", obj.key));
 //     }
 
-//     println!("Backup downloaded successfully");
+//     info!("Backup downloaded successfully");
 // }
 
 // async fn verify_downloaded_files(backup_dir: &Path, restore_dir: &Path) {
@@ -222,12 +222,12 @@
 //         }
 //     }
 
-//     println!("All files verified successfully");
+//     info!("All files verified successfully");
 // }
 
 // async fn delete_backup(provider: &Box<dyn StorageProvider>, backup_id: &str) {
 //     let bucket_name = env::var("TEST_BUCKET_NAME").unwrap_or_else(|_| "test-postgres-backups".to_string());
-//     println!("Deleting backup from storage...");
+//     info!("Deleting backup from storage...");
 
 //     // List all objects for this backup
 //     let prefix = format!("{}/", backup_id);
@@ -237,5 +237,5 @@
 //         provider.delete_object(&bucket_name, &obj.key).await.expect(&format!("Failed to delete {}", obj.key));
 //     }
 
-//     println!("Backup deleted successfully");
+//     info!("Backup deleted successfully");
 // }
