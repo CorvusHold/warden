@@ -6,74 +6,109 @@ permissions:
   issues: write
   id-token: write
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-*"
 
+
+env:
+  RUST_VERSION: 1.82.0
+  BUILD_ARGS: "--release --all-features"
+  BIN_NAME: "warden"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    name: Build - ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os || 'ubuntu-22.04' }}
+    strategy:
+      matrix:
+        platform:
+          - name: Linux x86_64
+            target: x86_64-unknown-linux-gnu
+          - name: Linux aarch64
+            target: aarch64-unknown-linux-gnu
+          - name: MacOS x86_64
+            target: x86_64-apple-darwin
+          - name: MacOS aarch64
+            target: aarch64-apple-darwin
+
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout Git repo
+      uses: actions/checkout@v3
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
+    # Linux & Windows
+    - name: Install rust toolchain
+      if: ${{ !contains(matrix.platform.target, 'apple') }}
+      uses: actions-rs/toolchain@v1
+      with:
+        # We setup Rust toolchain and the desired target
+        profile: minimal
+        toolchain: "${{ env.RUST_VERSION }}"
+        override: true
+        target: ${{ matrix.platform.target }}
+        components: rustfmt, clippy
+    - name: Build ${{ matrix.platform.name }} binary
+      if: ${{ !contains(matrix.platform.target, 'apple') }}
+      uses: actions-rs/cargo@v1
+      # We use cross-rs if not running on x86_64 architecture on Linux
+      with:
+        command: build
+        use-cross: ${{ !contains(matrix.platform.target, 'x86_64') }}
+        args: ${{ env.BUILD_ARGS }} --target ${{ matrix.platform.target }}
 
-      - name: Go Cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+    - name: Login to DockerHub
+      if: contains(matrix.platform.target, 'apple')
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build ${{ matrix.platform.name }} binary
+      if: contains(matrix.platform.target, 'apple')
+      # We use a dedicated Rust image containing required Apple libraries to cross-compile on multiple archs
+      run: |
+        docker run --rm --volume "${PWD}":/root/src --workdir /root/src joseluisq/rust-linux-darwin-builder:$RUST_VERSION \
+        sh -c "CC=o64-clang CXX=o64-clang++ cargo build $BUILD_ARGS --target ${{ matrix.platform.target }}"
+    
+    - name: Store artifact
+      uses: actions/upload-artifact@v3
+      with:
+        # Finally, we store the binary as GitHub artifact for later usage
+        name: ${{ matrix.platform.target }}-${{ env.BIN_NAME }}
+        path: target/${{ matrix.platform.target }}/release/${{ env.BIN_NAME }}${{ contains(matrix.platform.target, 'windows') && '.exe' || '' }}
+        retention-days: 1
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+  release:
+    name: Release
+    needs: [build]
+    # We run the release job only if a tag starts with 'v' letter
+    if: startsWith( github.ref, 'refs/tags/v' )
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout Git repo
+      uses: actions/checkout@v3
 
-      - name: Install cross-compilation dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-          sudo apt-get install -y gcc-multilib g++-multilib
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu libc6-dev-arm64-cross
-          sudo apt-get install -y mingw-w64
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          target: x86_64-unknown-linux-gnu,x86_64-apple-darwin,x86_64-pc-windows-gnu,aarch64-unknown-linux-gnu,aarch64-apple-darwin
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update release notes
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          generate_release_notes: true
+    - name: Set up Go
+      uses: actions/setup-go@v4
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v5
+      with:
+        distribution: goreleaser
+        version: latest
+        args: release --clean --skip=validate
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
