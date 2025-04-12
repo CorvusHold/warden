@@ -48,6 +48,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install LibC
+        run: sudo apt-get install -y libc6-dev
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
