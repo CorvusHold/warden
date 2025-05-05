@@ -203,3 +203,17 @@ jobs:
             ${{ env.BINARY_NAME }}-${{ matrix.asset_suffix }}.tar.gz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Copy linux amd64 binary for Docker
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: |
+          cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.suffix }}" ./warden
+
+      - name: Build Docker image
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: warden:${{ env.VERSION }}
