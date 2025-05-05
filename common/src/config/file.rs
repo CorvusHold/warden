@@ -1,9 +1,9 @@
 use config::{Config, ConfigError, File};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use log::{error, info};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WardenConfig {

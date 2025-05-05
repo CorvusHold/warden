@@ -69,9 +69,7 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
 
     info!(
         "Forwarding remote port {} on {} to local port {}",
-        remote_port,
-        remote_host,
-        local_port,
+        remote_port, remote_host, local_port,
     );
 
     let mut tunnel = SSHTunnel::new(ssh_host.clone(), ssh_user.clone(), Some(ssh_port));
@@ -125,9 +123,7 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
             info!("SSH tunnel established successfully");
             info!(
                 "Connect to localhost:{} to access {}:{}",
-                local_port,
-                remote_host,
-                remote_port,
+                local_port, remote_host, remote_port,
             );
 
             // Keep the tunnel running until it's stopped (e.g., by Ctrl+C)

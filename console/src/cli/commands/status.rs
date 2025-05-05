@@ -17,10 +17,10 @@
 use anyhow::{anyhow, Result};
 use clap::Args;
 use common::config::load_config;
+use log::info;
 use serde::Serialize;
 use serde_json;
 use serde_yaml;
-use log::info;
 
 #[derive(Debug, Args)]
 pub struct Status {

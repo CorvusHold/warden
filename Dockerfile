@@ -14,7 +14,7 @@ RUN apt update && apt upgrade -y && \
     postgresql-common \
     libssl3 && \
     apt update && \
-    apt install -y postgresql-client-16 && \
+    apt install -y postgresql-client-17 && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
