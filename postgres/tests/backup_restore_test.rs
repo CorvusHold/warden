@@ -2,7 +2,7 @@ use chrono::Utc;
 use postgres::common::{Backup, BackupStatus, BackupType, PostgresConfig, RestoreStatus};
 use postgres::manager::PostgresManager;
 use tempfile::tempdir;
-use tokio_postgres::{connect, NoTls};
+use tokio_postgres::{connect, error, NoTls};
 use uuid::Uuid;
 
 // Helper function to create a test database config
@@ -131,8 +131,10 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
     let (client, connection) = connect(&manager.config.connection_string(), NoTls).await?;
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            error("Connection error: {}", e);
+            log::error!("Connection error: {}", e);
+            return Err(e);
         }
+        Ok(())
     });
     let rows = client.query("SELECT 1", &[]).await?;
     assert_eq!(rows.len(), 1);
