@@ -213,6 +213,12 @@ jobs:
         shell: bash
         run: |
           cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.suffix }}" ./warden
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
