@@ -13,6 +13,7 @@ RUN apt update && apt upgrade -y && \
     ca-certificates \
     postgresql-common \
     libssl3 && \
+    yes | sh /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh && \
     apt update && \
     apt install -y postgresql-client-17 && \
     apt clean && \
