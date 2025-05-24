@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, sync::atomic::Ordering};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 /// Represents a PostgreSQL server configuration

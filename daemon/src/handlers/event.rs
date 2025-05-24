@@ -8,11 +8,9 @@ use std::sync::{Arc, Mutex};
 
 /// Helper function to extract subtopic from routing key
 fn get_subtopic(routing_key: &str, prefix: &str) -> Option<String> {
-    if routing_key.starts_with(prefix) {
-        Some(routing_key[prefix.len()..].to_string())
-    } else {
-        None
-    }
+    routing_key
+        .strip_prefix(prefix)
+        .map(|stripped| stripped.to_string())
 }
 
 /// Event types that the daemon can handle
@@ -164,7 +162,7 @@ pub async fn handle_event(
 }
 
 /// Handle PostgreSQL events
-async fn handle_postgres_event(event: &EventPayload, client: &Arc<AmqpClient>) -> Result<()> {
+async fn handle_postgres_event(event: &EventPayload, _client: &Arc<AmqpClient>) -> Result<()> {
     match event.severity {
         EventSeverity::Critical => {
             // For critical PostgreSQL events, we might want to take immediate action
@@ -327,7 +325,7 @@ async fn handle_overwatch_event(event: &EventPayload, client: &Arc<AmqpClient>) 
 }
 
 /// Handle system events
-async fn handle_system_event(event: &EventPayload, client: &Arc<AmqpClient>) -> Result<()> {
+async fn handle_system_event(event: &EventPayload, _client: &Arc<AmqpClient>) -> Result<()> {
     // Log all system events
     info!("System event: {} - {}", event.severity, event.message);
 

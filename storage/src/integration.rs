@@ -20,6 +20,7 @@ pub struct PostgresBackupStorage {
 
 impl PostgresBackupStorage {
     /// Creates a new PostgreSQL backup storage
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         provider_type: StorageProviderType,
         bucket: String,
@@ -292,7 +293,7 @@ impl PostgresBackupStorage {
         // Create the target directory if it doesn't exist
         tokio::fs::create_dir_all(target_dir)
             .await
-            .map_err(|e| StorageError::Io(e))?;
+            .map_err(StorageError::Io)?;
 
         // Download each object
         for obj in objects {
@@ -308,7 +309,7 @@ impl PostgresBackupStorage {
             if let Some(parent) = target_path.parent() {
                 tokio::fs::create_dir_all(parent)
                     .await
-                    .map_err(|e| StorageError::Io(e))?;
+                    .map_err(StorageError::Io)?;
             }
 
             self.provider
@@ -345,7 +346,7 @@ impl PostgresBackupStorage {
         if let Some(parent) = target_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| StorageError::Io(e))?;
+                .map_err(StorageError::Io)?;
         }
 
         // Download the file
@@ -375,7 +376,7 @@ impl PostgresBackupStorage {
             let key = obj.key;
             let parts: Vec<&str> = key.split('/').collect();
 
-            if parts.len() >= 1 {
+            if !parts.is_empty() {
                 let backup_id = if self.prefix.is_empty() {
                     parts[0].to_string()
                 } else {
@@ -403,7 +404,7 @@ impl PostgresBackupStorage {
                         BackupType::Full
                     };
 
-                    let timestamp = obj.last_modified.unwrap_or_else(|| chrono::Utc::now());
+                    let timestamp = obj.last_modified.unwrap_or_else(chrono::Utc::now);
 
                     backup_infos.push(BackupInfo {
                         id: backup_id,

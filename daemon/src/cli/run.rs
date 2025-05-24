@@ -54,7 +54,7 @@ pub async fn execute() -> Result<()> {
     if let Err(e) = daemon.init_amqp().await {
         error!("Failed to initialize AMQP client: {}", e);
         std::fs::remove_file(pid_file).ok(); // Clean up PID file on error
-        return Err(e.into());
+        return Err(e);
     }
 
     // Set up signal handling for graceful shutdown

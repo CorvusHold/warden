@@ -10,7 +10,7 @@ use crate::PostgresError;
 
 /// Incremental restore manager
 pub struct IncrementalRestoreManager {
-    config: PostgresConfig,
+    _config: PostgresConfig,
     full_backup: Backup,
     incremental_backups: Vec<Backup>,
     target_dir: PathBuf,
@@ -19,13 +19,13 @@ pub struct IncrementalRestoreManager {
 impl IncrementalRestoreManager {
     /// Create a new incremental restore manager
     pub fn new(
-        config: PostgresConfig,
+        _config: PostgresConfig,
         full_backup: Backup,
         incremental_backups: Vec<Backup>,
         target_dir: PathBuf,
     ) -> Self {
         Self {
-            config,
+            _config,
             full_backup,
             incremental_backups,
             target_dir,
@@ -45,7 +45,7 @@ impl IncrementalRestoreManager {
 
         // Create target directory if it doesn't exist
         if !self.target_dir.exists() {
-            fs::create_dir_all(&self.target_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.target_dir).map_err(PostgresError::Io)?;
         }
 
         // Check if the full backup exists
@@ -130,7 +130,7 @@ impl IncrementalRestoreManager {
 
         // Create target directory if it doesn't exist
         if !self.target_dir.exists() {
-            fs::create_dir_all(&self.target_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.target_dir).map_err(PostgresError::Io)?;
         }
 
         // First approach: Try to use the cp command with the directory itself
@@ -148,7 +148,7 @@ impl IncrementalRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
                 return Ok(());
             }
         }
@@ -169,15 +169,14 @@ impl IncrementalRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
                 return Ok(());
             }
         }
 
         // Create a dummy file to ensure the directory is not empty (for test verification)
         let dummy_file = self.target_dir.join(".restore_complete");
-        fs::write(dummy_file, "Restore completed successfully")
-            .map_err(|e| PostgresError::Io(e))?;
+        fs::write(dummy_file, "Restore completed successfully").map_err(PostgresError::Io)?;
 
         Ok(())
     }
@@ -187,7 +186,7 @@ impl IncrementalRestoreManager {
         // Create WAL directory if it doesn't exist
         let wal_dir = self.target_dir.join("pg_wal");
         if !wal_dir.exists() {
-            fs::create_dir_all(&wal_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&wal_dir).map_err(PostgresError::Io)?;
         }
 
         // Sort incremental backups by start time
@@ -253,7 +252,7 @@ impl IncrementalRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = wal_dir.join(".wal_restore_complete");
                 fs::write(dummy_file, "WAL restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
             } else {
                 info!(
                     "No WAL directory found in incremental backup: {:?}",
@@ -263,7 +262,7 @@ impl IncrementalRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = wal_dir.join(".wal_restore_complete");
                 fs::write(dummy_file, "WAL restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
             }
         }
 
@@ -290,7 +289,7 @@ impl IncrementalRestoreManager {
             self.target_dir.to_string_lossy()
         );
 
-        fs::write(&recovery_conf_path, recovery_conf_content).map_err(|e| PostgresError::Io(e))?;
+        fs::write(&recovery_conf_path, recovery_conf_content).map_err(PostgresError::Io)?;
 
         info!("Created recovery.conf file at {:?}", recovery_conf_path);
 

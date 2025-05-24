@@ -8,11 +8,9 @@ use std::sync::{Arc, Mutex};
 
 /// Helper function to extract subtopic from routing key
 fn get_subtopic(routing_key: &str, prefix: &str) -> Option<String> {
-    if routing_key.starts_with(prefix) {
-        Some(routing_key[prefix.len()..].to_string())
-    } else {
-        None
-    }
+    routing_key
+        .strip_prefix(prefix)
+        .map(|stripped| stripped.to_string())
 }
 
 /// Command types that the daemon can handle
@@ -229,7 +227,7 @@ pub async fn handle_command(
                 }
             } else if let Some(args) = &command.args {
                 if let Some(backup_id) = args.get("backup_id") {
-                    if let Some(backup_id) = backup_id.as_str() {
+                    if let Some(_backup_id) = backup_id.as_str() {
                         // Call PostgreSQL restore functionality
                         // match postgres::backup::restore_backup(backup_id).await {
                         //     Ok(_) => {
