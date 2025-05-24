@@ -4,7 +4,7 @@ use log::{debug, error, info, warn};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 use tokio_postgres::Client;
 
 use crate::common::{Backup, BackupType, PostgresConfig};
@@ -30,11 +30,11 @@ impl SnapshotBackupManager {
         // Verify base backup directory exists and is writable
         if !self.backup_dir.exists() {
             info!("Creating base backup directory: {:?}", self.backup_dir);
-            fs::create_dir_all(&self.backup_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.backup_dir).map_err(PostgresError::Io)?;
         }
 
         // Verify base directory permissions
-        let base_metadata = fs::metadata(&self.backup_dir).map_err(|e| PostgresError::Io(e))?;
+        let base_metadata = fs::metadata(&self.backup_dir).map_err(PostgresError::Io)?;
         if !base_metadata.is_dir() || base_metadata.permissions().mode() & 0o777 != 0o755 {
             return Err(PostgresError::BackupError(format!(
                 "Base backup directory has incorrect permissions: {:?}",
@@ -66,9 +66,9 @@ impl SnapshotBackupManager {
 
         // Create backup directory
         if !backup_path.exists() {
-            fs::create_dir_all(&backup_path).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&backup_path).map_err(PostgresError::Io)?;
             fs::set_permissions(&backup_path, PermissionsExt::from_mode(0o755))
-                .map_err(|e| PostgresError::Io(e))?;
+                .map_err(PostgresError::Io)?;
         }
 
         let mut backup = Backup::new(
@@ -163,8 +163,8 @@ impl SnapshotBackupManager {
             )));
         }
 
-        let backup_files = fs::read_dir(&backup_path)
-            .map_err(|e| PostgresError::Io(e))?
+        let backup_files = fs::read_dir(backup_path)
+            .map_err(PostgresError::Io)?
             .filter_map(|entry| entry.ok())
             .map(|entry| entry.path())
             .collect::<Vec<_>>();
@@ -177,7 +177,7 @@ impl SnapshotBackupManager {
 
         // Create restore directory if it doesn't exist
         if !restore_dir.exists() {
-            fs::create_dir_all(restore_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(restore_dir).map_err(PostgresError::Io)?;
         }
 
         for file in &backup_files {
@@ -192,7 +192,7 @@ impl SnapshotBackupManager {
 
             // Create parent directories if they don't exist
             if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| PostgresError::Io(e))?;
+                fs::create_dir_all(parent).map_err(PostgresError::Io)?;
             }
 
             // Copy with progress and retries
@@ -230,7 +230,7 @@ impl SnapshotBackupManager {
         let row = client
             .query_one("SELECT version()", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         let version: String = row.get(0);
         debug!("PostgreSQL server version: {}", version);
@@ -239,13 +239,14 @@ impl SnapshotBackupManager {
     }
 
     /// Get current WAL position
+    #[allow(dead_code)]
     async fn get_current_wal_position(&self, client: &Client) -> Result<String, PostgresError> {
         // Use a completely different approach to avoid pg_lsn type issues
         // Use a simple query that returns a text representation directly
         let result = client
             .simple_query("SELECT pg_current_wal_lsn()::TEXT")
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         // Extract the value from the result
         if let Some(tokio_postgres::SimpleQueryMessage::Row(row)) = result.into_iter().next() {

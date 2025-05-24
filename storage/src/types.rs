@@ -122,25 +122,16 @@ impl Default for StreamingUploadOptions {
         Self {
             content_type: None,
             metadata: None,
-            part_size: Some(8 * 1024 * 1024), // 8 MB default part size
+            part_size: Some(5 * 1024 * 1024), // 5 MB default part size (S3 minimum)
         }
     }
 }
 
 /// Streaming download options
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StreamingDownloadOptions {
     /// Range start (in bytes)
     pub range_start: Option<u64>,
     /// Range end (in bytes)
     pub range_end: Option<u64>,
-}
-
-impl Default for StreamingDownloadOptions {
-    fn default() -> Self {
-        Self {
-            range_start: None,
-            range_end: None,
-        }
-    }
 }

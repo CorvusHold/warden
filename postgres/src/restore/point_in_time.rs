@@ -10,7 +10,7 @@ use crate::PostgresError;
 
 /// Point-in-time restore manager
 pub struct PointInTimeRestoreManager {
-    config: PostgresConfig,
+    _config: PostgresConfig,
     full_backup: Backup,
     incremental_backups: Vec<Backup>,
     target_dir: PathBuf,
@@ -20,14 +20,14 @@ pub struct PointInTimeRestoreManager {
 impl PointInTimeRestoreManager {
     /// Create a new point-in-time restore manager
     pub fn new(
-        config: PostgresConfig,
+        _config: PostgresConfig,
         full_backup: Backup,
         incremental_backups: Vec<Backup>,
         target_dir: PathBuf,
         target_time: DateTime<Utc>,
     ) -> Self {
         Self {
-            config,
+            _config,
             full_backup,
             incremental_backups,
             target_dir,
@@ -53,7 +53,7 @@ impl PointInTimeRestoreManager {
 
         // Create target directory if it doesn't exist
         if !self.target_dir.exists() {
-            fs::create_dir_all(&self.target_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.target_dir).map_err(PostgresError::Io)?;
         }
 
         // Check if the full backup exists
@@ -138,7 +138,7 @@ impl PointInTimeRestoreManager {
 
         // Create target directory if it doesn't exist
         if !self.target_dir.exists() {
-            fs::create_dir_all(&self.target_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.target_dir).map_err(PostgresError::Io)?;
         }
 
         // First approach: Try to use the cp command with the directory itself
@@ -156,7 +156,7 @@ impl PointInTimeRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
                 return Ok(());
             }
         }
@@ -177,15 +177,14 @@ impl PointInTimeRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
                 return Ok(());
             }
         }
 
         // Create a dummy file to ensure the directory is not empty (for test verification)
         let dummy_file = self.target_dir.join(".restore_complete");
-        fs::write(dummy_file, "Restore completed successfully")
-            .map_err(|e| PostgresError::Io(e))?;
+        fs::write(dummy_file, "Restore completed successfully").map_err(PostgresError::Io)?;
 
         Ok(())
     }
@@ -195,7 +194,7 @@ impl PointInTimeRestoreManager {
         // Create WAL directory if it doesn't exist
         let wal_dir = self.target_dir.join("pg_wal");
         if !wal_dir.exists() {
-            fs::create_dir_all(&wal_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&wal_dir).map_err(PostgresError::Io)?;
         }
 
         // Sort incremental backups by start time
@@ -272,7 +271,7 @@ impl PointInTimeRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = wal_dir.join(".wal_restore_complete");
                 fs::write(dummy_file, "WAL restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
             } else {
                 info!(
                     "No WAL directory found in incremental backup: {:?}",
@@ -282,7 +281,7 @@ impl PointInTimeRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = wal_dir.join(".wal_restore_complete");
                 fs::write(dummy_file, "WAL restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
             }
         }
 
@@ -311,7 +310,7 @@ impl PointInTimeRestoreManager {
             target_time_str
         );
 
-        fs::write(&recovery_conf_path, recovery_conf_content).map_err(|e| PostgresError::Io(e))?;
+        fs::write(&recovery_conf_path, recovery_conf_content).map_err(PostgresError::Io)?;
 
         info!(
             "Created recovery.conf file at {:?} with target time: {}",

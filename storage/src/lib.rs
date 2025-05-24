@@ -6,7 +6,7 @@
 
 mod error;
 mod integration;
-mod providers;
+pub mod providers;
 mod types;
 
 pub use error::StorageError;

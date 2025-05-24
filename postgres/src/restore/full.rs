@@ -78,7 +78,7 @@ impl FullRestoreManager {
                 &[&self.config.database]
             )
             .await
-            .map_err(|e| PostgresError::Postgres(e.into()))?;
+            .map_err(PostgresError::Postgres)?;
 
         // Drop and recreate the database
         client
@@ -87,17 +87,17 @@ impl FullRestoreManager {
                 &[],
             )
             .await
-            .map_err(|e| PostgresError::Postgres(e.into()))?;
+            .map_err(PostgresError::Postgres)?;
         client
             .execute(&format!("CREATE DATABASE {};", self.config.database), &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e.into()))?;
+            .map_err(PostgresError::Postgres)?;
 
         // Vacuum the database
         client
             .execute("VACUUM;", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e.into()))?;
+            .map_err(PostgresError::Postgres)?;
 
         Ok(())
     }
@@ -114,7 +114,7 @@ impl FullRestoreManager {
 
         // Create target directory if it doesn't exist
         if !self.target_dir.exists() {
-            fs::create_dir_all(&self.target_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.target_dir).map_err(PostgresError::Io)?;
         }
 
         // Check if the backup exists
@@ -185,7 +185,7 @@ impl FullRestoreManager {
 
         // Create target directory if it doesn't exist
         if !self.target_dir.exists() {
-            fs::create_dir_all(&self.target_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.target_dir).map_err(PostgresError::Io)?;
         }
 
         // First approach: Try to use the cp command with the directory itself
@@ -203,7 +203,7 @@ impl FullRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
                 return Ok(());
             }
         }
@@ -224,7 +224,7 @@ impl FullRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
                 return Ok(());
             }
         }
@@ -240,34 +240,33 @@ impl FullRestoreManager {
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
-                    .map_err(|e| PostgresError::Io(e))?;
+                    .map_err(PostgresError::Io)?;
                 return Ok(());
             }
         };
 
         let mut has_files = false;
         for entry in entries {
-            let entry = entry.map_err(|e| PostgresError::Io(e))?;
+            let entry = entry.map_err(PostgresError::Io)?;
             let path = entry.path();
             let file_name = entry.file_name();
             let target_path = self.target_dir.join(&file_name);
 
             if path.is_dir() {
                 // Copy directory recursively
-                fs::create_dir_all(&target_path).map_err(|e| PostgresError::Io(e))?;
-                copy_dir_all(&path, &target_path).map_err(|e| PostgresError::Io(e))?;
+                fs::create_dir_all(&target_path).map_err(PostgresError::Io)?;
+                copy_dir_all(&path, &target_path).map_err(PostgresError::Io)?;
                 has_files = true;
             } else {
                 // Copy file
-                fs::copy(&path, &target_path).map_err(|e| PostgresError::Io(e))?;
+                fs::copy(&path, &target_path).map_err(PostgresError::Io)?;
                 has_files = true;
             }
         }
 
         // Always create a dummy file to ensure the directory is not empty (for test verification)
         let dummy_file = self.target_dir.join(".restore_complete");
-        fs::write(dummy_file, "Restore completed successfully")
-            .map_err(|e| PostgresError::Io(e))?;
+        fs::write(dummy_file, "Restore completed successfully").map_err(PostgresError::Io)?;
 
         if !has_files {
             warn!("No files found in backup directory, but created .restore_complete file");
@@ -289,7 +288,7 @@ impl FullRestoreManager {
             self.backup.backup_path.to_string_lossy()
         );
 
-        fs::write(&recovery_conf_path, recovery_conf_content).map_err(|e| PostgresError::Io(e))?;
+        fs::write(&recovery_conf_path, recovery_conf_content).map_err(PostgresError::Io)?;
 
         info!("Created recovery.conf file at {:?}", recovery_conf_path);
 
@@ -300,7 +299,7 @@ impl FullRestoreManager {
     fn restore_database_content(&self) -> Result<(), PostgresError> {
         // Look for dump files in the backup directory
         let dump_files = fs::read_dir(&self.backup.backup_path)
-            .map_err(|e| PostgresError::Io(e))?
+            .map_err(PostgresError::Io)?
             .filter_map(Result::ok)
             .filter(|entry| {
                 let path = entry.path();
@@ -373,7 +372,7 @@ impl FullRestoreManager {
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .status()
-                .map_err(|e| PostgresError::Io(e))?;
+                .map_err(PostgresError::Io)?;
 
             if !restore_result.success() {
                 return Err(PostgresError::RestoreError(
@@ -399,7 +398,7 @@ impl FullRestoreManager {
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .status()
-                .map_err(|e| PostgresError::Io(e))?;
+                .map_err(PostgresError::Io)?;
 
             if !restore_result.success() {
                 return Err(PostgresError::RestoreError(

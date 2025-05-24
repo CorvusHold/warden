@@ -69,7 +69,7 @@ impl PgRestore {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
-            .map_err(|e| PostgresError::Io(e))?;
+            .map_err(PostgresError::Io)?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -145,7 +145,7 @@ impl PgRestore {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
-            .map_err(|e| PostgresError::Io(e))?;
+            .map_err(PostgresError::Io)?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -191,7 +191,7 @@ impl PgRestore {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
-            .map_err(|e| PostgresError::Io(e))?;
+            .map_err(PostgresError::Io)?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

@@ -5,10 +5,9 @@ use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::{
     operation::{
-        create_bucket::CreateBucketOutput, delete_object::DeleteObjectOutput,
-        get_object::GetObjectOutput, head_object::HeadObjectOutput,
-        list_buckets::ListBucketsOutput, list_objects_v2::ListObjectsV2Output,
-        put_object::PutObjectOutput,
+        delete_object::DeleteObjectOutput, get_object::GetObjectOutput,
+        head_object::HeadObjectOutput, list_buckets::ListBucketsOutput,
+        list_objects_v2::ListObjectsV2Output, put_object::PutObjectOutput,
     },
     primitives::ByteStream,
     Client,
@@ -19,8 +18,8 @@ use chrono;
 use bytes::Bytes;
 use futures::Stream;
 use futures::StreamExt;
-use log::{error, info};
-use std::convert::TryFrom;
+use log::{debug, error, info};
+
 use std::path::Path;
 use std::pin::Pin;
 use std::time::{Duration, SystemTime};
@@ -28,6 +27,16 @@ use tokio::io::AsyncWriteExt;
 use tokio::{fs::File, io::AsyncReadExt};
 
 /// AWS S3 storage provider
+#[derive(Debug, Clone)]
+pub enum ProviderKind {
+    Aws,
+    Minio,
+    Cloudflare,
+    Gcp,
+    Localstack,
+    Other(String),
+}
+
 pub struct S3Provider {
     /// S3 client
     client: Client,
@@ -35,17 +44,88 @@ pub struct S3Provider {
     region: String,
     /// Custom endpoint
     endpoint: Option<String>,
+    /// Provider kind (for provider-specific config/quirks)
+    #[allow(dead_code)]
+    provider_kind: ProviderKind,
 }
 
 impl S3Provider {
     /// Creates a new S3 provider
+    pub async fn new_with_kind(
+        region: Option<String>,
+        endpoint: Option<String>,
+        access_key: Option<String>,
+        secret_key: Option<String>,
+        provider_kind: ProviderKind,
+    ) -> Result<Self, StorageError> {
+        use log::info;
+        let region_str = region.clone().unwrap_or_else(|| "us-east-1".to_string());
+        info!("Initializing S3Provider for {:?}", provider_kind);
+        let region = Region::new(region_str.clone());
+
+        let mut config_builder = aws_config::defaults(BehaviorVersion::v2025_01_17())
+            .region(region)
+            .retry_config(aws_config::retry::RetryConfig::standard().with_max_attempts(3));
+
+        // Add credentials if provided
+        if let (Some(access_key), Some(secret_key)) = (access_key.clone(), secret_key.clone()) {
+            let credentials = aws_credential_types::Credentials::new(
+                access_key, secret_key, None, None, "explicit",
+            );
+            config_builder =
+                config_builder.credentials_provider(SharedCredentialsProvider::new(credentials));
+        }
+
+        // Provider-specific endpoint and config
+        let mut force_path_style = false;
+        let mut default_endpoint = endpoint.clone();
+        match provider_kind {
+            ProviderKind::Aws => {}
+            ProviderKind::Minio | ProviderKind::Localstack => {
+                force_path_style = true;
+                if default_endpoint.is_none() {
+                    default_endpoint = Some("http://localhost:9000".to_string());
+                }
+            }
+            ProviderKind::Cloudflare => {
+                // Cloudflare R2: force path style and custom endpoint
+                force_path_style = true;
+            }
+            ProviderKind::Gcp => {
+                // GCP Interop: may need path style
+                force_path_style = true;
+            }
+            ProviderKind::Other(_) => {}
+        }
+        if let Some(ref ep) = default_endpoint {
+            config_builder = config_builder.endpoint_url(ep.clone());
+        }
+
+        // Build the base AWS config
+        let sdk_config = config_builder.load().await;
+        let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+        if force_path_style {
+            s3_config_builder = s3_config_builder.force_path_style(true);
+        }
+        let s3_config = s3_config_builder.build();
+        let client = Client::from_conf(s3_config);
+        Ok(Self {
+            client,
+            region: region_str,
+            endpoint: default_endpoint,
+            provider_kind,
+        })
+    }
+
+    /// Creates a new S3 provider
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         region: Option<String>,
         endpoint: Option<String>,
         access_key: Option<String>,
         secret_key: Option<String>,
     ) -> Result<Self, StorageError> {
-        let region_str = region.unwrap_or_else(|| "us-east-1".to_string());
+        let region_str = region.unwrap_or("us-east-1".to_string());
         let region = Region::new(region_str.clone());
 
         let mut config_builder = aws_config::defaults(BehaviorVersion::v2025_01_17())
@@ -66,7 +146,7 @@ impl S3Provider {
         }
 
         // Add custom endpoint if provided
-        if let Some(endpoint) = endpoint.clone() {
+        if let Some(ref endpoint) = endpoint {
             info!("Using custom endpoint: {}", endpoint);
             config_builder = config_builder.endpoint_url(endpoint);
         } else {
@@ -77,16 +157,24 @@ impl S3Provider {
             config_builder = config_builder.endpoint_url(default_endpoint);
         }
 
-        // Build the config
+        // Build the base AWS config
         let sdk_config = config_builder.load().await;
 
+        // Build S3 config, enabling path-style if endpoint is set
+        let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+        if endpoint.is_some() {
+            s3_config_builder = s3_config_builder.force_path_style(true);
+        }
+        let s3_config = s3_config_builder.build();
+
         // Create the S3 client
-        let client = Client::new(&sdk_config);
+        let client = Client::from_conf(s3_config);
 
         Ok(Self {
             client,
             region: region_str,
             endpoint,
+            provider_kind: ProviderKind::Aws,
         })
     }
 
@@ -94,14 +182,11 @@ impl S3Provider {
     fn convert_s3_object(&self, obj: &aws_sdk_s3::types::Object) -> StorageObject {
         StorageObject {
             key: obj.key().unwrap_or_default().to_string(),
-            size: match obj.size() {
-                Some(size) => Some(size.try_into().unwrap_or(0)),
-                None => None,
-            },
+            size: obj.size().map(|size| size.try_into().unwrap_or(0)),
             last_modified: obj.last_modified().map(|t| {
                 let secs = t.secs();
                 let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
-                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(|| chrono::Utc::now())
+                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(chrono::Utc::now)
             }),
             etag: obj.e_tag().map(|s| s.to_string()),
             storage_class: obj.storage_class().map(|s| s.as_str().to_string()),
@@ -113,7 +198,76 @@ impl S3Provider {
         &self,
         metadata: Option<&std::collections::HashMap<String, String>>,
     ) -> Option<Metadata> {
-        metadata.map(|m| m.clone())
+        metadata.cloned()
+    }
+
+    /// Helper: fetch object from S3 with error mapping
+    pub async fn get_object_with_error_handling(
+        &self,
+        bucket: &str,
+        key: &str,
+    ) -> Result<GetObjectOutput, StorageError> {
+        self.client
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to get object {}/{}: {}", bucket, key, e);
+                if e.to_string().contains("404") {
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                } else {
+                    StorageError::Aws(e.to_string())
+                }
+            })
+    }
+
+    /// Helper: create parent directories for a file path
+    pub async fn create_parent_dirs(&self, file_path: &Path) -> Result<(), StorageError> {
+        if let Some(parent) = file_path.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                error!("Failed to create directory {}: {}", parent.display(), e);
+                StorageError::Io(e)
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Helper: stream S3 body to file, returns bytes written
+    pub async fn stream_s3_to_file<R>(
+        &self,
+        mut stream: R,
+        file_path: &Path,
+    ) -> Result<u64, StorageError>
+    where
+        R: tokio::io::AsyncRead + Unpin + Send,
+    {
+        let mut file = File::create(file_path).await.map_err(|e| {
+            error!("Failed to create file {}: {}", file_path.display(), e);
+            StorageError::Io(e)
+        })?;
+        let mut bytes_written = 0u64;
+        let mut buffer = vec![0u8; 8192]; // 8KB buffer
+        loop {
+            let n = stream.read(&mut buffer).await.map_err(|e| {
+                error!("Failed to read from stream: {}", e);
+                StorageError::Io(e)
+            })?;
+            if n == 0 {
+                break;
+            }
+            file.write_all(&buffer[0..n]).await.map_err(|e| {
+                error!("Failed to write to file: {}", e);
+                StorageError::Io(e)
+            })?;
+            bytes_written += n as u64;
+        }
+        file.flush().await.map_err(|e| {
+            error!("Failed to flush file: {}", e);
+            StorageError::Io(e)
+        })?;
+        Ok(bytes_written)
     }
 }
 
@@ -158,12 +312,6 @@ fn to_system_time(dt: &DateTime) -> SystemTime {
 //             error!("Failed to upload object {}/{}: {}", bucket, key, e);
 //             StorageError::Aws(e.to_string())
 //         })?;
-
-//         info!("Uploaded object {}/{}", bucket, key);
-//         Ok(())
-//     }
-// }
-
 #[async_trait]
 impl StorageProvider for S3Provider {
     fn name(&self) -> &str {
@@ -263,7 +411,7 @@ impl StorageProvider for S3Provider {
             .iter()
             .map(|b| Bucket {
                 name: b.name().unwrap_or_default().to_string(),
-                creation_date: b.creation_date().map(|t| to_system_time(t)),
+                creation_date: b.creation_date().map(to_system_time),
                 region: Some(self.region.clone()),
             })
             .collect();
@@ -305,57 +453,211 @@ impl StorageProvider for S3Provider {
         content_type: Option<&str>,
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
+        use aws_sdk_s3::primitives::ByteStream;
+        use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
+        use tokio::io::{AsyncReadExt, BufReader};
+
+        const PART_SIZE: usize = 5 * 1024 * 1024; // 5MB (S3 minimum)
+
         let file = tokio::fs::File::open(file_path).await.map_err(|e| {
             error!("Failed to open file {}: {}", file_path.display(), e);
             StorageError::Io(e)
         })?;
+        let metadata_fs = file.metadata().await.map_err(|e| {
+            error!("Failed to get file metadata: {}", e);
+            StorageError::Io(e)
+        })?;
+        let file_size = metadata_fs.len();
+        let mut reader = BufReader::new(file);
 
-        let file_size = file
-            .metadata()
-            .await
-            .map_err(|e| {
-                error!("Failed to get file metadata: {}", e);
+        // Use single put_object for small files
+        if file_size <= PART_SIZE as u64 {
+            let mut buffer = Vec::with_capacity(file_size as usize);
+            reader.read_to_end(&mut buffer).await.map_err(|e| {
+                error!("Failed to read file {}: {}", file_path.display(), e);
                 StorageError::Io(e)
-            })?
-            .len();
+            })?;
+            let mut put_object_request = self
+                .client
+                .put_object()
+                .bucket(bucket)
+                .key(key)
+                .body(ByteStream::from(buffer));
+            if let Some(content_type) = content_type {
+                put_object_request = put_object_request.content_type(content_type);
+            }
+            if let Some(metadata) = metadata {
+                for (key, value) in metadata {
+                    put_object_request = put_object_request.metadata(key, value);
+                }
+            }
+            put_object_request.send().await.map_err(|e| {
+                error!("Failed to upload file to {}/{}: {}", bucket, key, e);
+                StorageError::Aws(e.to_string())
+            })?;
+            info!(
+                "Uploaded file {} to {}/{} ({} bytes) in single part",
+                file_path.display(),
+                bucket,
+                key,
+                file_size
+            );
+            return Ok(());
+        }
 
-        // Read the file into a buffer
-        let mut buffer = Vec::new();
-        let mut file = tokio::fs::File::open(file_path).await.map_err(|e| {
-            error!("Failed to open file {}: {}", file_path.display(), e);
-            StorageError::Io(e)
-        })?;
-        file.read_to_end(&mut buffer).await.map_err(|e| {
-            error!("Failed to read file {}: {}", file_path.display(), e);
-            StorageError::Io(e)
-        })?;
-
-        // Create a ByteStream from the buffer
-        let stream = ByteStream::from(buffer);
-        let mut put_object_request = self
+        // Multipart upload for large files
+        debug!(
+            "Initiating multipart upload: bucket={}, key={}, file_size={}",
+            bucket, key, file_size
+        );
+        let create_resp = self
             .client
-            .put_object()
+            .create_multipart_upload()
             .bucket(bucket)
             .key(key)
-            .body(stream);
-
-        if let Some(content_type) = content_type {
-            put_object_request = put_object_request.content_type(content_type);
-        }
-
-        if let Some(metadata) = metadata {
-            for (key, value) in metadata {
-                put_object_request = put_object_request.metadata(key, value);
+            .set_content_type(content_type.map(|s| s.to_string()))
+            .send()
+            .await
+            .map_err(|e| {
+                error!("[DEBUG] Failed to initiate multipart upload: {}", e);
+                StorageError::Aws(e.to_string())
+            })?;
+        let upload_id = create_resp
+            .upload_id()
+            .ok_or_else(|| {
+                StorageError::Aws("No upload_id returned from create_multipart_upload".to_string())
+            })?
+            .to_string();
+        let mut parts: Vec<CompletedPart> = Vec::new();
+        let mut part_number = 1;
+        loop {
+            let mut buf = vec![0u8; PART_SIZE];
+            let mut filled = 0;
+            // Fill the buffer up to PART_SIZE or until EOF
+            while filled < PART_SIZE {
+                let n = reader.read(&mut buf[filled..]).await.map_err(|e| {
+                    error!("[DEBUG] Failed to read file part: {}", e);
+                    StorageError::Io(e)
+                })?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+            if filled == 0 {
+                break;
+            } // EOF
+            let is_last_part = filled < PART_SIZE;
+            // S3: All parts except the last must be at least PART_SIZE (5MB)
+            if !is_last_part && filled < PART_SIZE {
+                error!(
+                    "Part {} is too small ({} bytes, must be >= {} except last). Aborting upload.",
+                    part_number, filled, PART_SIZE
+                );
+                // Abort upload
+                std::mem::drop(
+                    self.client
+                        .abort_multipart_upload()
+                        .bucket(bucket)
+                        .key(key)
+                        .upload_id(&upload_id)
+                        .send(),
+                );
+                return Err(StorageError::Aws(format!(
+                    "Multipart upload failed: part {} too small ({} bytes)",
+                    part_number, filled
+                )));
+            }
+            println!("Uploading part {} ({} bytes)", part_number, filled);
+            debug!("Uploading part {} ({} bytes)", part_number, filled);
+            info!("Uploading part {} ({} bytes)", part_number, filled);
+            debug!(
+                "Part {} first 8 bytes: {:?}",
+                part_number,
+                &buf[..8.min(filled)]
+            );
+            let part_resp = self
+                .client
+                .upload_part()
+                .bucket(bucket)
+                .key(key)
+                .upload_id(&upload_id)
+                .part_number(part_number)
+                .body(ByteStream::from(buf[..filled].to_vec()))
+                .send()
+                .await
+                .map_err(|e| {
+                    error!("Failed to upload part {}: {}", part_number, e);
+                    // Abort upload on error
+                    error!("Aborting multipart upload: upload_id={}", upload_id);
+                    std::mem::drop(
+                        self.client
+                            .abort_multipart_upload()
+                            .bucket(bucket)
+                            .key(key)
+                            .upload_id(&upload_id)
+                            .send(),
+                    );
+                    StorageError::Aws(e.to_string())
+                })?;
+            let etag_raw = part_resp.e_tag().unwrap_or_default();
+            info!("Part {} ETag as returned: {:?}", part_number, etag_raw);
+            // DO NOT strip quotes; send ETag exactly as returned by S3/MinIO
+            let completed_part = CompletedPart::builder()
+                .part_number(part_number)
+                .set_e_tag(Some(etag_raw.to_string()))
+                .build();
+            info!(
+                "Will send part {} ETag (verbatim): {:?}",
+                part_number,
+                completed_part.e_tag()
+            );
+            parts.push(completed_part);
+            info!("Uploaded part {} ({} bytes)", part_number, filled);
+            part_number += 1;
+            if is_last_part {
+                break;
             }
         }
-
-        let _put_object_result: PutObjectOutput = put_object_request.send().await.map_err(|e| {
-            error!("Failed to upload file to {}/{}: {}", bucket, key, e);
-            StorageError::Aws(e.to_string())
-        })?;
-
+        // Complete upload
+        // Ensure parts are sorted by part_number (S3 requires this)
+        parts.sort_by_key(|p| p.part_number());
+        for part in &parts {
+            debug!(
+                "Completing part: part_number={:?}, e_tag={:?}",
+                part.part_number(),
+                part.e_tag()
+            );
+        }
+        // Assert all parts except the last are at least 5MB
+        // We can't get the size from CompletedPart, so log a warning instead
+        for (i, part) in parts.iter().enumerate() {
+            if i < parts.len() - 1 {
+                info!("Part {}: part_number={:?}, e_tag={:?} (size unknown, must be >=5MB except last)", i+1, part.part_number(), part.e_tag());
+            }
+        }
+        info!("CompletedMultipartUpload payload: parts={:?}", parts);
+        let completed_upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(parts))
+            .build();
+        let complete_result = self
+            .client
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(completed_upload)
+            .send()
+            .await;
+        match complete_result {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Failed to complete multipart upload: {:#?}", e);
+                return Err(StorageError::Aws(e.to_string()));
+            }
+        }
         info!(
-            "Uploaded file {} to {}/{} ({} bytes)",
+            "Uploaded file {} to {}/{} ({} bytes) via multipart upload",
             file_path.display(),
             bucket,
             key,
@@ -370,67 +672,12 @@ impl StorageProvider for S3Provider {
         key: &str,
         file_path: &Path,
     ) -> Result<(), StorageError> {
-        let get_object_result: GetObjectOutput = self
-            .client
-            .get_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(|e| {
-                error!("Failed to get object {}/{}: {}", bucket, key, e);
-                if e.to_string().contains("404") {
-                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
-                } else {
-                    StorageError::Aws(e.to_string())
-                }
-            })?;
-
-        let content_length = match get_object_result.content_length() {
-            Some(size) => size.try_into().unwrap_or(0),
-            None => 0,
-        };
-
-        // Create parent directories if they don't exist
-        if let Some(parent) = file_path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                error!("Failed to create directory {}: {}", parent.display(), e);
-                StorageError::Io(e)
-            })?;
-        }
-
-        let mut file = File::create(file_path).await.map_err(|e| {
-            error!("Failed to create file {}: {}", file_path.display(), e);
-            StorageError::Io(e)
-        })?;
-
-        let mut stream = get_object_result.body.into_async_read();
-        let mut bytes_written = 0;
-
-        let mut buffer = vec![0u8; 8192]; // 8KB buffer
-        loop {
-            let n = stream.read(&mut buffer).await.map_err(|e| {
-                error!("Failed to read from stream: {}", e);
-                StorageError::Io(e)
-            })?;
-
-            if n == 0 {
-                break;
-            }
-
-            file.write_all(&buffer[0..n]).await.map_err(|e| {
-                error!("Failed to write to file: {}", e);
-                StorageError::Io(e)
-            })?;
-
-            bytes_written += u64::try_from(n).unwrap_or(0);
-        }
-
-        file.flush().await.map_err(|e| {
-            error!("Failed to flush file: {}", e);
-            StorageError::Io(e)
-        })?;
-
+        let get_object_result = self.get_object_with_error_handling(bucket, key).await?;
+        let content_length = get_object_result.content_length().unwrap_or(0) as u64;
+        self.create_parent_dirs(file_path).await?;
+        let bytes_written = self
+            .stream_s3_to_file(get_object_result.body.into_async_read(), file_path)
+            .await?;
         info!(
             "Downloaded object {}/{} to {} ({} bytes)",
             bucket,
@@ -438,9 +685,7 @@ impl StorageProvider for S3Provider {
             file_path.display(),
             bytes_written
         );
-
-        // Verify the download size
-        if content_length != bytes_written {
+        if content_length != 0 && content_length != bytes_written {
             error!(
                 "Download size mismatch: expected {} bytes, got {} bytes",
                 content_length, bytes_written
@@ -450,7 +695,6 @@ impl StorageProvider for S3Provider {
                 content_length, bytes_written
             )));
         }
-
         Ok(())
     }
 
@@ -516,14 +760,13 @@ impl StorageProvider for S3Provider {
 
         let metadata = ObjectMetadata {
             key: key.to_string(),
-            size: match head_object_result.content_length() {
-                Some(size) => Some(size.try_into().unwrap_or(0)),
-                None => None,
-            },
+            size: head_object_result
+                .content_length()
+                .map(|size| size.try_into().unwrap_or(0)),
             last_modified: head_object_result.last_modified().map(|t| {
                 let secs = t.secs();
                 let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
-                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(|| chrono::Utc::now())
+                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(chrono::Utc::now)
             }),
             etag: head_object_result.e_tag().map(|s| s.to_string()),
             content_type: head_object_result.content_type().map(|s| s.to_string()),
@@ -578,7 +821,7 @@ impl StorageProvider for S3Provider {
         &self,
         bucket: &str,
         key: &str,
-        expires_in: Duration,
+        expires_in: std::time::Duration,
     ) -> Result<String, StorageError> {
         let presigner = aws_sdk_s3::presigning::PresigningConfig::builder()
             .expires_in(expires_in)

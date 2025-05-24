@@ -7,7 +7,6 @@ pub mod tunnel_keeper;
 pub mod user;
 pub mod wrapper;
 
-use anyhow;
 use ssh::SshError;
 use thiserror::Error;
 

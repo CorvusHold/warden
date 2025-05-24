@@ -1,0 +1,2 @@
+This is a test file for provider matrix integration tests.
+The content is simple and used to verify upload/download functionality.

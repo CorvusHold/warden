@@ -5,13 +5,13 @@ use ssh::cli::forward::find_available_port;
 use ssh::SSHTunnel;
 use ssh::SshError;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Once};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tokio::net::TcpStream;
+use tokio::sync::Mutex;
+use tokio::sync::OnceCell;
 
-static INIT: Once = Once::new();
-static mut TUNNEL_KEEPER: Option<Arc<Mutex<TunnelKeeper>>> = None;
+static TUNNEL_KEEPER: OnceCell<Arc<Mutex<TunnelKeeper>>> = OnceCell::const_new();
 
 pub struct TunnelKeeper {
     pub tunnel: Option<SSHTunnel>,
@@ -22,26 +22,27 @@ pub struct TunnelKeeper {
     pub is_active: AtomicBool,
 }
 
-enum TunnelCommand {
+#[allow(dead_code)]
+pub enum TunnelCommand {
     Stop,
     Verify,
 }
 
 impl TunnelKeeper {
-    pub fn instance() -> Arc<Mutex<TunnelKeeper>> {
-        unsafe {
-            INIT.call_once(|| {
-                TUNNEL_KEEPER = Some(Arc::new(Mutex::new(TunnelKeeper {
+    pub async fn instance() -> Arc<Mutex<TunnelKeeper>> {
+        TUNNEL_KEEPER
+            .get_or_init(|| async {
+                Arc::new(Mutex::new(TunnelKeeper {
                     tunnel: None,
                     tunnel_thread: None,
                     tunnel_tx: None,
                     original_host: String::new(),
                     original_port: 0,
                     is_active: AtomicBool::new(false),
-                })));
-            });
-            TUNNEL_KEEPER.clone().unwrap()
-        }
+                }))
+            })
+            .await
+            .clone()
     }
 
     pub async fn setup(&mut self, config: &PostgresConfig) -> Result<(), SshError> {
@@ -50,14 +51,14 @@ impl TunnelKeeper {
             return Ok(());
         }
 
-        if let Some(ssh_host) = &config.ssh_host {
+        if let Some(_ssh_host) = &config.ssh_host {
             let local_port = config
                 .ssh_local_port
                 .unwrap_or_else(|| find_available_port().expect("No available ports found"));
 
             // Clone necessary config values
             let host = config.host.clone();
-            let port = config.port;
+            let _port = config.port;
             let ssh_host = config.ssh_host.clone();
             let ssh_user = config.ssh_user.clone();
             let ssh_port = config.ssh_port;
@@ -83,21 +84,14 @@ impl TunnelKeeper {
 
             // Store original connection details
             self.original_host = host.clone();
-            self.original_port =
-                config
-                    .ssh_remote_port
-                    .clone()
-                    .ok_or(SshError::ConfigurationError(
-                        "SSH remote port must be specified".to_string(),
-                    ))?;
+            self.original_port = config.ssh_remote_port.ok_or(SshError::ConfigurationError(
+                "SSH remote port must be specified".to_string(),
+            ))?;
 
             let host = config.host.clone();
-            let port = config
-                .ssh_remote_port
-                .clone()
-                .ok_or(SshError::ConfigurationError(
-                    "SSH remote port must be specified".to_string(),
-                ))?;
+            let port = config.ssh_remote_port.ok_or(SshError::ConfigurationError(
+                "SSH remote port must be specified".to_string(),
+            ))?;
             let ssh_host = config.ssh_host.clone().ok_or(SshError::ConfigurationError(
                 "SSH host must be specified".to_string(),
             ))?;
@@ -112,7 +106,7 @@ impl TunnelKeeper {
             // Start tunnel in background thread
             let handle = thread::spawn(move || {
                 let runtime = tokio::runtime::Runtime::new().unwrap();
-                runtime.block_on(async move {
+                let _ = runtime.block_on(async move {
                     // Create new tunnel instance for the thread
                     let ssh_user_clone = ssh_user.clone();
                     let ssh_host_clone = ssh_host.clone();
@@ -142,15 +136,14 @@ impl TunnelKeeper {
                         "Forwarding local port {} to remote {}:{}",
                         local_port, host, port
                     );
-                    Ok(
-                        if let Err(e) = tunnel.forward_port(local_port, port, host).await {
-                            error!("SSH tunnel forwarding failed: {}", e);
-                            return Err(SshError::TunnelError(format!(
-                                "Failed to forward port: {}",
-                                e
-                            )));
-                        },
-                    )
+                    if let Err(e) = tunnel.forward_port(local_port, port, host).await {
+                        error!("SSH tunnel forwarding failed: {}", e);
+                        return Err(SshError::TunnelError(format!(
+                            "Failed to forward port: {}",
+                            e
+                        )));
+                    };
+                    Ok(())
                 });
             });
 

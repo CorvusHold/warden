@@ -141,7 +141,7 @@ impl UserManager {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .map_err(|e| PostgresError::Io(e.into()))?;
+            .map_err(PostgresError::Io)?;
 
         let has_permissions = output.success();
 

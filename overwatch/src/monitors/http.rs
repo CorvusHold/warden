@@ -60,9 +60,7 @@ async fn build_client(service: &Service) -> Result<Client, Error> {
             client_builder = client_builder.danger_accept_invalid_certs(true);
         } else {
             // Check SSL certificate validity
-            if let Err(e) = ssl::verify_ssl(&service.url).await {
-                return Err(e);
-            }
+            ssl::verify_ssl(&service.url).await?
         }
     }
 

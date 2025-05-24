@@ -2,7 +2,6 @@ use crate::{HttpRequestMethod, MonitorType, Service};
 
 mod http_tests {
     use super::*;
-    use mockito;
 
     #[tokio::test]
     async fn test_http_get_success() {

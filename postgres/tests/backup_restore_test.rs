@@ -2,7 +2,7 @@ use chrono::Utc;
 use postgres::common::{Backup, BackupStatus, BackupType, PostgresConfig, RestoreStatus};
 use postgres::manager::PostgresManager;
 use tempfile::tempdir;
-use tokio_postgres::{connect, error, NoTls};
+use tokio_postgres::{connect, NoTls};
 use uuid::Uuid;
 
 // Helper function to create a test database config
@@ -49,12 +49,12 @@ async fn test_full_backup_and_restore() -> Result<(), Box<dyn std::error::Error>
 
     // Verify restore was successful - check for the directory structure
     // The base directory might not exist directly, but the restore directory should not be empty
-    assert!(!restore_dir
+    assert!(restore_dir
         .path()
         .read_dir()
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
         .next()
-        .is_none());
+        .is_some());
 
     Ok(())
 }
@@ -85,12 +85,12 @@ async fn test_incremental_backup_and_restore() -> Result<(), Box<dyn std::error:
 
     // Verify restore was successful - check for the directory structure
     // The base directory might not exist directly, but the restore directory should not be empty
-    assert!(!restore_dir
+    assert!(restore_dir
         .path()
         .read_dir()
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
         .next()
-        .is_none());
+        .is_some());
 
     Ok(())
 }
@@ -164,12 +164,12 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
 
     // Verify restore was successful - check for the directory structure
     // The base directory might not exist directly, but the restore directory should not be empty
-    assert!(!restore_dir
+    assert!(restore_dir
         .path()
         .read_dir()
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
         .next()
-        .is_none());
+        .is_some());
 
     Ok(())
 }
@@ -229,7 +229,7 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
         wal_start: None,
         wal_end: None,
         size_bytes: Some(0),
-        backup_path: backup_path,
+        backup_path,
         server_version: "14.0".to_string(),
         error_message: None,
     };

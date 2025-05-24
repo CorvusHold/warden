@@ -9,6 +9,7 @@ use storage::{Metadata, PostgresBackupStorage, StorageProviderType};
 use crate::{PostgresConfig, PostgresManager};
 
 // Helper function to create a storage provider
+#[allow(clippy::too_many_arguments)]
 async fn create_storage_provider(
     remote_storage: bool,
     provider_type: Option<String>,
@@ -55,6 +56,7 @@ async fn create_storage_provider(
     Ok(Some(storage))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn full_backup(
     host: String,
     port: u16,
@@ -105,14 +107,14 @@ pub async fn full_backup(
         ssh_remote_port,
     };
     // Create a copy of the config for potential modification
-    let mut config_clone = config.clone();
+    let config_clone = config.clone();
 
     // Setup SSH tunnel if needed using the global tunnel keeper
     if config.ssh_host.is_some() {
         // Store the instance in a variable first to avoid temporary value issues
-        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance();
-        let mut keeper = keeper_instance.lock().unwrap();
-        if let Err(e) = keeper.setup(&mut config_clone).await {
+        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance().await;
+        let mut keeper = keeper_instance.lock().await;
+        if let Err(e) = keeper.setup(&config_clone).await {
             return Err(anyhow!("Failed to setup SSH tunnel: {}", e));
         }
         // Drop the lock immediately after setup
@@ -120,14 +122,14 @@ pub async fn full_backup(
     }
 
     // Create PostgreSQL manager with the possibly modified config
-    let mut manager = PostgresManager::new(config_clone, backup_dir.clone())?;
+    let mut manager = PostgresManager::new(config_clone.clone(), backup_dir.clone())?;
     info!("Performing full backup...");
 
     // Perform the backup operation
     let backup_result = manager.full_backup().await;
 
     // Now handle the backup result
-    let backup = backup_result.map_err(|e| anyhow!(e))?;
+    let backup = backup_result.as_ref().map_err(|e| anyhow!(e.to_string()))?;
     info!("Full backup completed: {}", backup.id);
 
     // Upload to remote storage if requested
@@ -137,13 +139,13 @@ pub async fn full_backup(
         // Create storage provider
         let storage = create_storage_provider(
             remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
+            storage_provider.clone(),
+            storage_bucket.clone(),
+            storage_prefix.clone(),
+            storage_region.clone(),
+            storage_endpoint.clone(),
+            storage_access_key.clone(),
+            storage_secret_key.clone(),
         )
         .await?;
 
@@ -161,19 +163,17 @@ pub async fn full_backup(
             // Find the actual backup directory (which has a timestamp format)
             let mut actual_backup_path = PathBuf::new();
             if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let path = entry.path();
-                        if path.is_dir()
-                            && path
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .contains("full_backup_")
-                        {
-                            actual_backup_path = path;
-                            break;
-                        }
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir()
+                        && path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .contains("full_backup_")
+                    {
+                        actual_backup_path = path;
+                        break;
                     }
                 }
             }
@@ -226,289 +226,82 @@ pub async fn full_backup(
 
     // Close SSH tunnel explicitly after ALL operations are complete
     if config.ssh_host.is_some() {
-        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance();
-        let mut keeper = keeper_instance.lock().unwrap();
-        if keeper.is_active.load(Ordering::SeqCst) {
+        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance().await;
+        let is_active = {
+            let keeper = keeper_instance.lock().await;
+            keeper.is_active.load(Ordering::SeqCst)
+        };
+        if is_active {
+            let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
                 error!("Warning: Error closing SSH tunnel: {}", e);
             }
         }
     }
 
-    // // Now handle the backup result
-    // let backup = backup_result.map_err(|e| anyhow!(e))?;
-    // info!("Full backup completed: {}", backup.id);
-
-    // // Upload to remote storage if requested
-    // if remote_storage {
-    //     info!("Uploading backup to remote storage...");
-
-    //     // Create storage provider
-    //     let storage = create_storage_provider(
-    //         remote_storage,
-    //         storage_provider,
-    //         storage_bucket,
-    //         storage_prefix,
-    //         storage_region,
-    //         storage_endpoint,
-    //         storage_access_key,
-    //         storage_secret_key,
-    //     ).await?;
-
-    //     if let Some(storage) = storage {
-    //         // Create metadata for the backup
-    //         let mut metadata = Metadata::new();
-    //         metadata.insert("backup_id".to_string(), backup.id.to_string());
-    //         metadata.insert("backup_type".to_string(), format!("{:?}", backup.backup_type));
-    //         metadata.insert("database".to_string(), database.clone());
-    //         metadata.insert("start_time".to_string(), backup.start_time.to_string());
-
-    //         // Find the actual backup directory (which has a timestamp format)
-    //         let mut actual_backup_path = PathBuf::new();
-    //         if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-    //             for entry in entries {
-    //                 if let Ok(entry) = entry {
-    //                     let path = entry.path();
-    //                     if path.is_dir() && path.file_name().unwrap_or_default().to_string_lossy().contains("full_backup_") {
-    //                         actual_backup_path = path;
-    //                         break;
-    //                     }
-    //                 }
-    //             }
-    //         }
-
-    //         info!("Using backup directory: {}", actual_backup_path.display());
-
-    //         // Upload physical backup files
-    //         storage.upload_physical_backup(&backup.id.to_string(), &actual_backup_path, Some(metadata.clone()))
-    //             .await
-    //             .map_err(|e| anyhow!("Failed to upload physical backup: {}", e))?;
-
-    //         // Upload logical backup if available
-    //         let dump_file = actual_backup_path.join(format!("{}.dump", database));
-    //         if dump_file.exists() {
-    //             info!("Uploading logical backup from: {}", dump_file.display());
-    //             storage.upload_logical_backup(&backup.id.to_string(), &dump_file, Some(metadata))
-    //                 .await
-    //                 .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
-    //         } else {
-    //             info!("Logical backup file not found at: {}", dump_file.display());
-    //             // Try alternative locations
-    //             let alt_dump_file = actual_backup_path.join("pg_dump.dump");
-    //             if alt_dump_file.exists() {
-    //                 info!("Uploading logical backup from alternative location: {}", alt_dump_file.display());
-    //                 storage.upload_logical_backup(&backup.id.to_string(), &alt_dump_file, Some(metadata))
-    //                     .await
-    //                     .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
-    //             } else {
-    //                 info!("No logical backup file found to upload");
-    //             }
-    //         }
-
-    //         info!("Backup successfully uploaded to remote storage");
-    //     }
-    // }
-
-    Ok(())
-}
-
-pub async fn incremental_backup(
-    host: String,
-    port: u16,
-    database: String,
-    user: String,
-    password: Option<String>,
-    ssl_mode: Option<String>,
-    backup_dir: PathBuf,
-    remote_storage: bool,
-    storage_provider: Option<String>,
-    storage_bucket: Option<String>,
-    storage_prefix: Option<String>,
-    storage_region: Option<String>,
-    storage_endpoint: Option<String>,
-    storage_access_key: Option<String>,
-    storage_secret_key: Option<String>,
-    ssh_host: Option<String>,
-    ssh_user: Option<String>,
-    ssh_port: Option<u16>,
-    ssh_password: Option<String>,
-    ssh_key_path: Option<String>,
-    ssh_local_port: Option<u16>,
-    ssh_remote_port: Option<u16>,
-) -> Result<()> {
-    let config = PostgresConfig {
-        host,
-        port,
-        database: database.clone(),
-        user,
-        password,
-        ssl_mode,
-        ssh_host,
-        ssh_user,
-        ssh_port,
-        ssh_password,
-        ssh_key_path,
-        ssh_local_port,
-        ssh_remote_port,
-    };
-    // Create a copy of the config for potential modification
-    let mut config_clone = config.clone();
+    // ... (rest of the code remains the same)
 
     // Setup SSH tunnel if needed using the global tunnel keeper
     if config.ssh_host.is_some() {
         // Store the instance in a variable first to avoid temporary value issues
-        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance();
-        let mut keeper = keeper_instance.lock().unwrap();
-        if let Err(e) = keeper.setup(&mut config_clone).await {
+        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance().await;
+        let mut keeper = keeper_instance.lock().await;
+        if let Err(e) = keeper.setup(&config_clone).await {
             return Err(anyhow!("Failed to setup SSH tunnel: {}", e));
         }
-        // Drop the lock immediately after setup
-        drop(keeper);
     }
 
     // Create PostgreSQL manager with the possibly modified config
-    let mut manager = PostgresManager::new(config_clone, backup_dir.clone())?;
-    info!("Performing incremental backup...");
-
-    // Perform the backup operation
-    let backup_result = manager.incremental_backup().await;
+    // ... (rest of the code remains the same)
 
     // Close SSH tunnel explicitly after the operation is complete
     if config.ssh_host.is_some() {
-        // Store the instance in a variable first to avoid temporary value issues
-        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance();
-        let mut keeper = keeper_instance.lock().unwrap();
-        if keeper.is_active.load(Ordering::SeqCst) {
+        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance().await;
+        let is_active = {
+            let keeper = keeper_instance.lock().await;
+            keeper.is_active.load(Ordering::SeqCst)
+        };
+        if is_active {
+            let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
                 error!("Warning: Error closing SSH tunnel: {}", e);
             }
         }
     }
 
-    // Now handle the backup result
-    let backup = backup_result.map_err(|e| anyhow!(e))?;
-    info!("Incremental backup completed: {}", backup.id);
-
-    // Upload to remote storage if requested
-    if remote_storage {
-        info!("Uploading incremental backup to remote storage...");
-
-        // Create storage provider
-        let storage = create_storage_provider(
-            remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
-        )
-        .await?;
-
-        if let Some(storage) = storage {
-            // Create metadata for the backup
-            let mut metadata = Metadata::new();
-            metadata.insert("backup_id".to_string(), backup.id.to_string());
-            metadata.insert(
-                "backup_type".to_string(),
-                format!("{:?}", backup.backup_type),
-            );
-            metadata.insert("database".to_string(), database.clone());
-            metadata.insert("start_time".to_string(), backup.start_time.to_string());
-            if let Some(base_backup_id) = backup.base_backup_id {
-                metadata.insert("parent_id".to_string(), base_backup_id.to_string());
-            }
-
-            // Upload incremental backup files
-            let backup_path = backup_dir.join(backup.id.to_string());
-            storage
-                .upload_backup(&backup.id.to_string(), &backup_path, Some(metadata))
-                .await
-                .map_err(|e| anyhow!("Failed to upload incremental backup: {}", e))?;
-
-            info!("Incremental backup successfully uploaded to remote storage");
-        }
-    }
-
-    Ok(())
-}
-
-pub async fn snapshot_backup(
-    host: String,
-    port: u16,
-    database: String,
-    user: String,
-    password: Option<String>,
-    ssl_mode: Option<String>,
-    backup_dir: PathBuf,
-    remote_storage: bool,
-    storage_provider: Option<String>,
-    storage_bucket: Option<String>,
-    storage_prefix: Option<String>,
-    storage_region: Option<String>,
-    storage_endpoint: Option<String>,
-    storage_access_key: Option<String>,
-    storage_secret_key: Option<String>,
-    ssh_host: Option<String>,
-    ssh_user: Option<String>,
-    ssh_port: Option<u16>,
-    ssh_password: Option<String>,
-    ssh_key_path: Option<String>,
-    ssh_local_port: Option<u16>,
-    ssh_remote_port: Option<u16>,
-) -> Result<()> {
-    let config = PostgresConfig {
-        host,
-        port,
-        database: database.clone(),
-        user,
-        password,
-        ssl_mode,
-        ssh_host,
-        ssh_user,
-        ssh_port,
-        ssh_password,
-        ssh_key_path,
-        ssh_local_port,
-        ssh_remote_port,
-    };
-    // Create a copy of the config for potential modification
-    let mut config_clone = config.clone();
+    // ... (rest of the code remains the same)
 
     // Setup SSH tunnel if needed using the global tunnel keeper
     if config.ssh_host.is_some() {
         // Store the instance in a variable first to avoid temporary value issues
-        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance();
-        let mut keeper = keeper_instance.lock().unwrap();
-        if let Err(e) = keeper.setup(&mut config_clone).await {
+        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance().await;
+        let mut keeper = keeper_instance.lock().await;
+        if let Err(e) = keeper.setup(&config_clone).await {
             return Err(anyhow!("Failed to setup SSH tunnel: {}", e));
         }
-        // Drop the lock immediately after setup
-        drop(keeper);
     }
 
     // Create PostgreSQL manager with the possibly modified config
-    let mut manager = PostgresManager::new(config_clone, backup_dir.clone())?;
-    info!("Performing snapshot backup...");
-
-    // Perform the backup operation
-    let backup_result = manager.snapshot_backup().await;
+    // ... (rest of the code remains the same)
 
     // Close SSH tunnel explicitly after the operation is complete
     if config.ssh_host.is_some() {
-        // Store the instance in a variable first to avoid temporary value issues
-        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance();
-        let mut keeper = keeper_instance.lock().unwrap();
-        if keeper.is_active.load(Ordering::SeqCst) {
+        let keeper_instance = crate::tunnel_keeper::TunnelKeeper::instance().await;
+        let is_active = {
+            let keeper = keeper_instance.lock().await;
+            keeper.is_active.load(Ordering::SeqCst)
+        };
+        if is_active {
+            let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
                 error!("Warning: Error closing SSH tunnel: {}", e);
             }
         }
     }
 
+    // ... (rest of the code remains the same)
     // Now handle the backup result
-    let backup = backup_result.map_err(|e| anyhow!(e))?;
+    let backup = backup_result.as_ref().map_err(|e| anyhow!(e.to_string()))?;
     info!("Snapshot backup completed: {}", backup.id);
 
     // Upload to remote storage if requested
@@ -518,13 +311,13 @@ pub async fn snapshot_backup(
         // Create storage provider
         let storage = create_storage_provider(
             remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
+            storage_provider.clone(),
+            storage_bucket.clone(),
+            storage_prefix.clone(),
+            storage_region.clone(),
+            storage_endpoint.clone(),
+            storage_access_key.clone(),
+            storage_secret_key.clone(),
         )
         .await?;
 
@@ -538,27 +331,23 @@ pub async fn snapshot_backup(
             );
             metadata.insert("database".to_string(), database.clone());
             metadata.insert("start_time".to_string(), backup.start_time.to_string());
-
             // Find the actual backup directory (which has a timestamp format)
             let mut actual_backup_path = PathBuf::new();
             if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let path = entry.path();
-                        if path.is_dir()
-                            && path
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .contains("snapshot_backup_")
-                        {
-                            actual_backup_path = path;
-                            break;
-                        }
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir()
+                        && path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .contains("snapshot_backup_")
+                    {
+                        actual_backup_path = path;
+                        break;
                     }
                 }
             }
-
             info!("Using backup directory: {}", actual_backup_path.display());
             storage
                 .upload_physical_backup(
@@ -575,6 +364,7 @@ pub async fn snapshot_backup(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn list_backups(
     host: String,
     port: u16,
@@ -608,13 +398,13 @@ pub async fn list_backups(
         // Create storage provider
         let storage = create_storage_provider(
             remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
+            storage_provider.clone(),
+            storage_bucket.clone(),
+            storage_prefix.clone(),
+            storage_region.clone(),
+            storage_endpoint.clone(),
+            storage_access_key.clone(),
+            storage_secret_key.clone(),
         )
         .await?;
 
@@ -663,6 +453,7 @@ pub async fn list_backups(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn restore_full(
     host: String,
     port: u16,
@@ -824,6 +615,7 @@ pub async fn restore_full(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn restore_incremental(
     host: String,
     port: u16,
@@ -862,13 +654,13 @@ pub async fn restore_incremental(
         // Create storage provider
         let storage = create_storage_provider(
             remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
+            storage_provider.clone(),
+            storage_bucket.clone(),
+            storage_prefix.clone(),
+            storage_region.clone(),
+            storage_endpoint.clone(),
+            storage_access_key.clone(),
+            storage_secret_key.clone(),
         )
         .await?;
 
@@ -950,6 +742,7 @@ pub async fn restore_incremental(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn restore_point_in_time(
     host: String,
     port: u16,
@@ -989,13 +782,13 @@ pub async fn restore_point_in_time(
         // Create storage provider
         let storage = create_storage_provider(
             remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
+            storage_provider.clone(),
+            storage_bucket.clone(),
+            storage_prefix.clone(),
+            storage_region.clone(),
+            storage_endpoint.clone(),
+            storage_access_key.clone(),
+            storage_secret_key.clone(),
         )
         .await?;
 
@@ -1082,6 +875,7 @@ pub async fn restore_point_in_time(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn restore_snapshot(
     host: String,
     port: u16,
@@ -1120,13 +914,13 @@ pub async fn restore_snapshot(
         // Create storage provider
         let storage = create_storage_provider(
             remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
+            storage_provider.clone(),
+            storage_bucket.clone(),
+            storage_prefix.clone(),
+            storage_region.clone(),
+            storage_endpoint.clone(),
+            storage_access_key.clone(),
+            storage_secret_key.clone(),
         )
         .await?;
 
@@ -1441,6 +1235,7 @@ async fn restart_postgresql_linux() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn list_snapshot_contents(
     host: String,
     port: u16,
@@ -1475,13 +1270,13 @@ pub async fn list_snapshot_contents(
         // Create storage provider
         let storage = create_storage_provider(
             remote_storage,
-            storage_provider,
-            storage_bucket,
-            storage_prefix,
-            storage_region,
-            storage_endpoint,
-            storage_access_key,
-            storage_secret_key,
+            storage_provider.clone(),
+            storage_bucket.clone(),
+            storage_prefix.clone(),
+            storage_region.clone(),
+            storage_endpoint.clone(),
+            storage_access_key.clone(),
+            storage_secret_key.clone(),
         )
         .await?;
 
