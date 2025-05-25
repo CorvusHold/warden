@@ -212,11 +212,9 @@ impl AmqpHelper {
 
     /// Extract the routing key from a topic
     pub fn get_routing_key(topic: &str, prefix: &str) -> Option<String> {
-        if topic.starts_with(prefix) {
-            Some(topic[prefix.len()..].to_string())
-        } else {
-            None
-        }
+        topic
+            .strip_prefix(prefix)
+            .map(|stripped| stripped.to_string())
     }
 }
 

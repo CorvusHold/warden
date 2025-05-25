@@ -41,7 +41,7 @@ impl IncrementalBackupManager {
 
         // Create backup directory if it doesn't exist
         if !self.backup_dir.exists() {
-            fs::create_dir_all(&self.backup_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.backup_dir).map_err(PostgresError::Io)?;
         }
 
         // Connect to PostgreSQL
@@ -66,7 +66,7 @@ impl IncrementalBackupManager {
             .backup_dir
             .join(format!("incremental_backup_{}", timestamp));
 
-        fs::create_dir_all(&backup_path).map_err(|e| PostgresError::Io(e))?;
+        fs::create_dir_all(&backup_path).map_err(PostgresError::Io)?;
 
         let mut backup = Backup::new(
             BackupType::Incremental,
@@ -113,7 +113,7 @@ impl IncrementalBackupManager {
         let row = client
             .query_one("SELECT version()", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         let version: String = row.get(0);
         debug!("PostgreSQL server version: {}", version);
@@ -126,7 +126,7 @@ impl IncrementalBackupManager {
         let row = client
             .query_one("SELECT pg_current_wal_lsn()::TEXT", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         let wal_position: String = row.get(0);
         debug!("Current WAL position: {}", wal_position);
@@ -143,7 +143,7 @@ impl IncrementalBackupManager {
     ) -> Result<Vec<String>, PostgresError> {
         // Create WAL directory
         let wal_dir = backup_path.join("pg_wal");
-        fs::create_dir_all(&wal_dir).map_err(|e| PostgresError::Io(e))?;
+        fs::create_dir_all(&wal_dir).map_err(PostgresError::Io)?;
 
         // Get the PostgreSQL data directory
         let data_dir_rows = client
@@ -152,7 +152,7 @@ impl IncrementalBackupManager {
                 &[],
             )
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         if data_dir_rows.is_empty() {
             return Err(PostgresError::BackupError(
@@ -167,7 +167,7 @@ impl IncrementalBackupManager {
         let current_lsn_rows = client
             .query("SELECT pg_current_wal_lsn()::text", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         let current_lsn: String = current_lsn_rows[0].get(0);
 
@@ -182,28 +182,25 @@ impl IncrementalBackupManager {
         let rows = client
             .query(&query, &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         // Switch to a new WAL file to ensure all changes are archived
         client
             .execute("SELECT pg_switch_wal()", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         // Get all available WAL files in the pg_wal directory
         let mut available_wal_files = Vec::new();
         if let Ok(entries) = fs::read_dir(&pg_wal_dir) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_file() {
-                        if let Some(file_name) = path.file_name() {
-                            if let Some(file_name_str) = file_name.to_str() {
-                                // Only include files that match the WAL file naming pattern
-                                if file_name_str.len() == 24 && file_name_str.starts_with("0000000")
-                                {
-                                    available_wal_files.push(file_name_str.to_string());
-                                }
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(file_name) = path.file_name() {
+                        if let Some(file_name_str) = file_name.to_str() {
+                            // Only include files that match the WAL file naming pattern
+                            if file_name_str.len() == 24 && file_name_str.starts_with("0000000") {
+                                available_wal_files.push(file_name_str.to_string());
                             }
                         }
                     }
@@ -222,7 +219,7 @@ impl IncrementalBackupManager {
         let current_wal_rows = client
             .query("SELECT pg_walfile_name(pg_current_wal_lsn())", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         if !current_wal_rows.is_empty() {
             let current_wal: String = current_wal_rows[0].get(0);

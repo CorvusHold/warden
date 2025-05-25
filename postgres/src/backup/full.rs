@@ -28,7 +28,7 @@ impl FullBackupManager {
         // Create backup directory if it doesn't exist
         if !self.backup_dir.exists() {
             info!("Creating base backup directory: {:?}", self.backup_dir);
-            fs::create_dir_all(&self.backup_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&self.backup_dir).map_err(PostgresError::Io)?;
         }
 
         // Connect to PostgreSQL to get server version
@@ -112,7 +112,7 @@ impl FullBackupManager {
         let row = client
             .query_one("SELECT version()", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         let version: String = row.get(0);
         debug!("PostgreSQL server version: {}", version);
@@ -125,7 +125,7 @@ impl FullBackupManager {
         let row = client
             .query_one("SELECT pg_current_wal_lsn()::TEXT", &[])
             .await
-            .map_err(|e| PostgresError::Postgres(e))?;
+            .map_err(PostgresError::Postgres)?;
 
         let wal_position: String = row.get(0);
         debug!("Current WAL position: {}", wal_position);

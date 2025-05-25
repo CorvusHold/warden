@@ -31,16 +31,25 @@ impl Daemon {
 
     /// Initialize the AMQP client with the current configuration
     pub async fn init_amqp(&mut self) -> Result<()> {
-        let config = self.config.lock().unwrap();
+        // Extract config fields up front to avoid holding the MutexGuard across await
+        let (c2_server, c2_auth_id, c2_auth_secret) = {
+            let config_guard = self.config.lock().unwrap();
+            (
+                config_guard.c2_server.clone(),
+                config_guard.c2_auth.id.clone(),
+                config_guard.c2_auth.secret.clone(),
+            )
+        };
+        // MutexGuard is dropped here before any await points
 
         // Create AMQP config from configuration
         // Use C2 server as default broker
-        let default_broker = format!("amqp://{}", config.c2_server);
+        let _default_broker = format!("amqp://{}", c2_server);
 
         // Create AMQP config based on available configuration
         let amqp_config = {
             // Extract host from C2 server URL
-            let amqp_host = config.c2_server.clone();
+            let amqp_host = c2_server.clone();
             let amqp_host = amqp_host.replace("http://", "").replace("https://", "");
 
             // Split host and port
@@ -52,13 +61,13 @@ impl Daemon {
                 5672 // Default AMQP port
             };
 
-            let username = if !config.c2_auth.id.is_empty() {
-                Some(config.c2_auth.id.clone())
+            let username = if !c2_auth_id.is_empty() {
+                Some(c2_auth_id.clone())
             } else {
                 None
             };
-            let password = if !config.c2_auth.secret.is_empty() {
-                Some(config.c2_auth.secret.clone())
+            let password = if !c2_auth_secret.is_empty() {
+                Some(c2_auth_secret.clone())
             } else {
                 None
             };
@@ -68,7 +77,7 @@ impl Daemon {
                 port,
                 username,
                 password,
-                client_id: format!("warden-{}", config.c2_auth.id),
+                client_id: format!("warden-{}", c2_auth_id),
                 vhost: Some("/".to_string()),
                 exchange: "warden".to_string(),
                 queues: vec![
@@ -387,7 +396,7 @@ impl Daemon {
                             topics
                                 .iter()
                                 .find(|t| t.contains("status"))
-                                .map(|t| t.clone())
+                                .cloned()
                                 .or(Some("warden.status".to_string()))
                         })
                         .unwrap_or_else(|| "warden.status".to_string());

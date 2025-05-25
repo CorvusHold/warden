@@ -22,7 +22,7 @@ impl PostgresManager {
     pub fn new(config: PostgresConfig, backup_dir: PathBuf) -> Result<Self, PostgresError> {
         // Create backup directory if it doesn't exist
         if !backup_dir.exists() {
-            fs::create_dir_all(&backup_dir).map_err(|e| PostgresError::Io(e))?;
+            fs::create_dir_all(&backup_dir).map_err(PostgresError::Io)?;
         }
 
         let catalog_path = backup_dir.join("backup_catalog.json");
@@ -347,7 +347,7 @@ impl PostgresManager {
         info!("Saving backup catalog to {}", self.catalog_path.display());
         self.catalog
             .save_to_file(&self.catalog_path)
-            .map_err(|e| PostgresError::Io(e))?;
+            .map_err(PostgresError::Io)?;
         Ok(())
     }
 
