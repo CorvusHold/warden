@@ -39,17 +39,17 @@ async fn test_full_backup_and_restore() -> Result<(), Box<dyn std::error::Error>
     // Start a temporary Postgres container
     let docker = clients::Cli::default();
     let image = GenericImage::new("postgres", "16")
-    .with_env_var("POSTGRES_PASSWORD", "toor")
-    .with_env_var("POSTGRES_DB", "rooted")
-    .with_volume(
-        "./postgres/tests/postgres-init-replication.sh",
-        "/docker-entrypoint-initdb.d/init-replication.sh"
-    );
+        .with_env_var("POSTGRES_PASSWORD", "toor")
+        .with_env_var("POSTGRES_DB", "rooted")
+        .with_volume(
+            "./postgres/tests/postgres-init-replication.sh",
+            "/docker-entrypoint-initdb.d/init-replication.sh",
+        );
     let node = docker.run(image);
-let host = "localhost";
-let port = node.get_host_port_ipv4(5432);
-println!("[TEST] Started Postgres container on port {}", port);
-println!("[TEST] Container info: {:?}", node);
+    let host = "localhost";
+    let port = node.get_host_port_ipv4(5432);
+    println!("[TEST] Started Postgres container on port {}", port);
+    println!("[TEST] Container info: {:?}", node);
 
     let db = "rooted";
     let user = "postgres";
@@ -85,7 +85,10 @@ println!("[TEST] Container info: {:?}", node);
             .arg(node.id())
             .output()
             .expect("failed to execute docker logs");
-        println!("[TEST][ERROR] Postgres container logs:\n{}", String::from_utf8_lossy(&output.stdout));
+        println!(
+            "[TEST][ERROR] Postgres container logs:\n{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
         panic!("Postgres was not ready after waiting for TCP+SQL");
     }
 
@@ -128,17 +131,17 @@ async fn test_incremental_backup_and_restore() -> Result<(), Box<dyn std::error:
     // Start a temporary Postgres container
     let docker = clients::Cli::default();
     let image = GenericImage::new("postgres", "16")
-    .with_env_var("POSTGRES_PASSWORD", "toor")
-    .with_env_var("POSTGRES_DB", "rooted")
-    .with_volume(
-        "./postgres/tests/postgres-init-replication.sh",
-        "/docker-entrypoint-initdb.d/init-replication.sh"
-    );
+        .with_env_var("POSTGRES_PASSWORD", "toor")
+        .with_env_var("POSTGRES_DB", "rooted")
+        .with_volume(
+            "./postgres/tests/postgres-init-replication.sh",
+            "/docker-entrypoint-initdb.d/init-replication.sh",
+        );
     let node = docker.run(image);
-let host = "localhost";
-let port = node.get_host_port_ipv4(5432);
-println!("[TEST] Started Postgres container on port {}", port);
-println!("[TEST] Container info: {:?}", node);
+    let host = "localhost";
+    let port = node.get_host_port_ipv4(5432);
+    println!("[TEST] Started Postgres container on port {}", port);
+    println!("[TEST] Container info: {:?}", node);
 
     let db = "rooted";
     let user = "postgres";
@@ -174,7 +177,10 @@ println!("[TEST] Container info: {:?}", node);
             .arg(node.id())
             .output()
             .expect("failed to execute docker logs");
-        println!("[TEST][ERROR] Postgres container logs:\n{}", String::from_utf8_lossy(&output.stdout));
+        println!(
+            "[TEST][ERROR] Postgres container logs:\n{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
         panic!("Postgres was not ready after waiting for TCP+SQL");
     }
 
@@ -220,17 +226,17 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
     // Start a temporary Postgres container
     let docker = clients::Cli::default();
     let image = GenericImage::new("postgres", "16")
-    .with_env_var("POSTGRES_PASSWORD", "toor")
-    .with_env_var("POSTGRES_DB", "rooted")
-    .with_volume(
-        "./postgres/tests/postgres-init-replication.sh",
-        "/docker-entrypoint-initdb.d/init-replication.sh"
-    );
+        .with_env_var("POSTGRES_PASSWORD", "toor")
+        .with_env_var("POSTGRES_DB", "rooted")
+        .with_volume(
+            "./postgres/tests/postgres-init-replication.sh",
+            "/docker-entrypoint-initdb.d/init-replication.sh",
+        );
     let node = docker.run(image);
-let host = "localhost";
-let port = node.get_host_port_ipv4(5432);
-println!("[TEST] Started Postgres container on port {}", port);
-println!("[TEST] Container info: {:?}", node);
+    let host = "localhost";
+    let port = node.get_host_port_ipv4(5432);
+    println!("[TEST] Started Postgres container on port {}", port);
+    println!("[TEST] Container info: {:?}", node);
 
     let db = "rooted";
     let user = "postgres";
@@ -266,7 +272,10 @@ println!("[TEST] Container info: {:?}", node);
             .arg(node.id())
             .output()
             .expect("failed to execute docker logs");
-        println!("[TEST][ERROR] Postgres container logs:\n{}", String::from_utf8_lossy(&output.stdout));
+        println!(
+            "[TEST][ERROR] Postgres container logs:\n{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
         panic!("Postgres was not ready after waiting for TCP+SQL");
     }
 
@@ -353,17 +362,17 @@ async fn test_snapshot_backup() -> Result<(), Box<dyn std::error::Error>> {
     // Start a temporary Postgres container
     let docker = clients::Cli::default();
     let image = GenericImage::new("postgres", "16")
-    .with_env_var("POSTGRES_PASSWORD", "toor")
-    .with_env_var("POSTGRES_DB", "rooted")
-    .with_volume(
-        "./postgres/tests/postgres-init-replication.sh",
-        "/docker-entrypoint-initdb.d/init-replication.sh"
-    );
+        .with_env_var("POSTGRES_PASSWORD", "toor")
+        .with_env_var("POSTGRES_DB", "rooted")
+        .with_volume(
+            "./postgres/tests/postgres-init-replication.sh",
+            "/docker-entrypoint-initdb.d/init-replication.sh",
+        );
     let node = docker.run(image);
-let host = "localhost";
-let port = node.get_host_port_ipv4(5432);
-println!("[TEST] Started Postgres container on port {}", port);
-println!("[TEST] Container info: {:?}", node);
+    let host = "localhost";
+    let port = node.get_host_port_ipv4(5432);
+    println!("[TEST] Started Postgres container on port {}", port);
+    println!("[TEST] Container info: {:?}", node);
 
     let db = "rooted";
     let user = "postgres";
@@ -399,7 +408,10 @@ println!("[TEST] Container info: {:?}", node);
             .arg(node.id())
             .output()
             .expect("failed to execute docker logs");
-        println!("[TEST][ERROR] Postgres container logs:\n{}", String::from_utf8_lossy(&output.stdout));
+        println!(
+            "[TEST][ERROR] Postgres container logs:\n{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
         panic!("Postgres was not ready after waiting for TCP+SQL");
     }
 
@@ -433,17 +445,17 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
     // Start a temporary Postgres container
     let docker = clients::Cli::default();
     let image = GenericImage::new("postgres", "16")
-    .with_env_var("POSTGRES_PASSWORD", "toor")
-    .with_env_var("POSTGRES_DB", "rooted")
-    .with_volume(
-        "./postgres/tests/postgres-init-replication.sh",
-        "/docker-entrypoint-initdb.d/init-replication.sh"
-    );
+        .with_env_var("POSTGRES_PASSWORD", "toor")
+        .with_env_var("POSTGRES_DB", "rooted")
+        .with_volume(
+            "./postgres/tests/postgres-init-replication.sh",
+            "/docker-entrypoint-initdb.d/init-replication.sh",
+        );
     let node = docker.run(image);
-let host = "localhost";
-let port = node.get_host_port_ipv4(5432);
-println!("[TEST] Started Postgres container on port {}", port);
-println!("[TEST] Container info: {:?}", node);
+    let host = "localhost";
+    let port = node.get_host_port_ipv4(5432);
+    println!("[TEST] Started Postgres container on port {}", port);
+    println!("[TEST] Container info: {:?}", node);
 
     let db = "rooted";
     let user = "postgres";
@@ -479,7 +491,10 @@ println!("[TEST] Container info: {:?}", node);
             .arg(node.id())
             .output()
             .expect("failed to execute docker logs");
-        println!("[TEST][ERROR] Postgres container logs:\n{}", String::from_utf8_lossy(&output.stdout));
+        println!(
+            "[TEST][ERROR] Postgres container logs:\n{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
         panic!("Postgres was not ready after waiting for TCP+SQL");
     }
 

@@ -11,12 +11,12 @@ async fn snapshot_backup_and_restore_real() {
     println!("[TEST] Starting Docker client and Postgres container...");
     let docker = clients::Cli::default();
     let image = GenericImage::new("postgres", "16")
-    .with_env_var("POSTGRES_PASSWORD", "postgres")
-    .with_env_var("POSTGRES_DB", "postgres")
-    .with_volume(
-        "./postgres/tests/postgres-init-replication.sh",
-        "/docker-entrypoint-initdb.d/init-replication.sh"
-    );
+        .with_env_var("POSTGRES_PASSWORD", "postgres")
+        .with_env_var("POSTGRES_DB", "postgres")
+        .with_volume(
+            "./postgres/tests/postgres-init-replication.sh",
+            "/docker-entrypoint-initdb.d/init-replication.sh",
+        );
     let node = docker.run(image);
     let host = "localhost";
     let port = node.get_host_port_ipv4(5432);
