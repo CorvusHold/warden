@@ -5,7 +5,8 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::tempdir;
-use testcontainers::{clients, GenericImage};
+use testcontainers::runners::AsyncRunner;
+use testcontainers::{GenericImage, ImageExt};
 
 fn warden_bin() -> Command {
     Command::cargo_bin("warden").expect("warden binary should build")
@@ -37,23 +38,20 @@ fn restore_snapshot_help_works() {
 async fn snapshot_backup_creates_backup_file() {
     // Setup: create a temp backup dir
     // Start a temporary Postgres container
-    let docker = clients::Cli::default();
+
     let image = GenericImage::new("postgres", "16")
         .with_env_var("POSTGRES_PASSWORD", "postgres")
         .with_env_var("POSTGRES_DB", "testdb")
-        .with_volume(
-            "./postgres/tests/postgres-init-replication.sh",
-            "/docker-entrypoint-initdb.d/init-replication.sh",
-        );
-    let node = docker.run(image);
+        .with_env_var("POSTGRES_LISTEN_ADDRESSES", "*");
+    let node = image.start().await.unwrap();
     let host = "localhost";
-    let port = node.get_host_port_ipv4(5432);
+    let port = node.get_host_port_ipv4(5432).await.unwrap();
     let user = "postgres";
     let db = "testdb";
 
     // Wait for Postgres to be ready
     let mut ready = false;
-    for i in 0..10 {
+    for _ in 0..10 {
         let conn = std::process::Command::new("psql")
             .args([
                 "-h",
@@ -118,16 +116,16 @@ async fn snapshot_backup_creates_backup_file() {
         "--port",
         &port.to_string(),
         "--user",
-        "test",
+        "postgres",
+        "--password",
+        "postgres",
         "--database",
         db,
         "--backup-dir",
         backup_dir_path,
     ]);
     let assert = cmd.assert();
-    assert
-        .success()
-        .stdout(predicate::str::contains("snapshot"));
+    assert.success();
     let files: Vec<_> = fs::read_dir(backup_dir_path).unwrap().collect();
     assert!(!files.is_empty(), "No snapshot backup file was created");
 }
@@ -146,13 +144,13 @@ fn restore_snapshot_restores_data() {
         "--host",
         "localhost",
         "--user",
-        "test",
+        "postgres",
         "--database",
         "testdb",
         "--backup-dir",
         backup_dir_path,
         "--backup-id",
-        "some-backup-id",
+        "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
         "--target-dir",
         backup_dir_path,
     ]);

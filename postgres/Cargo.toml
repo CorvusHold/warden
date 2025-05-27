@@ -4,26 +4,26 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.28.0", features = ["full"] }
-tokio-postgres = { version = "0.7.8", features = ["with-chrono-0_4", "with-uuid-1"] }
-chrono = { version = "0.4.24", features = ["serde"] }
-thiserror = "2.0.11"
-serde = { version = "1.0.160", features = ["derive"] }
-serde_json = "1.0.96"
-log = "0.4.17"
-env_logger = "0.11.6"
-anyhow = "1.0.70"
-walkdir = "2.3.3"
-uuid = { version = "1.3.1", features = ["v4", "serde"] }
-async-trait = "0.1.68"
-futures = "0.3.28"
-tempfile = "3.5.0"
-tar = "0.4.38"
-flate2 = "1.0.26"
-regex = "1.8.1"
-clap = { version = "4.0", features = ["derive"] }
+tokio = { version = "1.45.1", features = ["full"] }
+tokio-postgres = { version = "0.7.13", features = ["with-chrono-0_4", "with-uuid-1"] }
+chrono = { version = "0.4.41", features = ["serde"] }
+thiserror = "2.0.12"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+log = "0.4.27"
+env_logger = "0.11.8"
+anyhow = "1.0.98"
+walkdir = "2.5.0"
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
+async-trait = "0.1.88"
+futures = "0.3.31"
+tempfile = "3.20.0"
+tar = "0.4.44"
+flate2 = "1.1.1"
+regex = "1.11.1"
+clap = { version = "4.5.38", features = ["derive"] }
 storage = { path = "../storage" }
-serial_test = "2.0.0"
+serial_test = "3.2.0"
 
 ssh = { path = "../ssh" }
 
@@ -32,7 +32,7 @@ name = "postgres"
 path = "src/lib.rs"
 
 [dev-dependencies]
-testcontainers = "0.15.0"
-tokio = { version = "1.44.2", features = ["full"] }
-assert_cmd = "2.0.12"
-predicates = "3.0.4"
+testcontainers = { version = "0.24.0", features = ["blocking"] }
+tokio = { version = "1.45.1", features = ["full"] }
+assert_cmd = "2.0.17"
+predicates = "3.1.3"

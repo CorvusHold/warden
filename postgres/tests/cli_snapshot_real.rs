@@ -1,25 +1,21 @@
 //! Real integration tests for snapshot-backup and restore-snapshot using a temporary PostgreSQL database via testcontainers.
 
 use assert_cmd::Command;
-use predicates::prelude::*;
 use std::fs;
 use tempfile::tempdir;
-use testcontainers::{clients, GenericImage};
-
+use testcontainers::runners::AsyncRunner;
+use testcontainers::{GenericImage, ImageExt};
 #[tokio::test]
+
 async fn snapshot_backup_and_restore_real() {
     println!("[TEST] Starting Docker client and Postgres container...");
-    let docker = clients::Cli::default();
     let image = GenericImage::new("postgres", "16")
         .with_env_var("POSTGRES_PASSWORD", "postgres")
         .with_env_var("POSTGRES_DB", "postgres")
-        .with_volume(
-            "./postgres/tests/postgres-init-replication.sh",
-            "/docker-entrypoint-initdb.d/init-replication.sh",
-        );
-    let node = docker.run(image);
+        .with_env_var("POSTGRES_LISTEN_ADDRESSES", "*");
+    let node = image.start().await.unwrap();
     let host = "localhost";
-    let port = node.get_host_port_ipv4(5432);
+    let port = node.get_host_port_ipv4(5432).await.unwrap();
     let user = "postgres";
     let db = "postgres";
     println!("[TEST] Postgres container started on {}:{}", host, port);

@@ -71,33 +71,47 @@ impl FullRestoreManager {
     async fn cleanup_schema(&self) -> Result<(), PostgresError> {
         let client = self.create_client().await?;
 
-        // Disconnect all other connections
-        client
-            .execute(
-                "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = $1 AND pid <> pg_backend_pid();",
-                &[&self.config.database]
-            )
-            .await
-            .map_err(PostgresError::Postgres)?;
-
-        // Drop and recreate the database
-        client
-            .execute(
-                &format!("DROP DATABASE IF EXISTS {};", self.config.database),
+        // Check if user is superuser
+        let row = client
+            .query_one(
+                "SELECT usesuper FROM pg_user WHERE usename = current_user",
                 &[],
             )
             .await
             .map_err(PostgresError::Postgres)?;
-        client
-            .execute(&format!("CREATE DATABASE {};", self.config.database), &[])
-            .await
-            .map_err(PostgresError::Postgres)?;
+        let is_superuser: bool = row.get(0);
 
-        // Vacuum the database
-        client
-            .execute("VACUUM;", &[])
-            .await
-            .map_err(PostgresError::Postgres)?;
+        if is_superuser {
+            // Disconnect all other connections
+            client
+                .execute(
+                    "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = $1 AND pid <> pg_backend_pid();",
+                    &[&self.config.database]
+                )
+                .await
+                .map_err(PostgresError::Postgres)?;
+
+            // Drop and recreate the database
+            client
+                .execute(
+                    &format!("DROP DATABASE IF EXISTS {};", self.config.database),
+                    &[],
+                )
+                .await
+                .map_err(PostgresError::Postgres)?;
+            client
+                .execute(&format!("CREATE DATABASE {};", self.config.database), &[])
+                .await
+                .map_err(PostgresError::Postgres)?;
+
+            // Vacuum the database
+            client
+                .execute("VACUUM;", &[])
+                .await
+                .map_err(PostgresError::Postgres)?;
+        } else {
+            warn!("Current user is not a superuser. Skipping connection termination and database drop/creation in cleanup_schema.");
+        }
 
         Ok(())
     }

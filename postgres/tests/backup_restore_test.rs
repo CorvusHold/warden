@@ -2,25 +2,20 @@ use chrono::Utc;
 use postgres::common::{Backup, BackupStatus, BackupType, PostgresConfig, RestoreStatus};
 use postgres::manager::PostgresManager;
 use tempfile::tempdir;
+
 use tokio_postgres::{connect, NoTls};
 use uuid::Uuid;
 
-use testcontainers::{clients, GenericImage};
+// No longer needed: test_postgres_request
 
 // Helper function to create a test database config
-fn create_test_config(
-    host: &str,
-    port: u16,
-    database: &str,
-    user: &str,
-    password: &str,
-) -> PostgresConfig {
+fn create_test_config() -> PostgresConfig {
     PostgresConfig {
-        host: host.to_string(),
-        port,
-        database: database.to_string(),
-        user: user.to_string(),
-        password: Some(password.to_string()),
+        host: "localhost".to_string(),
+        port: 5432,
+        database: "warden_dev".to_string(),
+        user: "warden_dev".to_string(),
+        password: Some("warden_dev".to_string()),
         ssl_mode: None,
         ssh_host: None,
         ssh_user: None,
@@ -36,71 +31,10 @@ fn create_test_config(
 #[tokio::test]
 #[serial_test::serial]
 async fn test_full_backup_and_restore() -> Result<(), Box<dyn std::error::Error>> {
-    // Start a temporary Postgres container
-    let docker = clients::Cli::default();
-    let image = GenericImage::new("postgres", "16")
-        .with_env_var("POSTGRES_PASSWORD", "toor")
-        .with_env_var("POSTGRES_DB", "rooted")
-        .with_volume(
-            "./postgres/tests/postgres-init-replication.sh",
-            "/docker-entrypoint-initdb.d/init-replication.sh",
-        );
-    let node = docker.run(image);
-    let host = "localhost";
-    let port = node.get_host_port_ipv4(5432);
-    println!("[TEST] Started Postgres container on port {}", port);
-    println!("[TEST] Container info: {:?}", node);
-
-    let db = "rooted";
-    let user = "postgres";
-    let password = "toor";
-
-    // Wait for Postgres to be ready (TCP check + SQL check)
-    let mut ready = false;
-    for _ in 0..30 {
-        if std::net::TcpStream::connect((host, port)).is_ok() {
-            // Now try a SQL connection in this async context
-            let conn_str = format!(
-                "host={} port={} user={} password={} dbname={}",
-                host, port, user, password, db
-            );
-            match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
-                Ok((client, connection)) => {
-                    tokio::spawn(connection);
-                    if client.simple_query("SELECT 1;").await.is_ok() {
-                        ready = true;
-                        break;
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-    if !ready {
-        // Print container logs for diagnosis
-        use std::process::Command;
-        let output = Command::new("docker")
-            .arg("logs")
-            .arg(node.id())
-            .output()
-            .expect("failed to execute docker logs");
-        println!(
-            "[TEST][ERROR] Postgres container logs:\n{}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        panic!("Postgres was not ready after waiting for TCP+SQL");
-    }
-
-    // Create temporary directories for backup and restore
+    // Use local Postgres config
     let backup_dir = tempdir()?;
     let restore_dir = tempdir()?;
-
-    // Create PostgreSQL manager
-    let mut manager = PostgresManager::new(
-        create_test_config(host, port, db, user, password),
-        backup_dir.path().to_path_buf(),
-    )?;
+    let mut manager = PostgresManager::new(create_test_config(), backup_dir.path().to_path_buf())?;
 
     // Perform a full backup
     let backup = manager.full_backup().await?;
@@ -129,70 +63,11 @@ async fn test_full_backup_and_restore() -> Result<(), Box<dyn std::error::Error>
 #[serial_test::serial]
 async fn test_incremental_backup_and_restore() -> Result<(), Box<dyn std::error::Error>> {
     // Start a temporary Postgres container
-    let docker = clients::Cli::default();
-    let image = GenericImage::new("postgres", "16")
-        .with_env_var("POSTGRES_PASSWORD", "toor")
-        .with_env_var("POSTGRES_DB", "rooted")
-        .with_volume(
-            "./postgres/tests/postgres-init-replication.sh",
-            "/docker-entrypoint-initdb.d/init-replication.sh",
-        );
-    let node = docker.run(image);
-    let host = "localhost";
-    let port = node.get_host_port_ipv4(5432);
-    println!("[TEST] Started Postgres container on port {}", port);
-    println!("[TEST] Container info: {:?}", node);
 
-    let db = "rooted";
-    let user = "postgres";
-    let password = "toor";
-
-    // Wait for Postgres to be ready (TCP check + SQL check)
-    let mut ready = false;
-    for _ in 0..30 {
-        if std::net::TcpStream::connect((host, port)).is_ok() {
-            // Now try a SQL connection in this async context
-            let conn_str = format!(
-                "host={} port={} user={} password={} dbname={}",
-                host, port, user, password, db
-            );
-            match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
-                Ok((client, connection)) => {
-                    tokio::spawn(connection);
-                    if client.simple_query("SELECT 1;").await.is_ok() {
-                        ready = true;
-                        break;
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-    if !ready {
-        // Print container logs for diagnosis
-        use std::process::Command;
-        let output = Command::new("docker")
-            .arg("logs")
-            .arg(node.id())
-            .output()
-            .expect("failed to execute docker logs");
-        println!(
-            "[TEST][ERROR] Postgres container logs:\n{}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        panic!("Postgres was not ready after waiting for TCP+SQL");
-    }
-
-    // Create temporary directories for backup and restore
+    // Use local Postgres config
     let backup_dir = tempdir()?;
     let restore_dir = tempdir()?;
-
-    // Create PostgreSQL manager
-    let mut manager = PostgresManager::new(
-        create_test_config(host, port, db, user, password),
-        backup_dir.path().to_path_buf(),
-    )?;
+    let mut manager = PostgresManager::new(create_test_config(), backup_dir.path().to_path_buf())?;
 
     // Perform a full backup
     let full_backup = manager.full_backup().await?;
@@ -224,68 +99,36 @@ async fn test_incremental_backup_and_restore() -> Result<(), Box<dyn std::error:
 #[serial_test::serial]
 async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> {
     // Start a temporary Postgres container
-    let docker = clients::Cli::default();
-    let image = GenericImage::new("postgres", "16")
-        .with_env_var("POSTGRES_PASSWORD", "toor")
-        .with_env_var("POSTGRES_DB", "rooted")
-        .with_volume(
-            "./postgres/tests/postgres-init-replication.sh",
-            "/docker-entrypoint-initdb.d/init-replication.sh",
-        );
-    let node = docker.run(image);
-    let host = "localhost";
-    let port = node.get_host_port_ipv4(5432);
-    println!("[TEST] Started Postgres container on port {}", port);
-    println!("[TEST] Container info: {:?}", node);
 
-    let db = "rooted";
-    let user = "postgres";
-    let password = "toor";
-
-    // Wait for Postgres to be ready (TCP check + SQL check)
-    let mut ready = false;
-    for _ in 0..30 {
-        if std::net::TcpStream::connect((host, port)).is_ok() {
-            // Now try a SQL connection in this async context
-            let conn_str = format!(
-                "host={} port={} user={} password={} dbname={}",
-                host, port, user, password, db
-            );
-            match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
-                Ok((client, connection)) => {
-                    tokio::spawn(connection);
-                    if client.simple_query("SELECT 1;").await.is_ok() {
-                        ready = true;
-                        break;
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-    if !ready {
-        // Print container logs for diagnosis
-        use std::process::Command;
-        let output = Command::new("docker")
-            .arg("logs")
-            .arg(node.id())
-            .output()
-            .expect("failed to execute docker logs");
-        println!(
-            "[TEST][ERROR] Postgres container logs:\n{}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        panic!("Postgres was not ready after waiting for TCP+SQL");
-    }
-
-    // Create temporary directories for backup and restore
+    // Use local Postgres config
     let backup_dir = tempdir()?;
     let restore_dir = tempdir()?;
-
-    // Create PostgreSQL manager
-    let config = create_test_config(host, port, db, user, password);
+    let config = create_test_config();
     let mut manager = PostgresManager::new(config, backup_dir.path().to_path_buf())?;
+
+    // Create a user table and insert data before backup
+    {
+        let (client, connection) = connect(&manager.config.connection_string(), NoTls).await?;
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("Connection error: {}", e);
+                return Err(e);
+            }
+            Ok(())
+        });
+        client
+            .execute(
+                "CREATE TABLE IF NOT EXISTS test_table (id SERIAL PRIMARY KEY, value TEXT);",
+                &[],
+            )
+            .await?;
+        client
+            .execute(
+                "INSERT INTO test_table (value) VALUES ($1), ($2);",
+                &[&"foo", &"bar"],
+            )
+            .await?;
+    }
 
     // Perform a full backup
     let full_backup = manager.full_backup().await?;
@@ -357,72 +200,12 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
 
 #[tokio::test]
 #[serial_test::serial]
-
 async fn test_snapshot_backup() -> Result<(), Box<dyn std::error::Error>> {
-    // Start a temporary Postgres container
-    let docker = clients::Cli::default();
-    let image = GenericImage::new("postgres", "16")
-        .with_env_var("POSTGRES_PASSWORD", "toor")
-        .with_env_var("POSTGRES_DB", "rooted")
-        .with_volume(
-            "./postgres/tests/postgres-init-replication.sh",
-            "/docker-entrypoint-initdb.d/init-replication.sh",
-        );
-    let node = docker.run(image);
-    let host = "localhost";
-    let port = node.get_host_port_ipv4(5432);
-    println!("[TEST] Started Postgres container on port {}", port);
-    println!("[TEST] Container info: {:?}", node);
-
-    let db = "rooted";
-    let user = "postgres";
-    let password = "toor";
-
-    // Wait for Postgres to be ready (TCP check + SQL check)
-    let mut ready = false;
-    for _ in 0..30 {
-        if std::net::TcpStream::connect((host, port)).is_ok() {
-            // Now try a SQL connection in this async context
-            let conn_str = format!(
-                "host={} port={} user={} password={} dbname={}",
-                host, port, user, password, db
-            );
-            match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
-                Ok((client, connection)) => {
-                    tokio::spawn(connection);
-                    if client.simple_query("SELECT 1;").await.is_ok() {
-                        ready = true;
-                        break;
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-    if !ready {
-        // Print container logs for diagnosis
-        use std::process::Command;
-        let output = Command::new("docker")
-            .arg("logs")
-            .arg(node.id())
-            .output()
-            .expect("failed to execute docker logs");
-        println!(
-            "[TEST][ERROR] Postgres container logs:\n{}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        panic!("Postgres was not ready after waiting for TCP+SQL");
-    }
-
     // Create temporary directories for backup
     let backup_dir = tempdir()?;
 
     // Create PostgreSQL manager
-    let mut manager = PostgresManager::new(
-        create_test_config(host, port, db, user, password),
-        backup_dir.path().to_path_buf(),
-    )?;
+    let mut manager = PostgresManager::new(create_test_config(), backup_dir.path().to_path_buf())?;
 
     // Perform a snapshot backup
     let backup = manager.snapshot_backup().await?;
@@ -440,73 +223,13 @@ async fn test_snapshot_backup() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 #[serial_test::serial]
-
 async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
-    // Start a temporary Postgres container
-    let docker = clients::Cli::default();
-    let image = GenericImage::new("postgres", "16")
-        .with_env_var("POSTGRES_PASSWORD", "toor")
-        .with_env_var("POSTGRES_DB", "rooted")
-        .with_volume(
-            "./postgres/tests/postgres-init-replication.sh",
-            "/docker-entrypoint-initdb.d/init-replication.sh",
-        );
-    let node = docker.run(image);
-    let host = "localhost";
-    let port = node.get_host_port_ipv4(5432);
-    println!("[TEST] Started Postgres container on port {}", port);
-    println!("[TEST] Container info: {:?}", node);
-
-    let db = "rooted";
-    let user = "postgres";
-    let password = "toor";
-
-    // Wait for Postgres to be ready (TCP check + SQL check)
-    let mut ready = false;
-    for _ in 0..30 {
-        if std::net::TcpStream::connect((host, port)).is_ok() {
-            // Now try a SQL connection in this async context
-            let conn_str = format!(
-                "host={} port={} user={} password={} dbname={}",
-                host, port, user, password, db
-            );
-            match tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await {
-                Ok((client, connection)) => {
-                    tokio::spawn(connection);
-                    if client.simple_query("SELECT 1;").await.is_ok() {
-                        ready = true;
-                        break;
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-    if !ready {
-        // Print container logs for diagnosis
-        use std::process::Command;
-        let output = Command::new("docker")
-            .arg("logs")
-            .arg(node.id())
-            .output()
-            .expect("failed to execute docker logs");
-        println!(
-            "[TEST][ERROR] Postgres container logs:\n{}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        panic!("Postgres was not ready after waiting for TCP+SQL");
-    }
-
     // Create temporary directory for backup
     let backup_dir = tempdir()?;
     let catalog_path = backup_dir.path().join("backup_catalog.json");
 
     // Create PostgreSQL manager
-    let mut manager = PostgresManager::new(
-        create_test_config(host, port, db, user, password),
-        backup_dir.path().to_path_buf(),
-    )?;
+    let mut manager = PostgresManager::new(create_test_config(), backup_dir.path().to_path_buf())?;
 
     // Add a mock backup to the catalog
     let backup_id = Uuid::new_v4();
@@ -538,10 +261,7 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
     assert!(catalog_path.exists());
 
     // Create a new manager with the same backup directory
-    let manager2 = PostgresManager::new(
-        create_test_config(host, port, db, user, password),
-        backup_dir.path().to_path_buf(),
-    )?;
+    let manager2 = PostgresManager::new(create_test_config(), backup_dir.path().to_path_buf())?;
 
     // Verify that the catalog was loaded correctly
     assert_eq!(manager2.list_backups().len(), manager.list_backups().len());
