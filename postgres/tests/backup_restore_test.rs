@@ -2,17 +2,20 @@ use chrono::Utc;
 use postgres::common::{Backup, BackupStatus, BackupType, PostgresConfig, RestoreStatus};
 use postgres::manager::PostgresManager;
 use tempfile::tempdir;
+
 use tokio_postgres::{connect, NoTls};
 use uuid::Uuid;
+
+// No longer needed: test_postgres_request
 
 // Helper function to create a test database config
 fn create_test_config() -> PostgresConfig {
     PostgresConfig {
         host: "localhost".to_string(),
         port: 5432,
-        database: "hipe_dev".to_string(),
-        user: "hipe_dev".to_string(),
-        password: Some("please".to_string()),
+        database: "warden_dev".to_string(),
+        user: "warden_dev".to_string(),
+        password: Some("warden_dev".to_string()),
         ssl_mode: None,
         ssh_host: None,
         ssh_user: None,
@@ -27,13 +30,10 @@ fn create_test_config() -> PostgresConfig {
 // This test requires a running PostgreSQL instance
 #[tokio::test]
 #[serial_test::serial]
-
 async fn test_full_backup_and_restore() -> Result<(), Box<dyn std::error::Error>> {
-    // Create temporary directories for backup and restore
+    // Use local Postgres config
     let backup_dir = tempdir()?;
     let restore_dir = tempdir()?;
-
-    // Create PostgreSQL manager
     let mut manager = PostgresManager::new(create_test_config(), backup_dir.path().to_path_buf())?;
 
     // Perform a full backup
@@ -62,11 +62,11 @@ async fn test_full_backup_and_restore() -> Result<(), Box<dyn std::error::Error>
 #[tokio::test]
 #[serial_test::serial]
 async fn test_incremental_backup_and_restore() -> Result<(), Box<dyn std::error::Error>> {
-    // Create temporary directories for backup and restore
+    // Start a temporary Postgres container
+
+    // Use local Postgres config
     let backup_dir = tempdir()?;
     let restore_dir = tempdir()?;
-
-    // Create PostgreSQL manager
     let mut manager = PostgresManager::new(create_test_config(), backup_dir.path().to_path_buf())?;
 
     // Perform a full backup
@@ -98,13 +98,37 @@ async fn test_incremental_backup_and_restore() -> Result<(), Box<dyn std::error:
 #[tokio::test]
 #[serial_test::serial]
 async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> {
-    // Create temporary directories for backup and restore
+    // Start a temporary Postgres container
+
+    // Use local Postgres config
     let backup_dir = tempdir()?;
     let restore_dir = tempdir()?;
-
-    // Create PostgreSQL manager
     let config = create_test_config();
     let mut manager = PostgresManager::new(config, backup_dir.path().to_path_buf())?;
+
+    // Create a user table and insert data before backup
+    {
+        let (client, connection) = connect(&manager.config.connection_string(), NoTls).await?;
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                log::error!("Connection error: {}", e);
+                return Err(e);
+            }
+            Ok(())
+        });
+        client
+            .execute(
+                "CREATE TABLE IF NOT EXISTS test_table (id SERIAL PRIMARY KEY, value TEXT);",
+                &[],
+            )
+            .await?;
+        client
+            .execute(
+                "INSERT INTO test_table (value) VALUES ($1), ($2);",
+                &[&"foo", &"bar"],
+            )
+            .await?;
+    }
 
     // Perform a full backup
     let full_backup = manager.full_backup().await?;
@@ -176,7 +200,6 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
 
 #[tokio::test]
 #[serial_test::serial]
-
 async fn test_snapshot_backup() -> Result<(), Box<dyn std::error::Error>> {
     // Create temporary directories for backup
     let backup_dir = tempdir()?;
@@ -200,7 +223,6 @@ async fn test_snapshot_backup() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 #[serial_test::serial]
-
 async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
     // Create temporary directory for backup
     let backup_dir = tempdir()?;
@@ -216,21 +238,20 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
         .join(format!("snapshot_{}.dump", backup_id));
 
     // Create an empty backup file
-    std::fs::write(&backup_path, "-- Mock backup file")?;
+    std::fs::File::create(&backup_path)?;
 
-    // Add the backup to the catalog
     let backup = Backup {
         id: backup_id,
         backup_type: BackupType::Snapshot,
+        backup_path: backup_path.clone(),
         status: BackupStatus::Completed,
         start_time: Utc::now(),
         end_time: Some(Utc::now()),
-        base_backup_id: None,
+        size_bytes: Some(0),
         wal_start: None,
         wal_end: None,
-        size_bytes: Some(0),
-        backup_path,
-        server_version: "14.0".to_string(),
+        base_backup_id: None,
+        server_version: "mock-version".to_string(),
         error_message: None,
     };
 
