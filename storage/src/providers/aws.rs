@@ -22,9 +22,6 @@ use std::time::{Duration, SystemTime};
 use tokio::io::AsyncWriteExt;
 use tokio::{fs::File, io::AsyncReadExt};
 
-/// Helper to report S3 errors to Sentry with context
-
-// AWS S3 storage provider
 #[derive(Debug, Clone)]
 pub enum ProviderKind {
     Aws,
@@ -70,7 +67,10 @@ impl S3Provider {
             }
         }
         let resp = req.send().await.map_err(|e| {
-            error!("Failed to initiate multipart upload for {bucket}/{key}: {e}");
+            error!(
+                "Failed to initiate multipart upload for {}/{}: {}",
+                bucket, key, e
+            );
             StorageError::Aws(e.to_string())
         })?;
         resp.upload_id()
@@ -214,7 +214,7 @@ impl S3Provider {
             last_modified: obj.last_modified().map(|t| {
                 let secs = t.secs();
                 let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
-                ChronoDateTime::from_timestamp(secs, nanos).unwrap_or_else(chrono::Utc::now)
+                ChronoDateTime::<Utc>::from_timestamp(secs, nanos).unwrap_or_else(Utc::now)
             }),
             etag: obj.e_tag().map(|s| s.to_string()),
             storage_class: obj.storage_class().map(|s| s.as_str().to_string()),
@@ -359,6 +359,8 @@ impl StorageProvider for S3Provider {
                 }
             })?;
 
+        // Ensure parent directory exists
+        self.create_parent_dirs(destination).await?;
         let mut file = File::create(destination).await.map_err(StorageError::Io)?;
         let mut stream = resp.body.into_async_read();
         tokio::io::copy(&mut stream, &mut file)
@@ -386,8 +388,6 @@ impl StorageProvider for S3Provider {
         bucket: &str,
         key: &str,
     ) -> Result<ObjectMetadata, StorageError> {
-        use ChronoDateTime;
-
         let resp = self
             .client
             .head_object()
@@ -699,7 +699,7 @@ impl StorageProvider for S3Provider {
                     "Multipart upload failed: part {part_number} too small ({filled} bytes)"
                 )));
             }
-            println!("Uploading part {} ({} bytes)", part_number, filled);
+            debug!("Uploading part {} ({} bytes)", part_number, filled);
             debug!("Uploading part {} ({} bytes)", part_number, filled);
             info!("Uploading part {} ({} bytes)", part_number, filled);
             // Upload part
@@ -781,47 +781,92 @@ impl StorageProvider for S3Provider {
     ) -> Result<(), StorageError> {
         use aws_sdk_s3::primitives::ByteStream;
         use futures::StreamExt;
-        // TODO: Use true streaming if/when AWS SDK supports from_tokio_stream or similar in this version
-        let mut buffer = Vec::new();
+        const PART_SIZE: usize = 5 * 1024 * 1024; // 5 MB
+        let mut parts = Vec::new();
+        let mut part_number = 1;
+        let mut buffer = Vec::with_capacity(PART_SIZE);
         let mut s = stream;
+        let upload_id = self
+            .initiate_multipart_upload(bucket, key, content_type, metadata)
+            .await?;
         while let Some(chunk_result) = s.next().await {
             let chunk = chunk_result.map_err(|e| {
                 error!("Failed to read stream chunk: {}", e);
                 StorageError::Io(e)
             })?;
             buffer.extend_from_slice(&chunk);
-        }
-        let byte_stream = ByteStream::from(buffer);
-
-        let mut put_object_request = self
-            .client
-            .put_object()
-            .bucket(bucket)
-            .key(key)
-            .body(byte_stream);
-
-        if let Some(content_type) = content_type {
-            put_object_request = put_object_request.content_type(content_type);
-        }
-        if let Some(metadata) = metadata {
-            for (key, value) in metadata {
-                put_object_request = put_object_request.metadata(key, value);
+            while buffer.len() >= PART_SIZE {
+                let part = buffer.drain(..PART_SIZE).collect::<Vec<u8>>();
+                let upload_part_resp = self
+                    .client
+                    .upload_part()
+                    .bucket(bucket)
+                    .key(key)
+                    .upload_id(&upload_id)
+                    .part_number(part_number)
+                    .body(ByteStream::from(part))
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        error!(
+                            "Failed to upload part {} for {}/{}: {:?}",
+                            part_number, bucket, key, e
+                        );
+                        StorageError::Aws(e.to_string())
+                    })?;
+                parts.push(
+                    aws_sdk_s3::types::CompletedPart::builder()
+                        .set_part_number(Some(part_number))
+                        .set_e_tag(upload_part_resp.e_tag)
+                        .build(),
+                );
+                part_number += 1;
             }
         }
-
-        put_object_request.send().await.map_err(|e| {
-            error!("Failed to upload object {}/{}: {:?}", bucket, key, e);
-            debug!("S3 error debug: {:?}", e);
-            report_s3_error_to_sentry(
-                "upload_stream",
-                &e as &dyn std::error::Error,
-                bucket,
-                key,
-                None,
+        if !buffer.is_empty() {
+            let upload_part_resp = self
+                .client
+                .upload_part()
+                .bucket(bucket)
+                .key(key)
+                .upload_id(&upload_id)
+                .part_number(part_number)
+                .body(ByteStream::from(buffer.clone()))
+                .send()
+                .await
+                .map_err(|e| {
+                    error!(
+                        "Failed to upload last part {} for {}/{}: {:?}",
+                        part_number, bucket, key, e
+                    );
+                    StorageError::Aws(e.to_string())
+                })?;
+            parts.push(
+                aws_sdk_s3::types::CompletedPart::builder()
+                    .set_part_number(Some(part_number))
+                    .set_e_tag(upload_part_resp.e_tag)
+                    .build(),
             );
-            StorageError::Aws(e.to_string())
-        })?;
-        info!("Uploaded stream to {}/{}", bucket, key);
+        }
+        let completed_upload = aws_sdk_s3::types::CompletedMultipartUpload::builder()
+            .set_parts(Some(parts))
+            .build();
+        self.client
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(&upload_id)
+            .multipart_upload(completed_upload)
+            .send()
+            .await
+            .map_err(|e| {
+                error!(
+                    "Failed to complete multipart upload for {}/{}: {:?}",
+                    bucket, key, e
+                );
+                StorageError::Aws(e.to_string())
+            })?;
+        info!("Multipart upload completed: {}/{}", bucket, key);
         Ok(())
     }
 }
