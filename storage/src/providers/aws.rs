@@ -13,7 +13,7 @@ use aws_sdk_s3::{
 };
 use aws_smithy_types::DateTime;
 use bytes::Bytes;
-use chrono::{DateTime as ChronoDateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use futures::Stream;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -653,24 +653,9 @@ impl StorageProvider for S3Provider {
             "Initiating multipart upload: bucket={}, key={}, file_size={}",
             bucket, key, file_size
         );
-        let create_resp = self
-            .client
-            .create_multipart_upload()
-            .bucket(bucket)
-            .key(key)
-            .set_content_type(content_type.map(|s| s.to_string()))
-            .send()
-            .await
-            .map_err(|e| {
-                error!("[DEBUG] Failed to initiate multipart upload: {}", e);
-                StorageError::Aws(e.to_string())
-            })?;
-        let upload_id = create_resp
-            .upload_id()
-            .ok_or_else(|| {
-                StorageError::Aws("No upload_id returned from create_multipart_upload".to_string())
-            })?
-            .to_string();
+        let upload_id = self
+            .initiate_multipart_upload(bucket, key, content_type, metadata)
+            .await?;
         let mut parts: Vec<CompletedPart> = Vec::new();
         let mut part_number = 1;
         loop {
@@ -711,8 +696,6 @@ impl StorageProvider for S3Provider {
                     part_number, filled
                 )));
             }
-            debug!("Uploading part {} ({} bytes)", part_number, filled);
-            debug!("Uploading part {} ({} bytes)", part_number, filled);
             info!("Uploading part {} ({} bytes)", part_number, filled);
             // Upload part
             let upload_part_resp = self
