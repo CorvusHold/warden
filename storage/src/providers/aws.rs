@@ -400,7 +400,7 @@ impl StorageProvider for S3Provider {
         let last_modified = resp.last_modified().and_then(|dt| {
             // aws_sdk_s3::primitives::DateTime -> ChronoDateTime<Utc>
             let ts = dt.secs();
-            ChronoDateTime::<Utc>::from_timestamp(ts, 0)
+            Utc.timestamp_opt(ts, 0).single()
         });
         let etag = resp.e_tag().map(|s| s.to_string());
         let content_type = resp.content_type().map(|s| s.to_string());
