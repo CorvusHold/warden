@@ -12,7 +12,7 @@ use aws_sdk_s3::{
 };
 use aws_smithy_types::DateTime;
 use bytes::Bytes;
-use chrono;
+use chrono::{DateTime as ChronoDateTime, Utc};
 use futures::Stream;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -184,7 +184,7 @@ impl S3Provider {
             last_modified: obj.last_modified().map(|t| {
                 let secs = t.secs();
                 let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
-                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(chrono::Utc::now)
+                ChronoDateTime::from_timestamp(secs, nanos).unwrap_or_else(chrono::Utc::now)
             }),
             etag: obj.e_tag().map(|s| s.to_string()),
             storage_class: obj.storage_class().map(|s| s.as_str().to_string()),
@@ -281,18 +281,6 @@ fn to_system_time(dt: &DateTime) -> SystemTime {
 //         key: &str,
 //         stream: S,
 //         content_type: Option<&str>,
-//         metadata: Option<Metadata>,
-//     ) -> Result<(), StorageError>
-//     where
-//         S: Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
-//     {
-//         // Convert the stream to a ByteStream that AWS SDK can use
-//         let byte_stream = ByteStream::new(stream
-//             .map(|result| result.map_err(|e| {
-//                 error!("Stream error: {}", e);
-//                 std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-//             }))
-//             .map_ok(|bytes| bytes.to_vec()));
 
 //         let mut put_object_request = self.client.put_object().bucket(bucket).key(key).body(byte_stream);
 
@@ -368,7 +356,7 @@ impl StorageProvider for S3Provider {
         bucket: &str,
         key: &str,
     ) -> Result<ObjectMetadata, StorageError> {
-        use chrono::DateTime as ChronoDateTime;
+        use ChronoDateTime;
 
         let resp = self
             .client
@@ -388,9 +376,9 @@ impl StorageProvider for S3Provider {
 
         let size = resp.content_length().map(|s| s as u64);
         let last_modified = resp.last_modified().and_then(|dt| {
-            // aws_sdk_s3::primitives::DateTime -> chrono::DateTime<Utc>
+            // aws_sdk_s3::primitives::DateTime -> ChronoDateTime<Utc>
             let ts = dt.secs();
-            ChronoDateTime::from_timestamp(ts, 0)
+            ChronoDateTime::<Utc>::from_timestamp(ts, 0)
         });
         let etag = resp.e_tag().map(|s| s.to_string());
         let content_type = resp.content_type().map(|s| s.to_string());
@@ -782,21 +770,26 @@ impl StorageProvider for S3Provider {
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
         use aws_sdk_s3::primitives::ByteStream;
+        use futures::StreamExt;
+        // TODO: Use true streaming if/when AWS SDK supports from_tokio_stream or similar in this version
         let mut buffer = Vec::new();
-        let mut stream = stream;
-        while let Some(chunk_result) = futures::StreamExt::next(&mut stream).await {
+        let mut s = stream;
+        while let Some(chunk_result) = s.next().await {
             let chunk = chunk_result.map_err(|e| {
                 error!("Failed to read stream chunk: {}", e);
                 StorageError::Io(e)
             })?;
             buffer.extend_from_slice(&chunk);
         }
+        let byte_stream = ByteStream::from(buffer);
+
         let mut put_object_request = self
             .client
             .put_object()
             .bucket(bucket)
             .key(key)
-            .body(ByteStream::from(buffer));
+            .body(byte_stream);
+
         if let Some(content_type) = content_type {
             put_object_request = put_object_request.content_type(content_type);
         }
@@ -805,6 +798,7 @@ impl StorageProvider for S3Provider {
                 put_object_request = put_object_request.metadata(key, value);
             }
         }
+
         put_object_request.send().await.map_err(|e| {
             error!("Failed to upload object {}/{}: {:?}", bucket, key, e);
             debug!("S3 error debug: {:?}", e);
