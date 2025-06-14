@@ -13,7 +13,7 @@ use aws_sdk_s3::{
 };
 use aws_smithy_types::DateTime;
 use bytes::Bytes;
-use chrono::{DateTime as ChronoDateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use futures::Stream;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -691,8 +691,6 @@ impl StorageProvider for S3Provider {
                     "Multipart upload failed: part {part_number} too small ({filled} bytes)"
                 )));
             }
-            debug!("Uploading part {} ({} bytes)", part_number, filled);
-            debug!("Uploading part {} ({} bytes)", part_number, filled);
             info!("Uploading part {} ({} bytes)", part_number, filled);
             // Upload part
             let upload_part_resp = self
