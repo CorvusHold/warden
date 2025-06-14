@@ -13,7 +13,7 @@ use aws_sdk_s3::{
 };
 use aws_smithy_types::DateTime;
 use bytes::Bytes;
-use chrono::{DateTime as ChronoDateTime, Utc};
+use chrono::{DateTime as ChronoDateTime, TimeZone, Utc};
 use futures::Stream;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -214,21 +214,12 @@ impl S3Provider {
             size: obj.size().map(|size| size.try_into().unwrap_or(0)),
             last_modified: obj.last_modified().map(|t| {
                 let secs = t.secs();
-                let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
-                ChronoDateTime::<Utc>::from_timestamp(secs, nanos).unwrap_or_else(Utc::now)
+                Utc.timestamp_opt(secs, 0).single().unwrap_or_else(Utc::now)
             }),
             etag: obj.e_tag().map(|s| s.to_string()),
             storage_class: obj.storage_class().map(|s| s.as_str().to_string()),
         }
     }
-
-    /// Converts S3 metadata to a Metadata map
-    // fn extract_metadata(
-    //     &self,
-    //     metadata: Option<&std::collections::HashMap<String, String>>,
-    // ) -> Option<Metadata> {
-    //     metadata.cloned()
-    // }
 
     /// Helper: fetch object from S3 with error mapping
     pub async fn get_object_with_error_handling(
