@@ -183,11 +183,11 @@ impl PostgresBackupStorage {
             scope.set_tag("file", file_name);
             scope.set_tag("bucket", &self.bucket);
             scope.set_tag("key", &key);
+            scope.set_tag("region", &option_env!("AWS_REGION").unwrap_or("unknown"));
             scope.set_tag(
-                "region",
-                std::env::var("AWS_REGION").unwrap_or_else(|_| "unknown".into()),
+                "endpoint",
+                &option_env!("AWS_ENDPOINT").unwrap_or("unknown"),
             );
-            scope.set_tag("endpoint", option_env!("AWS_ENDPOINT").unwrap_or("unknown"));
         });
         // --- End Sentry scope ---
         self.provider

@@ -8,12 +8,11 @@ use aws_sdk_s3::{
         get_object::GetObjectOutput, list_buckets::ListBucketsOutput,
         list_objects_v2::ListObjectsV2Output,
     },
-    types::CompletedMultipartUpload,
     Client,
 };
 use aws_smithy_types::DateTime;
 use bytes::Bytes;
-use chrono::{TimeZone, Utc};
+use chrono;
 use futures::Stream;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -23,6 +22,9 @@ use std::time::{Duration, SystemTime};
 use tokio::io::AsyncWriteExt;
 use tokio::{fs::File, io::AsyncReadExt};
 
+/// Helper to report S3 errors to Sentry with context
+
+// AWS S3 storage provider
 #[derive(Debug, Clone)]
 pub enum ProviderKind {
     Aws,
@@ -218,6 +220,14 @@ impl S3Provider {
         }
     }
 
+    /// Converts S3 metadata to a Metadata map
+    // fn extract_metadata(
+    //     &self,
+    //     metadata: Option<&std::collections::HashMap<String, String>>,
+    // ) -> Option<Metadata> {
+    //     metadata.cloned()
+    // }
+
     /// Helper: fetch object from S3 with error mapping
     pub async fn get_object_with_error_handling(
         &self,
@@ -323,17 +333,12 @@ impl StorageProvider for S3Provider {
     }
 
     // --- Required trait stubs ---
-    async fn download_file(
-        &self,
-        bucket: &str,
-        key: &str,
-        destination: &Path,
-    ) -> Result<(), StorageError> {
-        use tokio::fs::File;
+    async fn download_file(&self, bucket: &str, key: &str, destination: &Path) -> Result<(), StorageError> {
         use tokio::io::AsyncWriteExt;
+        use tokio::fs::File;
+        use futures::StreamExt;
 
-        let resp = self
-            .client
+        let resp = self.client
             .get_object()
             .bucket(bucket)
             .key(key)
@@ -342,19 +347,17 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
                 } else {
                     StorageError::Aws(msg)
                 }
             })?;
 
-        // Ensure parent directory exists
-        self.create_parent_dirs(destination).await?;
-        let mut file = File::create(destination).await.map_err(StorageError::Io)?;
-        let mut stream = resp.body.into_async_read();
-        tokio::io::copy(&mut stream, &mut file)
+        let mut file = File::create(destination)
             .await
             .map_err(StorageError::Io)?;
+        let mut stream = resp.body.into_async_read();
+        tokio::io::copy(&mut stream, &mut file).await.map_err(StorageError::Io)?;
         file.flush().await.map_err(StorageError::Io)?;
         Ok(())
     }
@@ -377,9 +380,10 @@ impl StorageProvider for S3Provider {
         bucket: &str,
         key: &str,
     ) -> Result<ObjectMetadata, StorageError> {
-        let resp = self
-            .client
-            .head_object()
+        use chrono::{DateTime as ChronoDateTime, Utc};
+        use aws_sdk_s3::primitives::DateTime as AwsDateTime;
+
+        let resp = self.client.head_object()
             .bucket(bucket)
             .key(key)
             .send()
@@ -387,7 +391,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -395,13 +399,13 @@ impl StorageProvider for S3Provider {
 
         let size = resp.content_length().map(|s| s as u64);
         let last_modified = resp.last_modified().and_then(|dt| {
-            // aws_sdk_s3::primitives::DateTime -> ChronoDateTime<Utc>
+            // aws_sdk_s3::primitives::DateTime -> chrono::DateTime<Utc>
             let ts = dt.secs();
-            Utc.timestamp_opt(ts, 0).single()
+            ChronoDateTime::from_timestamp(ts, 0)
         });
         let etag = resp.e_tag().map(|s| s.to_string());
         let content_type = resp.content_type().map(|s| s.to_string());
-        let storage_class = resp.storage_class().map(|s| format!("{s:?}"));
+        let storage_class = resp.storage_class().map(|s| format!("{:?}", s));
         let metadata = if let Some(meta) = resp.metadata() {
             if !meta.is_empty() {
                 Some(meta.clone())
@@ -433,7 +437,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -688,7 +692,9 @@ impl StorageProvider for S3Provider {
                     "Multipart upload failed: part {part_number} too small ({filled} bytes)"
                 )));
             }
-            info!("Uploading part {part_number} ({filled} bytes)");
+            println!("Uploading part {} ({} bytes)", part_number, filled);
+            debug!("Uploading part {} ({} bytes)", part_number, filled);
+            info!("Uploading part {} ({} bytes)", part_number, filled);
             // Upload part
             let upload_part_resp = self
                 .client
@@ -701,8 +707,11 @@ impl StorageProvider for S3Provider {
                 .send()
                 .await
                 .map_err(|e| {
-                    error!("Failed to upload part {part_number} for {bucket}/{key}: {e:?}");
-                    debug!("S3 error debug: {e:?}");
+                    error!(
+                        "Failed to upload part {} for {}/{}: {:?}",
+                        part_number, bucket, key, e
+                    );
+                    debug!("S3 error debug: {:?}", e);
                     report_s3_error_to_sentry(
                         "upload_file:upload_part",
                         &e as &dyn std::error::Error,
@@ -712,10 +721,11 @@ impl StorageProvider for S3Provider {
                     );
                     StorageError::Aws(e.to_string())
                 })?;
+            // Add part to completed parts
             parts.push(
                 CompletedPart::builder()
                     .set_part_number(Some(part_number))
-                    .set_e_tag(upload_part_resp.e_tag().map(|s| s.to_string()))
+                    .set_e_tag(upload_part_resp.e_tag)
                     .build(),
             );
             part_number += 1;
@@ -736,8 +746,11 @@ impl StorageProvider for S3Provider {
             .send()
             .await
             .map_err(|e| {
-                error!("Failed to complete multipart upload for {bucket}/{key}: {e:?}");
-                debug!("S3 error debug: {e:?}");
+                error!(
+                    "Failed to complete multipart upload for {}/{}: {:?}",
+                    bucket, key, e
+                );
+                debug!("S3 error debug: {:?}", e);
                 report_s3_error_to_sentry(
                     "upload_file:complete_multipart_upload",
                     &e as &dyn std::error::Error,
@@ -760,84 +773,42 @@ impl StorageProvider for S3Provider {
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
         use aws_sdk_s3::primitives::ByteStream;
-        use futures::StreamExt;
-        const PART_SIZE: usize = 5 * 1024 * 1024; // 5 MB
-        let mut parts = Vec::new();
-        let mut part_number = 1;
-        let mut buffer = Vec::with_capacity(PART_SIZE);
-        let mut s = stream;
-        let upload_id = self
-            .initiate_multipart_upload(bucket, key, content_type, metadata)
-            .await?;
-        while let Some(chunk_result) = s.next().await {
+        let mut buffer = Vec::new();
+        let mut stream = stream;
+        while let Some(chunk_result) = futures::StreamExt::next(&mut stream).await {
             let chunk = chunk_result.map_err(|e| {
-                error!("Failed to read stream chunk: {e}");
+                error!("Failed to read stream chunk: {}", e);
                 StorageError::Io(e)
             })?;
             buffer.extend_from_slice(&chunk);
-            while buffer.len() >= PART_SIZE {
-                let part = buffer.drain(..PART_SIZE).collect::<Vec<u8>>();
-                let upload_part_resp = self
-                    .client
-                    .upload_part()
-                    .bucket(bucket)
-                    .key(key)
-                    .upload_id(&upload_id)
-                    .part_number(part_number)
-                    .body(ByteStream::from(part))
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to upload part {part_number} for {bucket}/{key}: {e:?}");
-                        StorageError::Aws(e.to_string())
-                    })?;
-                parts.push(
-                    aws_sdk_s3::types::CompletedPart::builder()
-                        .set_part_number(Some(part_number))
-                        .set_e_tag(upload_part_resp.e_tag().map(|s| s.to_string()))
-                        .build(),
-                );
-                part_number += 1;
-            }
         }
-        if !buffer.is_empty() {
-            let upload_part_resp = self
-                .client
-                .upload_part()
-                .bucket(bucket)
-                .key(key)
-                .upload_id(&upload_id)
-                .part_number(part_number)
-                .body(ByteStream::from(buffer))
-                .send()
-                .await
-                .map_err(|e| {
-                    error!("Failed to upload last part {part_number} for {bucket}/{key}: {e:?}");
-                    StorageError::Aws(e.to_string())
-                })?;
-            parts.push(
-                aws_sdk_s3::types::CompletedPart::builder()
-                    .set_part_number(Some(part_number))
-                    .set_e_tag(upload_part_resp.e_tag().map(|s| s.to_string()))
-                    .build(),
-            );
-        }
-        let completed_upload = CompletedMultipartUpload::builder()
-            .set_parts(Some(parts))
-            .build();
-        self.client
-            .complete_multipart_upload()
+        let mut put_object_request = self
+            .client
+            .put_object()
             .bucket(bucket)
             .key(key)
-            .upload_id(&upload_id)
-            .multipart_upload(completed_upload)
-            .send()
-            .await
-            .map_err(|e| {
-                error!("Failed to complete multipart upload for {bucket}/{key}: {e:?}");
-                StorageError::Aws(e.to_string())
-            })?;
-        info!("Multipart upload completed: {}/{}", bucket, key);
+            .body(ByteStream::from(buffer));
+        if let Some(content_type) = content_type {
+            put_object_request = put_object_request.content_type(content_type);
+        }
+        if let Some(metadata) = metadata {
+            for (key, value) in metadata {
+                put_object_request = put_object_request.metadata(key, value);
+            }
+        }
+        put_object_request.send().await.map_err(|e| {
+            error!("Failed to upload object {}/{}: {:?}", bucket, key, e);
+            debug!("S3 error debug: {:?}", e);
+            report_s3_error_to_sentry(
+                "upload_stream",
+                &e as &dyn std::error::Error,
+                bucket,
+                key,
+                None,
+            );
+            StorageError::Aws(e.to_string())
+        })?;
+        info!("Uploaded stream to {}/{}", bucket, key);
         Ok(())
     }
 }
@@ -856,8 +827,8 @@ fn report_s3_error_to_sentry(
         extra.insert("backup_id", backup_id);
     }
 
-    let error_message = format!("{operation}: {error}");
+    let error_message = format!("{}: {}", operation, error.to_string());
     let extra_json = serde_json::to_string(&extra).unwrap_or_default();
-    let sentry_message = format!("{error_message} | context: {extra_json}");
+    let sentry_message = format!("{} | context: {}", error_message, extra_json);
     sentry::capture_message(&sentry_message, sentry::Level::Error);
 }
