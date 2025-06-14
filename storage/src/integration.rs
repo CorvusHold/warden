@@ -112,6 +112,20 @@ impl PostgresBackupStorage {
                 };
 
                 info!("Uploading file: {} ({})", rel_path.display(), key);
+                // --- Sentry scope for upload ---
+                sentry::configure_scope(|scope| {
+                    scope.set_tag("operation", "upload_backup");
+                    scope.set_tag("backup_id", backup_id);
+                    scope.set_tag("file", &rel_path.to_string_lossy());
+                    scope.set_tag("bucket", &self.bucket);
+                    scope.set_tag("key", &key);
+                    scope.set_tag("region", &option_env!("AWS_REGION").unwrap_or("unknown"));
+                    scope.set_tag(
+                        "endpoint",
+                        &option_env!("AWS_ENDPOINT").unwrap_or("unknown"),
+                    );
+                });
+                // --- End Sentry scope ---
                 self.provider
                     .upload_file(
                         &self.bucket,
@@ -165,7 +179,20 @@ impl PostgresBackupStorage {
 
         let stream = ReaderStream::new(file);
 
-        // Upload the stream
+        // --- Sentry scope for upload_stream ---
+        sentry::configure_scope(|scope| {
+            scope.set_tag("operation", "upload_backup_stream");
+            scope.set_tag("backup_id", backup_id);
+            scope.set_tag("file", file_name);
+            scope.set_tag("bucket", &self.bucket);
+            scope.set_tag("key", &key);
+            scope.set_tag("region", &option_env!("AWS_REGION").unwrap_or("unknown"));
+            scope.set_tag(
+                "endpoint",
+                &option_env!("AWS_ENDPOINT").unwrap_or("unknown"),
+            );
+        });
+        // --- End Sentry scope ---
         self.provider
             .upload_stream(&self.bucket, &key, Box::pin(stream), content_type, metadata)
             .await?;

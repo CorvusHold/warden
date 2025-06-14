@@ -61,8 +61,34 @@ enum SshCommands {
     },
 }
 
+use sentry;
+use sentry_log;
+use std::env;
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // --- Sentry initialization ---
+    let sentry_dsn = env::var("SENTRY_DSN").ok();
+    let _sentry_guard = if let Some(dsn) = sentry_dsn {
+        let env = env::var("SENTRY_ENVIRONMENT").unwrap_or_else(|_| "development".into());
+        let release = env!("CARGO_PKG_VERSION");
+        let guard = sentry::init(sentry::ClientOptions {
+            dsn: Some(dsn.parse().expect("Invalid SENTRY_DSN")),
+            environment: Some(env.into()),
+            release: Some(release.into()),
+            attach_stacktrace: true,
+            ..Default::default()
+        });
+        // Integrate sentry-log for breadcrumbs
+        let logger =
+            sentry_log::SentryLogger::with_dest(env_logger::Builder::from_default_env().build());
+        log::set_boxed_logger(Box::new(logger)).expect("Failed to set logger");
+        log::set_max_level(log::LevelFilter::Info);
+        Some(guard)
+    } else {
+        None
+    };
+
     env_logger::Builder::from_default_env()
         .format_timestamp(None)
         .format_level(true)

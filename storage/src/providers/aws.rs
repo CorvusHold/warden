@@ -5,28 +5,26 @@ use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::{
     operation::{
-        delete_object::DeleteObjectOutput, get_object::GetObjectOutput,
-        head_object::HeadObjectOutput, list_buckets::ListBucketsOutput,
-        list_objects_v2::ListObjectsV2Output, put_object::PutObjectOutput,
+        get_object::GetObjectOutput, list_buckets::ListBucketsOutput,
+        list_objects_v2::ListObjectsV2Output,
     },
-    primitives::ByteStream,
     Client,
 };
 use aws_smithy_types::DateTime;
-use chrono;
-
 use bytes::Bytes;
+use chrono;
 use futures::Stream;
-use futures::StreamExt;
 use log::{debug, error, info};
-
+use std::collections::HashMap;
 use std::path::Path;
 use std::pin::Pin;
 use std::time::{Duration, SystemTime};
 use tokio::io::AsyncWriteExt;
 use tokio::{fs::File, io::AsyncReadExt};
 
-/// AWS S3 storage provider
+/// Helper to report S3 errors to Sentry with context
+
+// AWS S3 storage provider
 #[derive(Debug, Clone)]
 pub enum ProviderKind {
     Aws,
@@ -194,12 +192,12 @@ impl S3Provider {
     }
 
     /// Converts S3 metadata to a Metadata map
-    fn extract_metadata(
-        &self,
-        metadata: Option<&std::collections::HashMap<String, String>>,
-    ) -> Option<Metadata> {
-        metadata.cloned()
-    }
+    // fn extract_metadata(
+    //     &self,
+    //     metadata: Option<&std::collections::HashMap<String, String>>,
+    // ) -> Option<Metadata> {
+    //     metadata.cloned()
+    // }
 
     /// Helper: fetch object from S3 with error mapping
     pub async fn get_object_with_error_handling(
@@ -311,11 +309,140 @@ fn to_system_time(dt: &DateTime) -> SystemTime {
 //         let _put_object_result: PutObjectOutput = put_object_request.send().await.map_err(|e| {
 //             error!("Failed to upload object {}/{}: {}", bucket, key, e);
 //             StorageError::Aws(e.to_string())
-//         })?;
 #[async_trait]
 impl StorageProvider for S3Provider {
     fn name(&self) -> &str {
         "AWS S3"
+    }
+
+    // --- Required trait stubs ---
+    async fn download_file(&self, bucket: &str, key: &str, destination: &Path) -> Result<(), StorageError> {
+        use tokio::io::AsyncWriteExt;
+        use tokio::fs::File;
+        use futures::StreamExt;
+
+        let resp = self.client
+            .get_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("NotFound") || msg.contains("404") {
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                } else {
+                    StorageError::Aws(msg)
+                }
+            })?;
+
+        let mut file = File::create(destination)
+            .await
+            .map_err(StorageError::Io)?;
+        let mut stream = resp.body.into_async_read();
+        tokio::io::copy(&mut stream, &mut file).await.map_err(StorageError::Io)?;
+        file.flush().await.map_err(StorageError::Io)?;
+        Ok(())
+    }
+
+    async fn download_stream(
+        &self,
+        _bucket: &str,
+        _key: &str,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>>,
+        StorageError,
+    > {
+        Err(StorageError::Unexpected(
+            "download_stream not implemented".to_string(),
+        ))
+    }
+
+    async fn get_object_metadata(
+        &self,
+        bucket: &str,
+        key: &str,
+    ) -> Result<ObjectMetadata, StorageError> {
+        use chrono::{DateTime as ChronoDateTime, Utc};
+        use aws_sdk_s3::primitives::DateTime as AwsDateTime;
+
+        let resp = self.client.head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("NotFound") || msg.contains("404") {
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                } else {
+                    StorageError::Aws(msg)
+                }
+            })?;
+
+        let size = resp.content_length().map(|s| s as u64);
+        let last_modified = resp.last_modified().and_then(|dt| {
+            // aws_sdk_s3::primitives::DateTime -> chrono::DateTime<Utc>
+            let ts = dt.secs();
+            ChronoDateTime::from_timestamp(ts, 0)
+        });
+        let etag = resp.e_tag().map(|s| s.to_string());
+        let content_type = resp.content_type().map(|s| s.to_string());
+        let storage_class = resp.storage_class().map(|s| format!("{:?}", s));
+        let metadata = if let Some(meta) = resp.metadata() {
+            if !meta.is_empty() {
+                Some(meta.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok(ObjectMetadata {
+            key: key.to_string(),
+            size,
+            last_modified,
+            etag,
+            content_type,
+            storage_class,
+            metadata,
+        })
+    }
+
+    async fn delete_object(&self, bucket: &str, key: &str) -> Result<(), StorageError> {
+        self.client
+            .delete_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("NotFound") || msg.contains("404") {
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                } else {
+                    StorageError::Aws(msg)
+                }
+            })?;
+        Ok(())
+    }
+
+    async fn object_exists(&self, _bucket: &str, _key: &str) -> Result<bool, StorageError> {
+        Err(StorageError::Unexpected(
+            "object_exists not implemented".to_string(),
+        ))
+    }
+
+    async fn generate_presigned_url(
+        &self,
+        _bucket: &str,
+        _key: &str,
+        _expires_in: std::time::Duration,
+    ) -> Result<String, StorageError> {
+        Err(StorageError::Unexpected(
+            "generate_presigned_url not implemented".to_string(),
+        ))
     }
 
     async fn create_bucket(&self, bucket: &str) -> Result<(), StorageError> {
@@ -571,12 +698,8 @@ impl StorageProvider for S3Provider {
             println!("Uploading part {} ({} bytes)", part_number, filled);
             debug!("Uploading part {} ({} bytes)", part_number, filled);
             info!("Uploading part {} ({} bytes)", part_number, filled);
-            debug!(
-                "Part {} first 8 bytes: {:?}",
-                part_number,
-                &buf[..8.min(filled)]
-            );
-            let part_resp = self
+            // Upload part
+            let upload_part_resp = self
                 .client
                 .upload_part()
                 .bucket(bucket)
@@ -587,263 +710,61 @@ impl StorageProvider for S3Provider {
                 .send()
                 .await
                 .map_err(|e| {
-                    error!("Failed to upload part {}: {}", part_number, e);
-                    // Abort upload on error
-                    error!("Aborting multipart upload: upload_id={}", upload_id);
-                    std::mem::drop(
-                        self.client
-                            .abort_multipart_upload()
-                            .bucket(bucket)
-                            .key(key)
-                            .upload_id(&upload_id)
-                            .send(),
+                    error!(
+                        "Failed to upload part {} for {}/{}: {:?}",
+                        part_number, bucket, key, e
+                    );
+                    debug!("S3 error debug: {:?}", e);
+                    report_s3_error_to_sentry(
+                        "upload_file:upload_part",
+                        &e as &dyn std::error::Error,
+                        bucket,
+                        key,
+                        None,
                     );
                     StorageError::Aws(e.to_string())
                 })?;
-            let etag_raw = part_resp.e_tag().unwrap_or_default();
-            info!("Part {} ETag as returned: {:?}", part_number, etag_raw);
-            // DO NOT strip quotes; send ETag exactly as returned by S3/MinIO
-            let completed_part = CompletedPart::builder()
-                .part_number(part_number)
-                .set_e_tag(Some(etag_raw.to_string()))
-                .build();
-            info!(
-                "Will send part {} ETag (verbatim): {:?}",
-                part_number,
-                completed_part.e_tag()
+            // Add part to completed parts
+            parts.push(
+                CompletedPart::builder()
+                    .set_part_number(Some(part_number))
+                    .set_e_tag(upload_part_resp.e_tag)
+                    .build(),
             );
-            parts.push(completed_part);
-            info!("Uploaded part {} ({} bytes)", part_number, filled);
             part_number += 1;
             if is_last_part {
                 break;
             }
         }
-        // Complete upload
-        // Ensure parts are sorted by part_number (S3 requires this)
-        parts.sort_by_key(|p| p.part_number());
-        for part in &parts {
-            debug!(
-                "Completing part: part_number={:?}, e_tag={:?}",
-                part.part_number(),
-                part.e_tag()
-            );
-        }
-        // Assert all parts except the last are at least 5MB
-        // We can't get the size from CompletedPart, so log a warning instead
-        for (i, part) in parts.iter().enumerate() {
-            if i < parts.len() - 1 {
-                info!("Part {}: part_number={:?}, e_tag={:?} (size unknown, must be >=5MB except last)", i+1, part.part_number(), part.e_tag());
-            }
-        }
-        info!("CompletedMultipartUpload payload: parts={:?}", parts);
+        // Complete multipart upload
         let completed_upload = CompletedMultipartUpload::builder()
             .set_parts(Some(parts))
             .build();
-        let complete_result = self
-            .client
+        self.client
             .complete_multipart_upload()
             .bucket(bucket)
             .key(key)
             .upload_id(&upload_id)
             .multipart_upload(completed_upload)
             .send()
-            .await;
-        match complete_result {
-            Ok(_) => {}
-            Err(e) => {
-                error!("Failed to complete multipart upload: {:#?}", e);
-                return Err(StorageError::Aws(e.to_string()));
-            }
-        }
-        info!(
-            "Uploaded file {} to {}/{} ({} bytes) via multipart upload",
-            file_path.display(),
-            bucket,
-            key,
-            file_size
-        );
-        Ok(())
-    }
-
-    async fn download_file(
-        &self,
-        bucket: &str,
-        key: &str,
-        file_path: &Path,
-    ) -> Result<(), StorageError> {
-        let get_object_result = self.get_object_with_error_handling(bucket, key).await?;
-        let content_length = get_object_result.content_length().unwrap_or(0) as u64;
-        self.create_parent_dirs(file_path).await?;
-        let bytes_written = self
-            .stream_s3_to_file(get_object_result.body.into_async_read(), file_path)
-            .await?;
-        info!(
-            "Downloaded object {}/{} to {} ({} bytes)",
-            bucket,
-            key,
-            file_path.display(),
-            bytes_written
-        );
-        if content_length != 0 && content_length != bytes_written {
-            error!(
-                "Download size mismatch: expected {} bytes, got {} bytes",
-                content_length, bytes_written
-            );
-            return Err(StorageError::Unexpected(format!(
-                "Download size mismatch: expected {} bytes, got {} bytes",
-                content_length, bytes_written
-            )));
-        }
-        Ok(())
-    }
-
-    async fn download_stream(
-        &self,
-        bucket: &str,
-        key: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>, StorageError>
-    {
-        let get_object_result: GetObjectOutput = self
-            .client
-            .get_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
             .await
             .map_err(|e| {
-                error!("Failed to get object {}/{}: {}", bucket, key, e);
-                if e.to_string().contains("404") {
-                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
-                } else {
-                    StorageError::Aws(e.to_string())
-                }
-            })?;
-
-        // Convert ByteStream to our expected return type
-        let byte_stream = get_object_result.body;
-
-        // Create a stream that collects all bytes and then yields them
-        let collected_stream = byte_stream.collect().await.map_err(|e| {
-            error!("Failed to collect stream: {}", e);
-            StorageError::Aws(e.to_string())
-        })?;
-
-        // Create a once stream that yields the collected bytes
-        let once_stream = futures::stream::once(futures::future::ok::<Bytes, std::io::Error>(
-            collected_stream.into_bytes(),
-        ));
-
-        Ok(Box::pin(once_stream))
-    }
-
-    async fn get_object_metadata(
-        &self,
-        bucket: &str,
-        key: &str,
-    ) -> Result<ObjectMetadata, StorageError> {
-        let head_object_result: HeadObjectOutput = self
-            .client
-            .head_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(|e| {
-                error!("Failed to get object metadata {}/{}: {}", bucket, key, e);
-                if e.to_string().contains("404") {
-                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
-                } else {
-                    StorageError::Aws(e.to_string())
-                }
-            })?;
-
-        let metadata = ObjectMetadata {
-            key: key.to_string(),
-            size: head_object_result
-                .content_length()
-                .map(|size| size.try_into().unwrap_or(0)),
-            last_modified: head_object_result.last_modified().map(|t| {
-                let secs = t.secs();
-                let nanos = 0; // AWS DateTime doesn't provide nanoseconds directly
-                chrono::DateTime::from_timestamp(secs, nanos).unwrap_or_else(chrono::Utc::now)
-            }),
-            etag: head_object_result.e_tag().map(|s| s.to_string()),
-            content_type: head_object_result.content_type().map(|s| s.to_string()),
-            storage_class: head_object_result
-                .storage_class()
-                .map(|s| s.as_str().to_string()),
-            metadata: self.extract_metadata(head_object_result.metadata()),
-        };
-
-        Ok(metadata)
-    }
-
-    async fn delete_object(&self, bucket: &str, key: &str) -> Result<(), StorageError> {
-        let _delete_object_result: DeleteObjectOutput = self
-            .client
-            .delete_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(|e| {
-                error!("Failed to delete object {}/{}: {}", bucket, key, e);
+                error!(
+                    "Failed to complete multipart upload for {}/{}: {:?}",
+                    bucket, key, e
+                );
+                debug!("S3 error debug: {:?}", e);
+                report_s3_error_to_sentry(
+                    "upload_file:complete_multipart_upload",
+                    &e as &dyn std::error::Error,
+                    bucket,
+                    key,
+                    None,
+                );
                 StorageError::Aws(e.to_string())
             })?;
-
-        info!("Deleted object {}/{}", bucket, key);
+        info!("Multipart upload completed: {}/{}", bucket, key);
         Ok(())
-    }
-
-    async fn object_exists(&self, bucket: &str, key: &str) -> Result<bool, StorageError> {
-        match self
-            .client
-            .head_object()
-            .bucket(bucket)
-            .key(key)
-            .send()
-            .await
-        {
-            Ok(_) => Ok(true),
-            Err(e) => {
-                if e.to_string().contains("404") {
-                    Ok(false)
-                } else {
-                    error!("Error checking if object exists: {}", e);
-                    Err(StorageError::AwsSdk(e.to_string()))
-                }
-            }
-        }
-    }
-
-    async fn generate_presigned_url(
-        &self,
-        bucket: &str,
-        key: &str,
-        expires_in: std::time::Duration,
-    ) -> Result<String, StorageError> {
-        let presigner = aws_sdk_s3::presigning::PresigningConfig::builder()
-            .expires_in(expires_in)
-            .build()
-            .map_err(|e| {
-                error!("Failed to build presigning config: {}", e);
-                StorageError::Configuration(e.to_string())
-            })?;
-
-        let presigned_request = self
-            .client
-            .get_object()
-            .bucket(bucket)
-            .key(key)
-            .presigned(presigner)
-            .await
-            .map_err(|e| {
-                error!("Failed to generate presigned URL: {}", e);
-                StorageError::Aws(e.to_string())
-            })?;
-
-        Ok(presigned_request.uri().to_string())
     }
 
     async fn upload_stream(
@@ -854,48 +775,63 @@ impl StorageProvider for S3Provider {
         content_type: Option<&str>,
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
-        // Collect all bytes from the stream into a single buffer
+        use aws_sdk_s3::primitives::ByteStream;
         let mut buffer = Vec::new();
         let mut stream = stream;
-
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    buffer.extend_from_slice(&chunk);
-                }
-                Err(e) => {
-                    error!("Stream error: {}", e);
-                    return Err(StorageError::Io(e));
-                }
-            }
+        while let Some(chunk_result) = futures::StreamExt::next(&mut stream).await {
+            let chunk = chunk_result.map_err(|e| {
+                error!("Failed to read stream chunk: {}", e);
+                StorageError::Io(e)
+            })?;
+            buffer.extend_from_slice(&chunk);
         }
-
-        // Create a ByteStream from the collected buffer
-        let byte_stream = ByteStream::from(buffer);
-
         let mut put_object_request = self
             .client
             .put_object()
             .bucket(bucket)
             .key(key)
-            .body(byte_stream);
-
+            .body(ByteStream::from(buffer));
         if let Some(content_type) = content_type {
             put_object_request = put_object_request.content_type(content_type);
         }
-
         if let Some(metadata) = metadata {
             for (key, value) in metadata {
                 put_object_request = put_object_request.metadata(key, value);
             }
         }
-
-        let _put_object_result: PutObjectOutput = put_object_request.send().await.map_err(|e| {
-            error!("Failed to upload object {}/{}: {}", bucket, key, e);
+        put_object_request.send().await.map_err(|e| {
+            error!("Failed to upload object {}/{}: {:?}", bucket, key, e);
+            debug!("S3 error debug: {:?}", e);
+            report_s3_error_to_sentry(
+                "upload_stream",
+                &e as &dyn std::error::Error,
+                bucket,
+                key,
+                None,
+            );
             StorageError::Aws(e.to_string())
         })?;
-
-        info!("Uploaded object {}/{}", bucket, key);
+        info!("Uploaded stream to {}/{}", bucket, key);
         Ok(())
     }
+}
+
+fn report_s3_error_to_sentry(
+    operation: &str,
+    error: &dyn std::error::Error,
+    bucket: &str,
+    key: &str,
+    backup_id: Option<&str>,
+) {
+    let mut extra = HashMap::new();
+    extra.insert("bucket", bucket);
+    extra.insert("key", key);
+    if let Some(backup_id) = backup_id {
+        extra.insert("backup_id", backup_id);
+    }
+
+    let error_message = format!("{}: {}", operation, error.to_string());
+    let extra_json = serde_json::to_string(&extra).unwrap_or_default();
+    let sentry_message = format!("{} | context: {}", error_message, extra_json);
+    sentry::capture_message(&sentry_message, sentry::Level::Error);
 }
