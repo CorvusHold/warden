@@ -8,6 +8,7 @@ use aws_sdk_s3::{
         get_object::GetObjectOutput, list_buckets::ListBucketsOutput,
         list_objects_v2::ListObjectsV2Output,
     },
+    types::CompletedMultipartUpload,
     Client,
 };
 use aws_smithy_types::DateTime;
@@ -748,11 +749,10 @@ impl StorageProvider for S3Provider {
                     );
                     StorageError::Aws(e.to_string())
                 })?;
-            // Add part to completed parts
             parts.push(
                 CompletedPart::builder()
                     .set_part_number(Some(part_number))
-                    .set_e_tag(upload_part_resp.e_tag)
+                    .set_e_tag(upload_part_resp.e_tag().map(|s| s.to_string()))
                     .build(),
             );
             part_number += 1;
@@ -837,7 +837,7 @@ impl StorageProvider for S3Provider {
                 parts.push(
                     aws_sdk_s3::types::CompletedPart::builder()
                         .set_part_number(Some(part_number))
-                        .set_e_tag(upload_part_resp.e_tag)
+                        .set_e_tag(upload_part_resp.e_tag().map(|s| s.to_string()))
                         .build(),
                 );
                 part_number += 1;
@@ -851,7 +851,7 @@ impl StorageProvider for S3Provider {
                 .key(key)
                 .upload_id(&upload_id)
                 .part_number(part_number)
-                .body(ByteStream::from(buffer.clone()))
+                .body(ByteStream::from(buffer))
                 .send()
                 .await
                 .map_err(|e| {
@@ -864,11 +864,11 @@ impl StorageProvider for S3Provider {
             parts.push(
                 aws_sdk_s3::types::CompletedPart::builder()
                     .set_part_number(Some(part_number))
-                    .set_e_tag(upload_part_resp.e_tag)
+                    .set_e_tag(upload_part_resp.e_tag().map(|s| s.to_string()))
                     .build(),
             );
         }
-        let completed_upload = aws_sdk_s3::types::CompletedMultipartUpload::builder()
+        let completed_upload = CompletedMultipartUpload::builder()
             .set_parts(Some(parts))
             .build();
         self.client
