@@ -116,14 +116,14 @@ impl PostgresBackupStorage {
                 sentry::configure_scope(|scope| {
                     scope.set_tag("operation", "upload_backup");
                     scope.set_tag("backup_id", backup_id);
-                    scope.set_tag("file", &rel_path.to_string_lossy());
+                    scope.set_tag("file", rel_path.to_string_lossy());
                     scope.set_tag("bucket", &self.bucket);
                     scope.set_tag("key", &key);
-                    scope.set_tag("region", &option_env!("AWS_REGION").unwrap_or("unknown"));
                     scope.set_tag(
-                        "endpoint",
-                        &option_env!("AWS_ENDPOINT").unwrap_or("unknown"),
+                        "region",
+                        std::env::var("AWS_REGION").unwrap_or_else(|_| "unknown".into()),
                     );
+                    scope.set_tag("endpoint", option_env!("AWS_ENDPOINT").unwrap_or("unknown"));
                 });
                 // --- End Sentry scope ---
                 self.provider
@@ -186,11 +186,11 @@ impl PostgresBackupStorage {
             scope.set_tag("file", file_name);
             scope.set_tag("bucket", &self.bucket);
             scope.set_tag("key", &key);
-            scope.set_tag("region", &option_env!("AWS_REGION").unwrap_or("unknown"));
             scope.set_tag(
-                "endpoint",
-                &option_env!("AWS_ENDPOINT").unwrap_or("unknown"),
+                "region",
+                std::env::var("AWS_REGION").unwrap_or_else(|_| "unknown".into()),
             );
+            scope.set_tag("endpoint", option_env!("AWS_ENDPOINT").unwrap_or("unknown"));
         });
         // --- End Sentry scope ---
         self.provider

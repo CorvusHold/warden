@@ -316,12 +316,17 @@ impl StorageProvider for S3Provider {
     }
 
     // --- Required trait stubs ---
-    async fn download_file(&self, bucket: &str, key: &str, destination: &Path) -> Result<(), StorageError> {
-        use tokio::io::AsyncWriteExt;
+    async fn download_file(
+        &self,
+        bucket: &str,
+        key: &str,
+        destination: &Path,
+    ) -> Result<(), StorageError> {
         use tokio::fs::File;
-        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
 
-        let resp = self.client
+        let resp = self
+            .client
             .get_object()
             .bucket(bucket)
             .key(key)
@@ -336,11 +341,11 @@ impl StorageProvider for S3Provider {
                 }
             })?;
 
-        let mut file = File::create(destination)
+        let mut file = File::create(destination).await.map_err(StorageError::Io)?;
+        let mut stream = resp.body.into_async_read();
+        tokio::io::copy(&mut stream, &mut file)
             .await
             .map_err(StorageError::Io)?;
-        let mut stream = resp.body.into_async_read();
-        tokio::io::copy(&mut stream, &mut file).await.map_err(StorageError::Io)?;
         file.flush().await.map_err(StorageError::Io)?;
         Ok(())
     }
@@ -363,10 +368,11 @@ impl StorageProvider for S3Provider {
         bucket: &str,
         key: &str,
     ) -> Result<ObjectMetadata, StorageError> {
-        use chrono::{DateTime as ChronoDateTime, Utc};
-        use aws_sdk_s3::primitives::DateTime as AwsDateTime;
+        use chrono::DateTime as ChronoDateTime;
 
-        let resp = self.client.head_object()
+        let resp = self
+            .client
+            .head_object()
             .bucket(bucket)
             .key(key)
             .send()
@@ -830,7 +836,7 @@ fn report_s3_error_to_sentry(
         extra.insert("backup_id", backup_id);
     }
 
-    let error_message = format!("{}: {}", operation, error.to_string());
+    let error_message = format!("{}: {}", operation, error);
     let extra_json = serde_json::to_string(&extra).unwrap_or_default();
     let sentry_message = format!("{} | context: {}", error_message, extra_json);
     sentry::capture_message(&sentry_message, sentry::Level::Error);

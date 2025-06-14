@@ -61,8 +61,6 @@ enum SshCommands {
     },
 }
 
-use sentry;
-use sentry_log;
 use std::env;
 
 #[tokio::main]
