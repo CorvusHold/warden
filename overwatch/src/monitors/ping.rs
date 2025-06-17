@@ -117,7 +117,7 @@ mod tests {
             id: "test-ping-1".to_string(),
             name: "Test Ping Service".to_string(),
             monitor_type: MonitorType::PING,
-            url: "https://www.google.com".to_string(),
+            url: "https://corvushold.com".to_string(),
             http_method: None,
             payload: None,
             headers: None,

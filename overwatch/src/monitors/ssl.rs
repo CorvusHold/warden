@@ -43,7 +43,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_valid_ssl() {
-        let result = verify_ssl("https://www.google.com").await;
+        let result = verify_ssl("https://corvushold.com").await;
         assert!(result.is_ok());
     }
 
