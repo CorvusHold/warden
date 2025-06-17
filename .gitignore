@@ -3,3 +3,4 @@ backups
 .DS_Store
 **/dist
 d
+*.sql

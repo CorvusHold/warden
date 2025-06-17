@@ -111,7 +111,7 @@ mod tests {
             id: "test-dns-1".to_string(),
             name: "Test DNS Service".to_string(),
             monitor_type: MonitorType::DNS,
-            url: "https://www.google.com".to_string(),
+            url: "https://corvushold.com".to_string(),
             http_method: None,
             payload: None,
             headers: None,
