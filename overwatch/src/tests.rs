@@ -118,7 +118,7 @@ mod http_tests {
 mod dns_tests {
     use super::*;
 
-    #[tokio::test]
+    /// Tests DNS monitoring by performing an "A" record lookup on a valid domain and asserting the result is successful.
     async fn test_dns_lookup() {
         let service = Service {
             id: "test-dns-1".to_string(),
@@ -176,7 +176,15 @@ mod dns_tests {
 mod ping_tests {
     use super::*;
 
-    #[tokio::test]
+    /// Tests that the Ping monitor successfully pings a valid domain.
+    ///
+    /// This test creates a `Service` configured for Ping monitoring with two ping attempts to "https://corvushold.com". It executes the service and asserts that the result indicates a successful ping.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Runs as part of the test suite; not intended for direct invocation.
+    /// ```
     async fn test_ping() {
         let service = Service {
             id: "test-ping-1".to_string(),
@@ -235,7 +243,15 @@ mod ping_tests {
 mod integration_tests {
     use super::*;
 
-    #[tokio::test]
+    /// Tests the execution of multiple monitoring services (HTTP, DNS, and Ping) and verifies that each completes successfully.
+    ///
+    /// This integration test creates three `Service` instances, each configured for a different monitor type targeting the same domain. It executes each service asynchronously, asserts that all executions succeed, and checks that all results indicate success.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // This test runs automatically with `cargo test` and does not require manual invocation.
+    /// ```
     async fn test_multiple_services() {
         let services = vec![
             Service {

@@ -34,6 +34,17 @@ enum DbSize {
 }
 
 impl DbSize {
+    /// Returns the number of users and orders associated with the database size.
+    ///
+    /// The tuple contains the user count as the first element and the order count as the second.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let (users, orders) = DbSize::Medium.row_counts();
+    /// assert_eq!(users, 50000);
+    /// assert_eq!(orders, 200000);
+    /// ```
     fn row_counts(&self) -> (usize, usize) {
         match self {
             DbSize::Small => (5000, 30000),     // users, orders
@@ -43,6 +54,19 @@ impl DbSize {
     }
 }
 
+/// Entry point for the fake SQL database generator CLI tool.
+///
+/// Parses command-line arguments to determine the database size, output file, and loading options. Generates a SQL dump file with fake users and orders if it does not already exist, and optionally loads it into a PostgreSQL database if requested.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success, or an error if file operations or database loading fail.
+///
+/// # Examples
+///
+/// ```sh
+/// cargo run -- --size medium --out mydb.sql --load --db-url postgres://user:pass@localhost/db
+/// ```
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let (user_count, order_count) = args.size.row_counts();
@@ -66,6 +90,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Loads a SQL file into a PostgreSQL database using the `psql` command-line tool.
+///
+/// Parses the provided database URL to extract connection parameters and executes `psql` to import the specified SQL file. The password, if present in the URL, is set via the `PGPASSWORD` environment variable.
+///
+/// # Arguments
+///
+/// * `sql_path` - Path to the SQL file to be loaded.
+/// * `db_url` - PostgreSQL connection URL.
+///
+/// # Errors
+///
+/// Returns an error if the database URL cannot be parsed or if the `psql` command fails to execute.
 fn load_sql_file(sql_path: &str, db_url: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Parse the db_url for psql args
     let url = url::Url::parse(db_url)?;
@@ -94,6 +130,19 @@ fn load_sql_file(sql_path: &str, db_url: &str) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
+/// Writes SQL statements to define the schema for `users` and `orders` tables.
+///
+/// Drops existing tables if they exist, then creates new `users` and `orders` tables with appropriate columns and constraints.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Cursor;
+/// let mut buffer = Cursor::new(Vec::new());
+/// write_schema(&mut buffer).unwrap();
+/// let sql = String::from_utf8(buffer.into_inner()).unwrap();
+/// assert!(sql.contains("CREATE TABLE users"));
+/// ```
 fn write_schema<W: Write>(out: &mut W) -> IoResult<()> {
     writeln!(out, "DROP TABLE IF EXISTS orders;")?;
     writeln!(out, "DROP TABLE IF EXISTS users;")?;
@@ -102,6 +151,23 @@ fn write_schema<W: Write>(out: &mut W) -> IoResult<()> {
     Ok(())
 }
 
+/// Generates a vector of fake user names and emails.
+///
+/// Each user has a randomly generated name and a unique email in the format `user{n}@example.com`.
+///
+/// # Parameters
+/// - `count`: The number of users to generate.
+///
+/// # Returns
+/// A vector of `(name, email)` tuples representing the generated users.
+///
+/// # Examples
+///
+/// ```
+/// let users = generate_users(3);
+/// assert_eq!(users.len(), 3);
+/// assert!(users[0].1.starts_with("user1@"));
+/// ```
 fn generate_users(count: usize) -> Vec<(String, String)> {
     let pb = ProgressBar::new(count as u64);
     pb.set_style(ProgressStyle::default_bar()
@@ -120,6 +186,27 @@ fn generate_users(count: usize) -> Vec<(String, String)> {
     users
 }
 
+/// Writes SQL `INSERT` statements for a list of users to the provided output.
+///
+/// Each user is assigned a sequential ID starting from 1. Single quotes in names and emails are escaped for SQL safety.
+///
+/// # Parameters
+/// - `out`: The writable output stream to which SQL statements are written.
+/// - `users`: A slice of `(name, email)` tuples representing users.
+///
+/// # Returns
+/// Returns an I/O result indicating success or failure.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Cursor;
+/// let users = vec![("Alice O'Neil".to_string(), "alice@example.com".to_string())];
+/// let mut buf = Cursor::new(Vec::new());
+/// write_users(&mut buf, &users).unwrap();
+/// let sql = String::from_utf8(buf.into_inner()).unwrap();
+/// assert!(sql.contains("INSERT INTO users"));
+/// ```
 fn write_users<W: Write>(out: &mut W, users: &[(String, String)]) -> IoResult<()> {
     let pb = ProgressBar::new(users.len() as u64);
     pb.set_style(ProgressStyle::default_bar()
@@ -136,6 +223,21 @@ fn write_users<W: Write>(out: &mut W, users: &[(String, String)]) -> IoResult<()
     Ok(())
 }
 
+/// Writes SQL insert statements for a specified number of orders with randomized data.
+///
+/// Each order is assigned a random user ID, product name, and amount, and is written as an SQL `INSERT` statement to the provided output stream.
+///
+/// # Parameters
+/// - `order_count`: The number of orders to generate and write.
+/// - `user_count`: The total number of users to select random user IDs from.
+///
+/// # Examples
+///
+/// ```
+/// use std::fs::File;
+/// let mut file = tempfile::tempfile().unwrap();
+/// write_orders(&mut file, 10, 5).unwrap();
+/// ```
 fn write_orders<W: Write>(out: &mut W, order_count: usize, user_count: usize) -> IoResult<()> {
     let pb = ProgressBar::new(order_count as u64);
     pb.set_style(ProgressStyle::default_bar()
