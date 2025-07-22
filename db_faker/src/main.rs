@@ -4,7 +4,6 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use std::io::{Result as IoResult, Write};
-use url;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -138,8 +137,8 @@ fn write_users<W: Write>(out: &mut W, user_count: usize) -> IoResult<()> {
     for i in 0..user_count {
         let name: String = Faker.fake();
         let email = format!("user{}@example.com", i + 1);
-        let name = name.replace('\t', " ").replace('\n', " ");
-        let email = email.replace('\t', " ").replace('\n', " ");
+        let name = name.replace(['\t', '\n'], " ");
+        let email = email.replace(['\t', '\n'], " ");
         writeln!(out, "{}\t{}\t{}", i + 1, name, email)?;
         pb.inc(1);
     }
@@ -165,7 +164,7 @@ fn write_orders<W: Write>(out: &mut W, order_count: usize, user_count: usize) ->
         let product = products.choose(&mut rng).unwrap_or(&"Widget");
         let amount = rng.gen_range(1..=10);
         // Tab-separated, escaping tabs and newlines
-        let product = product.replace('\t', " ").replace('\n', " ");
+        let product = product.replace(['\t', '\n'], " ");
         writeln!(out, "{}\t{}\t{}\t{}", i + 1, user_id, product, amount)?;
         pb.inc(1);
     }
