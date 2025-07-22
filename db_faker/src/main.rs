@@ -51,9 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if need_generate {
         let mut out = std::fs::File::create(&out_file)?;
         write_schema(&mut out)?;
-        let users = generate_users(user_count);
-        write_users(&mut out, &users)?;
-        write_orders(&mut out, order_count, users.len())?;
+        write_users(&mut out, user_count)?;
+        write_orders(&mut out, order_count, user_count)?;
         println!("SQL file generated: {}", out_file);
     } else {
         println!("SQL file already exists: {}", out_file);
@@ -67,13 +66,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn load_sql_file(sql_path: &str, db_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Check for psql in PATH
+    if which::which("psql").is_err() {
+        return Err("psql command not found in PATH. Please install PostgreSQL client tools.".into());
+    }
+
     // Parse the db_url for psql args
     let url = url::Url::parse(db_url)?;
     let user = url.username();
+    if user.is_empty() {
+        return Err("Database URL must contain a username".into());
+    }
     let password = url.password();
     let host = url.host_str().unwrap_or("localhost");
     let port = url.port().unwrap_or(5432);
     let dbname = url.path().trim_start_matches('/');
+    if dbname.is_empty() {
+        return Err("Database URL must contain a database name".into());
+    }
+
     let mut cmd = std::process::Command::new("psql");
     cmd.arg("-h").arg(host)
         .arg("-p").arg(port.to_string())
@@ -102,36 +113,24 @@ fn write_schema<W: Write>(out: &mut W) -> IoResult<()> {
     Ok(())
 }
 
-fn generate_users(count: usize) -> Vec<(String, String)> {
-    let pb = ProgressBar::new(count as u64);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} users")
-        .unwrap()
-        .progress_chars("#>-")
-    );
-    let mut users = Vec::with_capacity(count);
-    for i in 0..count {
-        let name: String = Faker.fake();
-        let email = format!("user{}@example.com", i + 1);
-        users.push((name, email));
-        pb.inc(1);
-    }
-    pb.finish_with_message("Users generated");
-    users
-}
 
-fn write_users<W: Write>(out: &mut W, users: &[(String, String)]) -> IoResult<()> {
-    let pb = ProgressBar::new(users.len() as u64);
+
+fn write_users<W: Write>(out: &mut W, user_count: usize) -> IoResult<()> {
+    let pb = ProgressBar::new(user_count as u64);
     pb.set_style(ProgressStyle::default_bar()
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} users written")
         .unwrap()
         .progress_chars("#>-"));
-    for (i, (name, email)) in users.iter().enumerate() {
-        let name = name.replace("'", "''");
-        let email = email.replace("'", "''");
-        writeln!(out, "INSERT INTO users (id, name, email) VALUES ({}, '{}', '{}');", i + 1, name, email)?;
+    writeln!(out, "COPY users (id, name, email) FROM stdin WITH (FORMAT text);")?;
+    for i in 0..user_count {
+        let name: String = Faker.fake();
+        let email = format!("user{}@example.com", i + 1);
+        let name = name.replace('\t', " ").replace('\n', " ");
+        let email = email.replace('\t', " ").replace('\n', " ");
+        writeln!(out, "{}\t{}\t{}", i + 1, name, email)?;
         pb.inc(1);
     }
+    writeln!(out, "\\.")?;
     pb.finish_with_message("Users written");
     Ok(())
 }
@@ -144,13 +143,17 @@ fn write_orders<W: Write>(out: &mut W, order_count: usize, user_count: usize) ->
         .progress_chars("#>-"));
     let products = ["Widget", "Gadget", "Thingamajig", "Doodad", "Gizmo"];
     let mut rng = rand::thread_rng();
+    writeln!(out, "COPY orders (id, user_id, product, amount) FROM stdin WITH (FORMAT text);")?;
     for i in 0..order_count {
         let user_id = rng.gen_range(1..=user_count);
         let product = products.choose(&mut rng).unwrap_or(&"Widget");
         let amount = rng.gen_range(1..=10);
-        writeln!(out, "INSERT INTO orders (id, user_id, product, amount) VALUES ({}, {}, '{}', {});", i + 1, user_id, product, amount)?;
+        // Tab-separated, escaping tabs and newlines
+        let product = product.replace('\t', " ").replace('\n', " ");
+        writeln!(out, "{}\t{}\t{}\t{}", i + 1, user_id, product, amount)?;
         pb.inc(1);
     }
+    writeln!(out, "\\.")?;
     pb.finish_with_message("Orders written");
     Ok(())
 }

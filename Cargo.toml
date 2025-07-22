@@ -14,23 +14,23 @@ codegen-units = 1
 members = ["common", "console", "daemon", "overwatch", "postgres", "ssh", "storage", "db_faker"]
 
 [dependencies]
-anyhow = "1.0.97"
-clap = { version = "4.5.36", features = ["derive"] }
-tokio = { version = "1.44.2", features = ["full"] }
+anyhow = "1.0.98"
+clap = { version = "4.5.41", features = ["derive"] }
+tokio = { version = "1.46.1", features = ["full"] }
 env_logger = "0.11.8"
 log = "0.4.27"
-sentry = "0.32.2"
-sentry-log = "0.32.2"
+sentry = "0.41.0"
+sentry-log = "0.41.0"
 console = { path = "./console" }
 daemon = { path = "./daemon" }
 postgres = { path = "./postgres" }
 ssh = { path = "./ssh" }
 common = { path = "./common" }
-uuid = { version = "1.16.0", features = ["v4", "serde"] }
-chrono = { version = "0.4.40", features = ["serde"] }
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
+chrono = { version = "0.4.41", features = ["serde"] }
 storage = { path = "./storage" }
 overwatch = { path = "./overwatch" }
 
 [dev-dependencies]
-assert_cmd = "2.0.12"
-predicates = "3.0.4"
+assert_cmd = "2.0.17"
+predicates = "3.1.3"

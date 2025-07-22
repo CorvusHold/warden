@@ -46,25 +46,25 @@ jobs:
       AWS_TEST_BUCKET: testbucket
       CI: true
     steps:
-    - uses: actions/checkout@v4
-    - name: Install latest PostgreSQL client
-      run: |
-        sudo apt-get update
-        sudo apt-get install --yes postgresql-client
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: rustfmt, clippy
-    - name: Generate fake database (medium)
-      env:
-        DATABASE_URL: "postgres://warden_dev:warden_dev@localhost:5432/warden_dev"
-      run: cargo run --release -p db_faker -- --db-url "$DATABASE_URL" --size medium
-    - name: Check formatting
-      run: cargo fmt -- --check
-    - name: Lint with clippy
-      run: cargo clippy --workspace -- -D warnings
-    - name: Run tests
-      run: cargo test --workspace -- --test-threads=1
+      - uses: actions/checkout@v4
+      - name: Install latest PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      - name: Generate fake database (medium)
+        env:
+          DATABASE_URL: "postgres://warden_dev:warden_dev@localhost:5432/warden_dev"
+        run: cargo run --release -p db_faker -- --db-url "$DATABASE_URL" --size medium
+      - name: Check formatting
+        run: cargo fmt -- --check
+      - name: Lint with clippy
+        run: cargo clippy --workspace -- -D warnings
+      - name: Run tests
+        run: cargo test --workspace -- --test-threads=1
