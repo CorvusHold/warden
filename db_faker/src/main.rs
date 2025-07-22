@@ -1,9 +1,9 @@
 use clap::{Parser, ValueEnum};
 use fake::{Fake, Faker};
-use rand::Rng;
-use rand::seq::SliceRandom;
-use std::io::{Write, Result as IoResult};
 use indicatif::{ProgressBar, ProgressStyle};
+use rand::seq::SliceRandom;
+use rand::Rng;
+use std::io::{Result as IoResult, Write};
 use url;
 
 #[derive(Parser, Debug)]
@@ -36,7 +36,7 @@ enum DbSize {
 impl DbSize {
     fn row_counts(&self) -> (usize, usize) {
         match self {
-            DbSize::Small => (5000, 30000),     // users, orders
+            DbSize::Small => (5000, 30000), // users, orders
             DbSize::Medium => (50000, 200000),
             DbSize::Large => (2000000, 10000000),
         }
@@ -46,7 +46,9 @@ impl DbSize {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let (user_count, order_count) = args.size.row_counts();
-    let out_file = args.out.unwrap_or_else(|| format!("fake_{:?}.sql", args.size).to_lowercase());
+    let out_file = args
+        .out
+        .unwrap_or_else(|| format!("fake_{:?}.sql", args.size).to_lowercase());
     let need_generate = !std::path::Path::new(&out_file).exists();
     if need_generate {
         let mut out = std::fs::File::create(&out_file)?;
@@ -59,7 +61,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("You can load it with: psql < {}", out_file);
     if args.load {
-        let db_url = args.db_url.as_ref().expect("--db-url must be provided with --load");
+        let db_url = args
+            .db_url
+            .as_ref()
+            .expect("--db-url must be provided with --load");
         load_sql_file(&out_file, db_url)?;
     }
     Ok(())
@@ -68,7 +73,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn load_sql_file(sql_path: &str, db_url: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Check for psql in PATH
     if which::which("psql").is_err() {
-        return Err("psql command not found in PATH. Please install PostgreSQL client tools.".into());
+        return Err(
+            "psql command not found in PATH. Please install PostgreSQL client tools.".into(),
+        );
     }
 
     // Parse the db_url for psql args
@@ -86,11 +93,16 @@ fn load_sql_file(sql_path: &str, db_url: &str) -> Result<(), Box<dyn std::error:
     }
 
     let mut cmd = std::process::Command::new("psql");
-    cmd.arg("-h").arg(host)
-        .arg("-p").arg(port.to_string())
-        .arg("-U").arg(user)
-        .arg("-d").arg(dbname)
-        .arg("-f").arg(sql_path);
+    cmd.arg("-h")
+        .arg(host)
+        .arg("-p")
+        .arg(port.to_string())
+        .arg("-U")
+        .arg(user)
+        .arg("-d")
+        .arg(dbname)
+        .arg("-f")
+        .arg(sql_path);
     if let Some(pw) = password {
         cmd.env("PGPASSWORD", pw);
     }
@@ -113,15 +125,16 @@ fn write_schema<W: Write>(out: &mut W) -> IoResult<()> {
     Ok(())
 }
 
-
-
 fn write_users<W: Write>(out: &mut W, user_count: usize) -> IoResult<()> {
     let pb = ProgressBar::new(user_count as u64);
     pb.set_style(ProgressStyle::default_bar()
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} users written")
         .unwrap()
         .progress_chars("#>-"));
-    writeln!(out, "COPY users (id, name, email) FROM stdin WITH (FORMAT text);")?;
+    writeln!(
+        out,
+        "COPY users (id, name, email) FROM stdin WITH (FORMAT text);"
+    )?;
     for i in 0..user_count {
         let name: String = Faker.fake();
         let email = format!("user{}@example.com", i + 1);
@@ -143,7 +156,10 @@ fn write_orders<W: Write>(out: &mut W, order_count: usize, user_count: usize) ->
         .progress_chars("#>-"));
     let products = ["Widget", "Gadget", "Thingamajig", "Doodad", "Gizmo"];
     let mut rng = rand::thread_rng();
-    writeln!(out, "COPY orders (id, user_id, product, amount) FROM stdin WITH (FORMAT text);")?;
+    writeln!(
+        out,
+        "COPY orders (id, user_id, product, amount) FROM stdin WITH (FORMAT text);"
+    )?;
     for i in 0..order_count {
         let user_id = rng.gen_range(1..=user_count);
         let product = products.choose(&mut rng).unwrap_or(&"Widget");
