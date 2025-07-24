@@ -48,7 +48,7 @@ pub struct ForwardCommand {
 
 /// Find an available local port
 pub fn find_available_port() -> Option<u16> {
-    (10000..65535).find(|port| TcpListener::bind(format!("127.0.0.1:{}", port)).is_ok())
+    (10000..65535).find(|port| TcpListener::bind(format!("127.0.0.1:{port}")).is_ok())
 }
 
 pub async fn forward(cmd: ForwardCommand) -> Result<()> {

@@ -94,7 +94,7 @@ impl SSHTunnel {
         *self.session.lock().await = Some(session);
 
         let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", local_port)).await?;
-        log::info!("Listening on localhost:{}", local_port);
+        log::info!("Listening on localhost:{local_port}");
 
         let session = self.session.clone();
         let running = self.running.clone();
@@ -103,7 +103,7 @@ impl SSHTunnel {
             while running.load(Ordering::SeqCst) {
                 match listener.accept().await {
                     Ok((local_stream, addr)) => {
-                        log::info!("Accepting connection from {}", addr);
+                        log::info!("Accepting connection from {addr:?}");
                         let session = session.clone();
                         let remote_host = remote_host.clone();
                         let running = running.clone();
@@ -119,13 +119,13 @@ impl SSHTunnel {
                             )
                             .await
                             {
-                                log::error!("Forwarding error: {}", e);
+                                log::error!("Forwarding error: {e}");
                             }
                         });
                     }
                     Err(e) => {
                         if running.load(Ordering::SeqCst) {
-                            log::error!("Error accepting connection: {}", e);
+                            log::error!("Error accepting connection: {e}");
                         }
                     }
                 }
