@@ -67,15 +67,11 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
     let local_port =
         local_port.unwrap_or_else(|| find_available_port().expect("No available ports found"));
 
-    info!(
-        "Forwarding remote port {remote_port} on {remote_host} to local port {local_port}",
-    );
+    info!("Forwarding remote port {remote_port} on {remote_host} to local port {local_port}",);
 
     let mut tunnel = SSHTunnel::new(ssh_host.clone(), ssh_user.clone(), Some(ssh_port));
 
-    info!(
-        "Attempting SSH tunnel to {ssh_user}@{ssh_host}:{ssh_port}",
-    );
+    info!("Attempting SSH tunnel to {ssh_user}@{ssh_host}:{ssh_port}",);
 
     // Set authentication
     if let Some(password) = &remote_password {
@@ -109,18 +105,14 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
     .expect("Error setting Ctrl+C handler");
 
     // Forward the port
-    info!(
-        "Forwarding port {local_port} to {remote_host}:{remote_port}",
-    );
+    info!("Forwarding port {local_port} to {remote_host}:{remote_port}",);
     match tunnel_ref
         .forward_port(local_port, remote_port, remote_host.clone())
         .await
     {
         Ok(_) => {
             info!("SSH tunnel established successfully");
-            info!(
-                "Connect to localhost:{local_port} to access {remote_host}:{remote_port}",
-            );
+            info!("Connect to localhost:{local_port} to access {remote_host}:{remote_port}",);
 
             // Keep the tunnel running until it's stopped (e.g., by Ctrl+C)
             while tunnel_ref.is_running() {
