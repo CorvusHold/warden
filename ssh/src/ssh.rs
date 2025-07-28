@@ -93,7 +93,7 @@ impl SSHTunnel {
 
         *self.session.lock().await = Some(session);
 
-        let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", local_port)).await?;
+        let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{local_port}")).await?;
         log::info!("Listening on localhost:{local_port}");
 
         let session = self.session.clone();
