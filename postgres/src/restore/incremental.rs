@@ -54,7 +54,7 @@ impl IncrementalRestoreManager {
                 "Full backup path does not exist: {:?}",
                 self.full_backup.backup_path
             );
-            error!("{}", error_msg);
+            error!("{error_msg}");
 
             restore.fail(error_msg);
             return Err(PostgresError::RestoreError(
@@ -82,8 +82,8 @@ impl IncrementalRestoreManager {
                         Ok(restore)
                     }
                     Err(e) => {
-                        let error_msg = format!("Failed to apply incremental backups: {}", e);
-                        error!("{}", error_msg);
+                        let error_msg = format!("Failed to apply incremental backups: {e}");
+                        error!("{error_msg}");
 
                         restore.fail(error_msg);
 
@@ -94,8 +94,8 @@ impl IncrementalRestoreManager {
                 }
             }
             Err(e) => {
-                let error_msg = format!("Failed to restore full backup: {}", e);
-                error!("{}", error_msg);
+                let error_msg = format!("Failed to restore full backup: {e}");
+                error!("{error_msg}");
 
                 restore.fail(error_msg);
 
@@ -291,7 +291,7 @@ impl IncrementalRestoreManager {
 
         fs::write(&recovery_conf_path, recovery_conf_content).map_err(PostgresError::Io)?;
 
-        info!("Created recovery.conf file at {:?}", recovery_conf_path);
+        info!("Created recovery.conf file at {recovery_conf_path:?}");
 
         Ok(())
     }

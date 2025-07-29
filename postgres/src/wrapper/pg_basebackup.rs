@@ -78,7 +78,7 @@ impl PgBaseBackup {
             cmd.arg("--verbose");
         }
 
-        debug!("Running pg_basebackup command: {:?}", cmd);
+        debug!("Running pg_basebackup command: {cmd:?}");
 
         let output = cmd
             .stdout(Stdio::inherit())
@@ -107,7 +107,7 @@ impl PgBaseBackup {
         }
 
         let version = String::from_utf8_lossy(&output.stdout);
-        debug!("pg_basebackup version: {}", version);
+        debug!("pg_basebackup version: {version}");
 
         Ok(())
     }

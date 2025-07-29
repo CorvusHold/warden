@@ -38,10 +38,10 @@ impl PostgresManager {
                     catalog
                 }
                 Err(e) => {
-                    warn!("Failed to load backup catalog: {}, creating a new one", e);
+                    warn!("Failed to load backup catalog: {e}, creating a new one");
                     let catalog = BackupCatalog::new();
                     if let Err(e) = catalog.save_to_file(&catalog_path) {
-                        warn!("Failed to save new backup catalog: {}", e);
+                        warn!("Failed to save new backup catalog: {e}");
                     }
                     catalog
                 }
@@ -50,7 +50,7 @@ impl PostgresManager {
             info!("Creating new backup catalog");
             let catalog = BackupCatalog::new();
             if let Err(e) = catalog.save_to_file(&catalog_path) {
-                warn!("Failed to save new backup catalog: {}", e);
+                warn!("Failed to save new backup catalog: {e}");
             }
             catalog
         };
@@ -137,23 +137,21 @@ impl PostgresManager {
         backup_id: &Uuid,
         target_dir: PathBuf,
     ) -> Result<Restore, PostgresError> {
-        info!("Starting restore from full backup: {}", backup_id);
+        info!("Starting restore from full backup: {backup_id}");
 
         // Find the backup
         let backup = match self.catalog.get_backup(backup_id) {
             Some(backup) => {
                 if backup.backup_type != BackupType::Full {
                     return Err(PostgresError::RestoreError(format!(
-                        "Backup {} is not a full backup",
-                        backup_id
+                        "Backup {backup_id} is not a full backup"
                     )));
                 }
                 backup.clone()
             }
             None => {
                 return Err(PostgresError::RestoreError(format!(
-                    "Backup {} not found",
-                    backup_id
+                    "Backup {backup_id} not found"
                 )));
             }
         };
@@ -178,8 +176,7 @@ impl PostgresManager {
         target_dir: PathBuf,
     ) -> Result<Restore, PostgresError> {
         info!(
-            "Starting restore from incremental backups based on full backup: {}",
-            full_backup_id
+            "Starting restore from incremental backups based on full backup: {full_backup_id}"
         );
 
         // Find the full backup
@@ -187,16 +184,14 @@ impl PostgresManager {
             Some(backup) => {
                 if backup.backup_type != BackupType::Full {
                     return Err(PostgresError::RestoreError(format!(
-                        "Backup {} is not a full backup",
-                        full_backup_id
+                        "Backup {full_backup_id} is not a full backup"
                     )));
                 }
                 backup.clone()
             }
             None => {
                 return Err(PostgresError::RestoreError(format!(
-                    "Backup {} not found",
-                    full_backup_id
+                    "Backup {full_backup_id} not found"
                 )));
             }
         };
@@ -231,8 +226,7 @@ impl PostgresManager {
         target_time: DateTime<Utc>,
     ) -> Result<Restore, PostgresError> {
         info!(
-            "Starting point-in-time restore to {} based on full backup: {}",
-            target_time, full_backup_id
+            "Starting point-in-time restore to {target_time} based on full backup: {full_backup_id}"
         );
 
         // Find the full backup
@@ -240,16 +234,14 @@ impl PostgresManager {
             Some(backup) => {
                 if backup.backup_type != BackupType::Full {
                     return Err(PostgresError::RestoreError(format!(
-                        "Backup {} is not a full backup",
-                        full_backup_id
+                        "Backup {full_backup_id} is not a full backup"
                     )));
                 }
                 backup.clone()
             }
             None => {
                 return Err(PostgresError::RestoreError(format!(
-                    "Backup {} not found",
-                    full_backup_id
+                    "Backup {full_backup_id} not found"
                 )));
             }
         };
@@ -284,7 +276,7 @@ impl PostgresManager {
         backup_id: &Uuid,
         target_dir: PathBuf,
     ) -> Result<Restore, PostgresError> {
-        info!("Restoring snapshot backup: {}", backup_id);
+        info!("Restoring snapshot backup: {backup_id}");
 
         let backup = self
             .catalog
@@ -308,7 +300,7 @@ impl PostgresManager {
 
     /// List contents of a snapshot backup
     pub async fn list_snapshot_contents(&self, backup_id: &Uuid) -> Result<String, PostgresError> {
-        info!("Listing contents of snapshot backup: {}", backup_id);
+        info!("Listing contents of snapshot backup: {backup_id}");
 
         let backup = self
             .catalog

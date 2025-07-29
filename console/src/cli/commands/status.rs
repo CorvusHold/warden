@@ -71,11 +71,11 @@ impl Status {
         match self.format.as_str() {
             "json" => {
                 let json = serde_json::to_string_pretty(&status)?;
-                info!("{}", json);
+                info!("{json}");
             }
             "yaml" => {
                 let yaml = serde_yaml::to_string(&status)?;
-                info!("{}", yaml);
+                info!("{yaml}");
             }
             "text" | "color" => {
                 info!("Warden version: {}", status.warden_version);

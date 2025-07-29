@@ -24,7 +24,7 @@ pub async fn execute() -> Result<()> {
             // Remove PID file
             fs::remove_file(pid_file)?;
         } else {
-            info!("Failed to stop daemon: {:?}", status);
+            info!("Failed to stop daemon: {status:?}");
         }
     } else {
         info!("No PID file found, daemon may not be running");

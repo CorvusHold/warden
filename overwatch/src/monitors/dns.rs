@@ -42,7 +42,7 @@ pub async fn exec(service: &Service) -> Result<MonitorResult, Error> {
 async fn check_dns(service: &Service) -> Result<String, Error> {
     // Parse URL to extract hostname
     let url = Url::parse(&service.url)
-        .map_err(|e| Error::InvalidServiceConfig(format!("Invalid URL: {}", e)))?;
+        .map_err(|e| Error::InvalidServiceConfig(format!("Invalid URL: {e}")))?;
 
     let hostname = url
         .host_str()
@@ -61,8 +61,7 @@ async fn check_dns(service: &Service) -> Result<String, Error> {
         Some("SRV") => RecordType::SRV,
         Some(rt) => {
             return Err(Error::DnsRecordType(format!(
-                "Unsupported DNS record type: {}",
-                rt
+                "Unsupported DNS record type: {rt}"
             )))
         }
     };
@@ -73,13 +72,13 @@ async fn check_dns(service: &Service) -> Result<String, Error> {
 
     // Create the resolver
     let resolver = TokioAsyncResolver::tokio_from_system_conf()
-        .map_err(|e| Error::DnsResolution(format!("Failed to create resolver: {}", e)))?;
+        .map_err(|e| Error::DnsResolution(format!("Failed to create resolver: {e}")))?;
 
     // Perform lookup
     let response = resolver
         .lookup(hostname.clone(), record_type)
         .await
-        .map_err(|e| Error::DnsResolution(format!("DNS lookup failed: {}", e)))?;
+        .map_err(|e| Error::DnsResolution(format!("DNS lookup failed: {e}")))?;
 
     // Get all records as strings
     let records: Vec<String> = response.iter().map(|r| r.to_string()).collect();
@@ -88,15 +87,13 @@ async fn check_dns(service: &Service) -> Result<String, Error> {
     if let Some(expected_ip) = &service.expected_ip {
         if !records.iter().any(|r| r.contains(expected_ip)) {
             return Err(Error::DnsExpectedIp(format!(
-                "Expected IP {} not found in DNS records: {:?}",
-                expected_ip, records
+                "Expected IP {expected_ip} not found in DNS records: {records:?}"
             )));
         }
     }
 
     Ok(format!(
-        "DNS lookup for {} ({:?}) successful. Records: {:?}",
-        hostname, record_type, records
+        "DNS lookup for {hostname} ({record_type:?}) successful. Records: {records:?}"
     ))
 }
 

@@ -62,7 +62,7 @@ pub async fn snapshot_backup(
         let keeper_instance = TunnelKeeper::instance().await;
         let mut keeper = keeper_instance.lock().await;
         if let Err(e) = keeper.setup(&config_clone).await {
-            error!("[CLI] Failed to setup SSH tunnel: {}", e);
+            error!("[CLI] Failed to setup SSH tunnel: {e}");
             return Err(anyhow!("Failed to setup SSH tunnel: {}", e));
         }
     }
@@ -112,7 +112,7 @@ pub async fn snapshot_backup(
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to upload physical backup: {}", e))?;
-            let dump_file = actual_backup_path.join(format!("{}.dump", database));
+            let dump_file = actual_backup_path.join(format!("{database}.dump"));
             if dump_file.exists() {
                 info!(
                     "[CLI] Uploading logical backup from: {}",
@@ -162,7 +162,7 @@ pub async fn snapshot_backup(
         if is_active {
             let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
-                error!("[CLI] Warning: Error closing SSH tunnel: {}", e);
+                error!("[CLI] Warning: Error closing SSH tunnel: {e}");
             }
         }
     }
@@ -321,7 +321,7 @@ pub async fn full_backup(
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to upload physical backup: {}", e))?;
-            let dump_file = actual_backup_path.join(format!("{}.dump", database));
+            let dump_file = actual_backup_path.join(format!("{database}.dump"));
             if dump_file.exists() {
                 log::info!("Uploading logical backup from: {}", dump_file.display());
                 storage
@@ -365,7 +365,7 @@ pub async fn full_backup(
         if is_active {
             let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
-                log::error!("Warning: Error closing SSH tunnel: {}", e);
+                log::error!("Warning: Error closing SSH tunnel: {e}");
             }
         }
     }
@@ -459,7 +459,7 @@ pub async fn incremental_backup(
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to upload physical backup: {}", e))?;
-            let dump_file = actual_backup_path.join(format!("{}.dump", database));
+            let dump_file = actual_backup_path.join(format!("{database}.dump"));
             if dump_file.exists() {
                 info!("Uploading logical backup from: {}", dump_file.display());
                 storage
@@ -499,7 +499,7 @@ pub async fn incremental_backup(
         if is_active {
             let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
-                error!("Warning: Error closing SSH tunnel: {}", e);
+                error!("Warning: Error closing SSH tunnel: {e}");
             }
         }
     }
@@ -619,7 +619,7 @@ pub async fn restore(
 
             // Download each incremental backup
             for backup_id in incremental_backups {
-                info!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {backup_id}...");
 
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
@@ -654,8 +654,7 @@ pub async fn restore(
     };
     let mut manager = PostgresManager::new(config, backup_dir)?;
     info!(
-        "Restoring with incremental backups from {} to {:?}...",
-        full_backup_id, target_dir
+        "Restoring with incremental backups from {full_backup_id} to {target_dir:?}..."
     );
     let full_backup_id =
         Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow::anyhow!(e))?;
@@ -711,7 +710,7 @@ pub async fn restore_point_in_time(
                 .await
                 .map_err(|e| anyhow!("Failed to list incremental backups: {}", e))?;
             for backup_id in incremental_backups {
-                info!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {backup_id}...");
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
                     std::fs::create_dir_all(&backup_path)
@@ -764,8 +763,7 @@ pub async fn restore_point_in_time(
         .map_err(|e| anyhow::anyhow!("Invalid target time format: {}", e))?
         .with_timezone(&chrono::Utc);
     info!(
-        "Restoring to point in time {} from {} to {:?}...",
-        target_time, full_backup_id, target_dir
+        "Restoring to point in time {target_time} from {full_backup_id} to {target_dir:?}..."
     );
     let full_backup_id = Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow!(e))?;
     let restore = manager
@@ -789,7 +787,7 @@ pub async fn restore_point_in_time(
         if is_active {
             let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
-                error!("Warning: Error closing SSH tunnel: {}", e);
+                error!("Warning: Error closing SSH tunnel: {e}");
             }
         }
     }
@@ -855,8 +853,7 @@ pub async fn restore_snapshot(
     };
     let mut manager = PostgresManager::new(config, backup_dir)?;
     info!(
-        "Restoring from snapshot backup {} to {:?}...",
-        backup_id, target_dir
+        "Restoring from snapshot backup {backup_id} to {target_dir:?}..."
     );
     let backup_id = Uuid::parse_str(&backup_id).map_err(|e: uuid::Error| anyhow::anyhow!(e))?;
     let restore = manager
@@ -880,7 +877,7 @@ async fn restart_postgresql(
 ) -> Result<()> {
     match (container_id, container_type.as_deref()) {
         (Some(id), Some("docker")) => {
-            info!("Restarting PostgreSQL in Docker container {}...", id);
+            info!("Restarting PostgreSQL in Docker container {id}...");
             // Execute Docker command to restart PostgreSQL
             let output = std::process::Command::new("docker")
                 .args([
@@ -907,7 +904,7 @@ async fn restart_postgresql(
             info!("PostgreSQL successfully restarted in Docker container");
         }
         (Some(id), Some("kubernetes")) => {
-            info!("Restarting PostgreSQL in Kubernetes pod {}...", id);
+            info!("Restarting PostgreSQL in Kubernetes pod {id}...");
             // Execute kubectl command to restart PostgreSQL
             let output = std::process::Command::new("kubectl")
                 .args([
@@ -956,7 +953,7 @@ async fn restart_postgresql(
                 "macos" => restart_postgresql_macos().await?,
                 "linux" => restart_postgresql_linux().await?,
                 _ => {
-                    info!("Auto-restart not supported on {} operating system. Please restart PostgreSQL manually.", os);
+                    info!("Auto-restart not supported on {os} operating system. Please restart PostgreSQL manually.");
                 }
             }
         }
@@ -997,8 +994,7 @@ async fn restart_postgresql_macos() -> Result<()> {
             {
                 if output.status.success() {
                     info!(
-                        "PostgreSQL successfully restarted using pg_ctl with data directory: {}",
-                        data_dir
+                        "PostgreSQL successfully restarted using pg_ctl with data directory: {data_dir}"
                     );
                     return Ok(());
                 }
@@ -1051,15 +1047,14 @@ async fn restart_postgresql_linux() -> Result<()> {
 
     // Method 2: Try with specific version numbers
     for version in ["14", "13", "12", "11", "10", "9.6"] {
-        let service_name = format!("postgresql-{}", version);
+        let service_name = format!("postgresql-{version}");
         if let Ok(output) = std::process::Command::new("systemctl")
             .args(["restart", &service_name])
             .output()
         {
             if output.status.success() {
                 info!(
-                    "PostgreSQL {} successfully restarted using systemctl",
-                    version
+                    "PostgreSQL {version} successfully restarted using systemctl"
                 );
                 return Ok(());
             }
@@ -1093,8 +1088,7 @@ async fn restart_postgresql_linux() -> Result<()> {
             {
                 if output.status.success() {
                     info!(
-                        "PostgreSQL successfully restarted using pg_ctl with data directory: {}",
-                        data_dir
+                        "PostgreSQL successfully restarted using pg_ctl with data directory: {data_dir}"
                     );
                     return Ok(());
                 }
@@ -1151,7 +1145,7 @@ pub async fn list_snapshot_contents(
 
             // Download each incremental backup
             for backup_id in incremental_backups {
-                info!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {backup_id}...");
 
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
@@ -1185,14 +1179,14 @@ pub async fn list_snapshot_contents(
         ssh_remote_port: ssh.remote_port,
     };
     let manager = PostgresManager::new(config, backup_dir)?;
-    info!("Snapshot backup contents for {}:", backup_id);
+    info!("Snapshot backup contents for {backup_id}:");
     let backup_id = Uuid::parse_str(&backup_id).map_err(|e: uuid::Error| anyhow::anyhow!(e))?;
     let contents = manager
         .list_snapshot_contents(&backup_id)
         .await
         .map_err(|e: PostgresError| anyhow::anyhow!(e))?;
     for item in contents.split('\n').filter(|s| !s.is_empty()) {
-        info!("{}", item);
+        info!("{item}");
     }
     Ok(())
 }

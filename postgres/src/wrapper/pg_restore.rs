@@ -22,12 +22,11 @@ impl PgRestore {
         target_db: Option<&str>,
     ) -> Result<(), PostgresError> {
         let dump_file = dump_file.as_ref();
-        info!("Restoring database from dump file: {:?}", dump_file);
+        info!("Restoring database from dump file: {dump_file:?}");
 
         if !dump_file.exists() {
             return Err(PostgresError::RestoreError(format!(
-                "Dump file does not exist: {:?}",
-                dump_file
+                "Dump file does not exist: {dump_file:?}"
             )));
         }
 
@@ -62,7 +61,7 @@ impl PgRestore {
             cmd.env("PGPASSWORD", password);
         }
 
-        debug!("Running pg_restore command: {:?}", cmd);
+        debug!("Running pg_restore command: {cmd:?}");
 
         // Execute command
         let output = cmd
@@ -73,16 +72,14 @@ impl PgRestore {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            error!("pg_restore failed: {}", stderr);
+            error!("pg_restore failed: {stderr}");
             return Err(PostgresError::RestoreError(format!(
-                "pg_restore failed: {}",
-                stderr
+                "pg_restore failed: {stderr}"
             )));
         }
 
         info!(
-            "Database restored successfully from dump file: {:?}",
-            dump_file
+            "Database restored successfully from dump file: {dump_file:?}"
         );
         Ok(())
     }
@@ -96,14 +93,12 @@ impl PgRestore {
     ) -> Result<(), PostgresError> {
         let dump_file = dump_file.as_ref();
         info!(
-            "Restoring database from dump file with custom options: {:?}",
-            dump_file
+            "Restoring database from dump file with custom options: {dump_file:?}"
         );
 
         if !dump_file.exists() {
             return Err(PostgresError::RestoreError(format!(
-                "Dump file does not exist: {:?}",
-                dump_file
+                "Dump file does not exist: {dump_file:?}"
             )));
         }
 
@@ -138,7 +133,7 @@ impl PgRestore {
             cmd.env("PGPASSWORD", password);
         }
 
-        debug!("Running pg_restore command: {:?}", cmd);
+        debug!("Running pg_restore command: {cmd:?}");
 
         // Execute command
         let output = cmd
@@ -149,16 +144,14 @@ impl PgRestore {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            error!("pg_restore failed: {}", stderr);
+            error!("pg_restore failed: {stderr}");
             return Err(PostgresError::RestoreError(format!(
-                "pg_restore failed: {}",
-                stderr
+                "pg_restore failed: {stderr}"
             )));
         }
 
         info!(
-            "Database restored successfully from dump file: {:?}",
-            dump_file
+            "Database restored successfully from dump file: {dump_file:?}"
         );
         Ok(())
     }
@@ -169,12 +162,11 @@ impl PgRestore {
         dump_file: P,
     ) -> Result<String, PostgresError> {
         let dump_file = dump_file.as_ref();
-        info!("Listing contents of dump file: {:?}", dump_file);
+        info!("Listing contents of dump file: {dump_file:?}");
 
         if !dump_file.exists() {
             return Err(PostgresError::RestoreError(format!(
-                "Dump file does not exist: {:?}",
-                dump_file
+                "Dump file does not exist: {dump_file:?}"
             )));
         }
 
@@ -184,7 +176,7 @@ impl PgRestore {
         // Add options
         cmd.arg("--list").arg(dump_file);
 
-        debug!("Running pg_restore --list command: {:?}", cmd);
+        debug!("Running pg_restore --list command: {cmd:?}");
 
         // Execute command
         let output = cmd
@@ -195,15 +187,14 @@ impl PgRestore {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            error!("pg_restore --list failed: {}", stderr);
+            error!("pg_restore --list failed: {stderr}");
             return Err(PostgresError::RestoreError(format!(
-                "pg_restore --list failed: {}",
-                stderr
+                "pg_restore --list failed: {stderr}"
             )));
         }
 
         let contents = String::from_utf8_lossy(&output.stdout).to_string();
-        info!("Successfully listed contents of dump file: {:?}", dump_file);
+        info!("Successfully listed contents of dump file: {dump_file:?}");
 
         Ok(contents)
     }

@@ -62,7 +62,7 @@ impl FullRestoreManager {
         let (client, connection) = tokio_postgres::connect(&connection_string, NoTls).await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                error!("Connection error: {}", e);
+                error!("Connection error: {e}");
             }
         });
         Ok(client)
@@ -134,7 +134,7 @@ impl FullRestoreManager {
         // Check if the backup exists
         if !self.backup.backup_path.exists() {
             let error_msg = format!("Backup path does not exist: {:?}", self.backup.backup_path);
-            error!("{}", error_msg);
+            error!("{error_msg}");
 
             restore.fail(error_msg);
             return Err(PostgresError::RestoreError(
@@ -152,7 +152,7 @@ impl FullRestoreManager {
 
                 // Restore the database using pg_restore if applicable
                 if let Err(e) = self.restore_database_content() {
-                    warn!("Database content restore failed: {}", e);
+                    warn!("Database content restore failed: {e}");
                     // Continue anyway as we've copied the files successfully
                 }
 
@@ -163,8 +163,8 @@ impl FullRestoreManager {
                 Ok(restore)
             }
             Err(e) => {
-                let error_msg = format!("Full restore failed: {}", e);
-                error!("{}", error_msg);
+                let error_msg = format!("Full restore failed: {e}");
+                error!("{error_msg}");
 
                 restore.fail(error_msg);
 
@@ -250,7 +250,7 @@ impl FullRestoreManager {
         let entries = match fs::read_dir(&self.backup.backup_path) {
             Ok(entries) => entries,
             Err(e) => {
-                warn!("Failed to read backup directory: {}", e);
+                warn!("Failed to read backup directory: {e}");
                 // Create a dummy file to ensure the directory is not empty (for test verification)
                 let dummy_file = self.target_dir.join(".restore_complete");
                 fs::write(dummy_file, "Restore completed successfully")
@@ -304,7 +304,7 @@ impl FullRestoreManager {
 
         fs::write(&recovery_conf_path, recovery_conf_content).map_err(PostgresError::Io)?;
 
-        info!("Created recovery.conf file at {:?}", recovery_conf_path);
+        info!("Created recovery.conf file at {recovery_conf_path:?}");
 
         Ok(())
     }
@@ -332,7 +332,7 @@ impl FullRestoreManager {
 
         // Use the first dump file found
         let dump_file = &dump_files[0].path();
-        info!("Found database dump file: {:?}", dump_file);
+        info!("Found database dump file: {dump_file:?}");
 
         // Determine if it's a custom format or plain SQL
         let is_custom_format = dump_file.to_string_lossy().ends_with(".dump")
@@ -352,12 +352,11 @@ impl FullRestoreManager {
 
         if let Ok(status) = create_db_result {
             if status.success() {
-                info!("Created database {}", db_name);
+                info!("Created database {db_name}");
             } else {
                 // Database might already exist, which is fine
                 info!(
-                    "Database {} might already exist, continuing with restore",
-                    db_name
+                    "Database {db_name} might already exist, continuing with restore"
                 );
             }
         }
@@ -366,8 +365,7 @@ impl FullRestoreManager {
         if is_custom_format {
             // Use pg_restore for custom format dumps
             info!(
-                "Restoring database content using pg_restore from {:?}",
-                dump_file
+                "Restoring database content using pg_restore from {dump_file:?}"
             );
             let restore_result = Command::new("pg_restore")
                 .args([
@@ -395,7 +393,7 @@ impl FullRestoreManager {
             }
         } else {
             // Use psql for plain SQL dumps
-            info!("Restoring database content using psql from {:?}", dump_file);
+            info!("Restoring database content using psql from {dump_file:?}");
             let restore_result = Command::new("psql")
                 .args([
                     "-h",

@@ -18,11 +18,11 @@ async fn snapshot_backup_and_restore_real() {
     let port = node.get_host_port_ipv4(5432).await.unwrap();
     let user = "postgres";
     let db = "postgres";
-    println!("[TEST] Postgres container started on {}:{}", host, port);
+    println!("[TEST] Postgres container started on {host}:{port}");
 
     let backup_dir = tempdir().unwrap();
     let backup_dir_path = backup_dir.path().to_str().unwrap();
-    println!("[TEST] Using backup dir: {}", backup_dir_path);
+    println!("[TEST] Using backup dir: {backup_dir_path}");
 
     // Wait for Postgres to be ready (simple retry loop)
     let mut ready = false;
@@ -62,7 +62,7 @@ async fn snapshot_backup_and_restore_real() {
                 }
             }
             Err(e) => {
-                println!("[TEST] Error running psql: {}", e);
+                println!("[TEST] Error running psql: {e}");
             }
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -104,7 +104,7 @@ async fn snapshot_backup_and_restore_real() {
 
     // Insert test table and row
     let sql = "CREATE TABLE test_table (id SERIAL PRIMARY KEY, name TEXT); INSERT INTO test_table (name) VALUES ('testdata');";
-    println!("[TEST] Inserting test data with SQL: {}", sql);
+    println!("[TEST] Inserting test data with SQL: {sql}");
     let insert = std::process::Command::new("psql")
         .args([
             "-h",
@@ -137,8 +137,8 @@ async fn snapshot_backup_and_restore_real() {
     );
 
     // Print command line and backup dir
-    println!("[TEST] Running: warden postgresql snapshot-backup --host {} --port {} --user {} --database {} --backup-dir {}", host, port, user, db, backup_dir_path);
-    println!("[TEST] Backup dir before backup: {}", backup_dir_path);
+    println!("[TEST] Running: warden postgresql snapshot-backup --host {host} --port {port} --user {user} --database {db} --backup-dir {backup_dir_path}");
+    println!("[TEST] Backup dir before backup: {backup_dir_path}");
     let before_files: Vec<_> = fs::read_dir(backup_dir_path).unwrap().collect();
     println!(
         "[TEST] Files in backup dir before backup: {:?}",
@@ -151,7 +151,7 @@ async fn snapshot_backup_and_restore_real() {
     // Run snapshot-backup
     let output = Command::cargo_bin("warden")
         .unwrap()
-        .args(&[
+        .args([
             "postgresql",
             "snapshot-backup",
             "--host",
@@ -170,8 +170,8 @@ async fn snapshot_backup_and_restore_real() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     println!("[TEST] snapshot-backup exit status: {}", output.status);
-    println!("[TEST] snapshot-backup stdout: {}", stdout);
-    println!("[TEST] snapshot-backup stderr: {}", stderr);
+    println!("[TEST] snapshot-backup stdout: {stdout}");
+    println!("[TEST] snapshot-backup stderr: {stderr}");
     // List files in backup dir for debug
     let files: Vec<_> = fs::read_dir(backup_dir_path).unwrap().collect();
     println!(
@@ -189,8 +189,7 @@ async fn snapshot_backup_and_restore_real() {
     }
     if files.is_empty() {
         panic!(
-            "No snapshot backup file was created.\nstdout:\n{}\nstderr:\n{}",
-            stdout, stderr
+            "No snapshot backup file was created.\nstdout:\n{stdout}\nstderr:\n{stderr}"
         );
     }
     println!("[TEST] Snapshot backup appears to have succeeded and files were created.");

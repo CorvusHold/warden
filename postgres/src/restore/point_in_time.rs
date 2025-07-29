@@ -62,7 +62,7 @@ impl PointInTimeRestoreManager {
                 "Full backup path does not exist: {:?}",
                 self.full_backup.backup_path
             );
-            error!("{}", error_msg);
+            error!("{error_msg}");
 
             restore.fail(error_msg);
             return Err(PostgresError::RestoreError(
@@ -90,8 +90,8 @@ impl PointInTimeRestoreManager {
                         Ok(restore)
                     }
                     Err(e) => {
-                        let error_msg = format!("Failed to apply incremental backups: {}", e);
-                        error!("{}", error_msg);
+                        let error_msg = format!("Failed to apply incremental backups: {e}");
+                        error!("{error_msg}");
 
                         restore.fail(error_msg);
 
@@ -102,8 +102,8 @@ impl PointInTimeRestoreManager {
                 }
             }
             Err(e) => {
-                let error_msg = format!("Failed to restore full backup: {}", e);
-                error!("{}", error_msg);
+                let error_msg = format!("Failed to restore full backup: {e}");
+                error!("{error_msg}");
 
                 restore.fail(error_msg);
 
@@ -313,8 +313,7 @@ impl PointInTimeRestoreManager {
         fs::write(&recovery_conf_path, recovery_conf_content).map_err(PostgresError::Io)?;
 
         info!(
-            "Created recovery.conf file at {:?} with target time: {}",
-            recovery_conf_path, target_time_str
+            "Created recovery.conf file at {recovery_conf_path:?} with target time: {target_time_str}"
         );
 
         Ok(())

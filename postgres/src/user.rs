@@ -22,12 +22,12 @@ impl UserManager {
         username: &str,
         password: Option<&str>,
     ) -> Result<(), PostgresError> {
-        info!("Creating backup user: {}", username);
+        info!("Creating backup user: {username}");
 
         // Create user
         let create_user_sql = match password {
-            Some(pwd) => format!("CREATE USER {} WITH PASSWORD '{}'", username, pwd),
-            None => format!("CREATE USER {} WITHOUT PASSWORD", username),
+            Some(pwd) => format!("CREATE USER {username} WITH PASSWORD '{pwd}'"),
+            None => format!("CREATE USER {username} WITHOUT PASSWORD"),
         };
 
         self.client
@@ -38,13 +38,13 @@ impl UserManager {
         // Grant necessary permissions
         self.grant_backup_permissions(username).await?;
 
-        info!("Backup user created successfully: {}", username);
+        info!("Backup user created successfully: {username}");
         Ok(())
     }
 
     /// Grant necessary permissions for backup operations
     pub async fn grant_backup_permissions(&self, username: &str) -> Result<(), PostgresError> {
-        info!("Granting backup permissions to user: {}", username);
+        info!("Granting backup permissions to user: {username}");
 
         // Get PostgreSQL version to determine which functions to grant
         let row = self
@@ -60,20 +60,17 @@ impl UserManager {
             // PostgreSQL 14 and above
             let grant_statements = [
                 format!(
-                    "GRANT EXECUTE ON FUNCTION pg_backup_start(text, boolean) to {}",
-                    username
+                    "GRANT EXECUTE ON FUNCTION pg_backup_start(text, boolean) to {username}"
                 ),
                 format!(
-                    "GRANT EXECUTE ON FUNCTION pg_backup_stop(boolean) to {}",
-                    username
+                    "GRANT EXECUTE ON FUNCTION pg_backup_stop(boolean) to {username}"
                 ),
-                format!("GRANT EXECUTE ON FUNCTION pg_switch_wal() to {}", username),
+                format!("GRANT EXECUTE ON FUNCTION pg_switch_wal() to {username}"),
                 format!(
-                    "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) to {}",
-                    username
+                    "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) to {username}"
                 ),
-                format!("GRANT pg_read_all_settings TO {}", username),
-                format!("GRANT pg_read_all_stats TO {}", username),
+                format!("GRANT pg_read_all_settings TO {username}"),
+                format!("GRANT pg_read_all_stats TO {username}"),
             ];
 
             for stmt in grant_statements.iter() {
@@ -86,7 +83,7 @@ impl UserManager {
             // For PostgreSQL 15+, grant pg_checkpoint role
             if version_num >= 150000 {
                 self.client
-                    .execute(&format!("GRANT pg_checkpoint TO {}", username), &[])
+                    .execute(&format!("GRANT pg_checkpoint TO {username}"), &[])
                     .await
                     .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
             }
@@ -94,21 +91,18 @@ impl UserManager {
             // PostgreSQL 13 and below
             let grant_statements = [
                 format!(
-                    "GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) to {}",
-                    username
+                    "GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) to {username}"
                 ),
-                format!("GRANT EXECUTE ON FUNCTION pg_stop_backup() to {}", username),
+                format!("GRANT EXECUTE ON FUNCTION pg_stop_backup() to {username}"),
                 format!(
-                    "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean, boolean) to {}",
-                    username
+                    "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean, boolean) to {username}"
                 ),
-                format!("GRANT EXECUTE ON FUNCTION pg_switch_wal() to {}", username),
+                format!("GRANT EXECUTE ON FUNCTION pg_switch_wal() to {username}"),
                 format!(
-                    "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) to {}",
-                    username
+                    "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) to {username}"
                 ),
-                format!("GRANT pg_read_all_settings TO {}", username),
-                format!("GRANT pg_read_all_stats TO {}", username),
+                format!("GRANT pg_read_all_settings TO {username}"),
+                format!("GRANT pg_read_all_stats TO {username}"),
             ];
 
             for stmt in grant_statements.iter() {
@@ -119,13 +113,13 @@ impl UserManager {
             }
         }
 
-        info!("Backup permissions granted to user: {}", username);
+        info!("Backup permissions granted to user: {username}");
         Ok(())
     }
 
     /// Check if user has necessary permissions for backup operations
     pub async fn check_backup_permissions(&self, username: &str) -> Result<bool, PostgresError> {
-        info!("Checking backup permissions for user: {}", username);
+        info!("Checking backup permissions for user: {username}");
 
         // Get the database name from the config
         let db_name = &self.config.database;
@@ -146,9 +140,9 @@ impl UserManager {
         let has_permissions = output.success();
 
         if has_permissions {
-            info!("User {} has necessary permissions", username);
+            info!("User {username} has necessary permissions");
         } else {
-            warn!("User {} does not have necessary permissions", username);
+            warn!("User {username} does not have necessary permissions");
         }
 
         Ok(has_permissions)
@@ -156,16 +150,16 @@ impl UserManager {
 
     /// Drop a backup user
     pub async fn drop_user(&self, username: &str) -> Result<(), PostgresError> {
-        info!("Dropping user: {}", username);
+        info!("Dropping user: {username}");
 
-        let drop_user_sql = format!("DROP USER IF EXISTS {}", username);
+        let drop_user_sql = format!("DROP USER IF EXISTS {username}");
 
         self.client
             .execute(&drop_user_sql, &[])
             .await
             .map_err(|e| PostgresError::RestoreError(e.to_string()))?;
 
-        info!("User dropped successfully: {}", username);
+        info!("User dropped successfully: {username}");
         Ok(())
     }
 }

@@ -111,7 +111,7 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
         let (client, connection) = connect(&manager.config.connection_string(), NoTls).await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                log::error!("Connection error: {}", e);
+                log::error!("Connection error: {e}");
                 return Err(e);
             }
             Ok(())
@@ -155,7 +155,7 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
     let (client, connection) = connect(&manager.config.connection_string(), NoTls).await?;
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            log::error!("Connection error: {}", e);
+            log::error!("Connection error: {e}");
             return Err(e);
         }
         Ok(())
@@ -167,10 +167,10 @@ async fn test_point_in_time_restore() -> Result<(), Box<dyn std::error::Error>> 
     let tables = vec!["pg_tables", "pg_class", "pg_index"];
     for table in tables {
         let row = client
-            .query_one(&format!("SELECT COUNT(*) FROM {}", table), &[])
+            .query_one(&format!("SELECT COUNT(*) FROM {table}"), &[])
             .await?;
         let count: i64 = row.get(0);
-        assert!(count > 0, "Table {} not found", table);
+        assert!(count > 0, "Table {table} not found");
     }
 
     // Verify user tables from restored content
@@ -235,7 +235,7 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
     let backup_id = Uuid::new_v4();
     let backup_path = backup_dir
         .path()
-        .join(format!("snapshot_{}.dump", backup_id));
+        .join(format!("snapshot_{backup_id}.dump"));
 
     // Create an empty backup file
     std::fs::File::create(&backup_path)?;

@@ -16,10 +16,10 @@ pub async fn execute() -> Result<()> {
     let pid = process::id();
     let pid_file = "/tmp/warden.pid";
     let mut file =
-        File::create(pid_file).context(format!("Failed to create PID file at {}", pid_file))?;
-    write!(file, "{}", pid).context("Failed to write PID to file")?;
+        File::create(pid_file).context(format!("Failed to create PID file at {pid_file}"))?;
+    write!(file, "{pid}").context("Failed to write PID to file")?;
 
-    info!("Created PID file at {} with PID {}", pid_file, pid);
+    info!("Created PID file at {pid_file} with PID {pid}");
 
     // Load configuration
     let config = match common::config::load_config() {
@@ -42,7 +42,7 @@ pub async fn execute() -> Result<()> {
             config
         }
         Err(e) => {
-            error!("Failed to load configuration: {}", e);
+            error!("Failed to load configuration: {e}");
             return Err(e.into());
         }
     };
@@ -52,7 +52,7 @@ pub async fn execute() -> Result<()> {
 
     // Initialize AMQP client
     if let Err(e) = daemon.init_amqp().await {
-        error!("Failed to initialize AMQP client: {}", e);
+        error!("Failed to initialize AMQP client: {e}");
         std::fs::remove_file(pid_file).ok(); // Clean up PID file on error
         return Err(e);
     }
@@ -65,7 +65,7 @@ pub async fn execute() -> Result<()> {
     // Handle SIGINT (Ctrl+C)
     tokio::spawn(async move {
         if let Err(e) = signal::ctrl_c().await {
-            error!("Failed to listen for Ctrl+C: {}", e);
+            error!("Failed to listen for Ctrl+C: {e}");
             return;
         }
 
@@ -74,7 +74,7 @@ pub async fn execute() -> Result<()> {
 
         // Remove PID file on Ctrl+C
         if let Err(e) = std::fs::remove_file(&pid_file_clone) {
-            error!("Failed to remove PID file: {}", e);
+            error!("Failed to remove PID file: {e}");
         }
     });
 
@@ -85,19 +85,19 @@ pub async fn execute() -> Result<()> {
     let result = daemon.start().await;
 
     if let Err(ref e) = result {
-        error!("Daemon error: {}", e);
+        error!("Daemon error: {e}");
     }
 
     // Perform cleanup
     if let Err(e) = daemon.stop().await {
-        error!("Error during daemon shutdown: {}", e);
+        error!("Error during daemon shutdown: {e}");
     }
 
     // Remove PID file on normal exit
     if let Err(e) = std::fs::remove_file(pid_file) {
         // Don't error if file is already gone (might have been removed by signal handler)
         if e.kind() != std::io::ErrorKind::NotFound {
-            error!("Failed to remove PID file: {}", e);
+            error!("Failed to remove PID file: {e}");
         }
     }
 

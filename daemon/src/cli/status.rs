@@ -22,7 +22,7 @@ pub async fn execute() -> Result<()> {
             .output()?;
 
         if !status.stdout.is_empty() {
-            info!("Daemon is running with PID {}", pid);
+            info!("Daemon is running with PID {pid}");
         } else {
             info!("Daemon is not running (stale PID file found)");
             // Remove stale PID file

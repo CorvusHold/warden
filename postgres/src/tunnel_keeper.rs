@@ -113,8 +113,7 @@ impl TunnelKeeper {
 
                     // Use the cloned values in the info macro
                     info!(
-                        "Setting up SSH tunnel from localhost:{} to {}:{} via {}@{}",
-                        local_port, host, port, ssh_user_clone, ssh_host_clone
+                        "Setting up SSH tunnel from localhost:{local_port} to {host}:{port} via {ssh_user_clone}@{ssh_host_clone}"
                     );
 
                     // Create the tunnel with the original values
@@ -127,20 +126,17 @@ impl TunnelKeeper {
 
                     // In the tunnel setup, before starting the tunnel:
                     info!(
-                        "Setting up SSH tunnel from localhost:{} to {}:{} via {}@{}",
-                        local_port, host, port, ssh_user_clone, ssh_host_clone
+                        "Setting up SSH tunnel from localhost:{local_port} to {host}:{port} via {ssh_user_clone}@{ssh_host_clone}"
                     );
 
                     // In the tunnel forward_port call, add more detailed logging:
                     info!(
-                        "Forwarding local port {} to remote {}:{}",
-                        local_port, host, port
+                        "Forwarding local port {local_port} to remote {host}:{port}"
                     );
                     if let Err(e) = tunnel.forward_port(local_port, port, host).await {
-                        error!("SSH tunnel forwarding failed: {}", e);
+                        error!("SSH tunnel forwarding failed: {e}");
                         return Err(SshError::TunnelError(format!(
-                            "Failed to forward port: {}",
-                            e
+                            "Failed to forward port: {e}"
                         )));
                     };
                     Ok(())
@@ -160,7 +156,7 @@ impl TunnelKeeper {
             match self.verify_tunnel().await {
                 Ok(_) => info!("SSH tunnel verified successfully"),
                 Err(e) => {
-                    error!("Failed to verify SSH tunnel: {}", e);
+                    error!("Failed to verify SSH tunnel: {e}");
                     return Err(e);
                 }
             }
@@ -200,7 +196,7 @@ impl TunnelKeeper {
                     attempts -= 1;
                 }
                 Err(e) => {
-                    warn!("Failed to run pg_isready: {}", e);
+                    warn!("Failed to run pg_isready: {e}");
                     attempts -= 1;
                 }
             }
@@ -218,7 +214,7 @@ impl TunnelKeeper {
         if let Some(tunnel) = self.tunnel.take() {
             tunnel
                 .stop()
-                .map_err(|e| SshError::TunnelError(format!("Error closing tunnel: {}", e)))?;
+                .map_err(|e| SshError::TunnelError(format!("Error closing tunnel: {e}")))?;
             self.is_active.store(false, Ordering::SeqCst);
             info!("SSH tunnel closed successfully");
         }

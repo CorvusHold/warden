@@ -69,8 +69,7 @@ impl S3Provider {
         }
         let resp = req.send().await.map_err(|e| {
             error!(
-                "Failed to initiate multipart upload for {}/{}: {}",
-                bucket, key, e
+                "Failed to initiate multipart upload for {bucket}/{key}: {e}"
             );
             StorageError::Aws(e.to_string())
         })?;
@@ -89,7 +88,7 @@ impl S3Provider {
     ) -> Result<Self, StorageError> {
         use log::info;
         let region_str = region.clone().unwrap_or_else(|| "us-east-1".to_string());
-        info!("Initializing S3Provider for {:?}", provider_kind);
+        info!("Initializing S3Provider for {provider_kind:?}");
         let region = Region::new(region_str.clone());
 
         let mut config_builder = aws_config::defaults(BehaviorVersion::v2025_01_17())
@@ -176,13 +175,13 @@ impl S3Provider {
 
         // Add custom endpoint if provided
         if let Some(ref endpoint) = endpoint {
-            info!("Using custom endpoint: {}", endpoint);
+            info!("Using custom endpoint: {endpoint}");
             config_builder = config_builder.endpoint_url(endpoint);
         } else {
-            info!("Using default AWS endpoint for region: {}", region_str);
+            info!("Using default AWS endpoint for region: {region_str}");
             // Explicitly construct the endpoint URL for the region
-            let default_endpoint = format!("https://s3.{}.amazonaws.com", region_str);
-            info!("Constructed default endpoint URL: {}", default_endpoint);
+            let default_endpoint = format!("https://s3.{region_str}.amazonaws.com");
+            info!("Constructed default endpoint URL: {default_endpoint}");
             config_builder = config_builder.endpoint_url(default_endpoint);
         }
 
@@ -234,9 +233,9 @@ impl S3Provider {
             .send()
             .await
             .map_err(|e| {
-                error!("Failed to get object {}/{}: {}", bucket, key, e);
+                error!("Failed to get object {bucket}/{key}: {e}");
                 if e.to_string().contains("404") {
-                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
                 } else {
                     StorageError::Aws(e.to_string())
                 }
@@ -271,20 +270,20 @@ impl S3Provider {
         let mut buffer = vec![0u8; 8192]; // 8KB buffer
         loop {
             let n = stream.read(&mut buffer).await.map_err(|e| {
-                error!("Failed to read from stream: {}", e);
+                error!("Failed to read from stream: {e}");
                 StorageError::Io(e)
             })?;
             if n == 0 {
                 break;
             }
             file.write_all(&buffer[0..n]).await.map_err(|e| {
-                error!("Failed to write to file: {}", e);
+                error!("Failed to write to file: {e}");
                 StorageError::Io(e)
             })?;
             bytes_written += n as u64;
         }
         file.flush().await.map_err(|e| {
-            error!("Failed to flush file: {}", e);
+            error!("Failed to flush file: {e}");
             StorageError::Io(e)
         })?;
         Ok(bytes_written)
@@ -345,7 +344,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -390,7 +389,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -404,7 +403,7 @@ impl StorageProvider for S3Provider {
         });
         let etag = resp.e_tag().map(|s| s.to_string());
         let content_type = resp.content_type().map(|s| s.to_string());
-        let storage_class = resp.storage_class().map(|s| format!("{:?}", s));
+        let storage_class = resp.storage_class().map(|s| format!("{s:?}"));
         let metadata = if let Some(meta) = resp.metadata() {
             if !meta.is_empty() {
                 Some(meta.clone())
@@ -436,7 +435,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
+                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -465,7 +464,7 @@ impl StorageProvider for S3Provider {
         // First check if bucket exists
         match self.client.head_bucket().bucket(bucket).send().await {
             Ok(_) => {
-                info!("Bucket {} already exists", bucket);
+                info!("Bucket {bucket} already exists");
                 return Ok(());
             }
             Err(e)
@@ -487,7 +486,7 @@ impl StorageProvider for S3Provider {
                     .send()
                     .await
                     .map_err(|e| {
-                        error!("Failed to create bucket {}: {}", bucket, e);
+                        error!("Failed to create bucket {bucket}: {e}");
                         StorageError::Aws(e.to_string())
                     })?;
 
@@ -495,7 +494,7 @@ impl StorageProvider for S3Provider {
                 return Ok(());
             }
             Err(e) => {
-                error!("Error checking bucket existence: {}", e);
+                error!("Error checking bucket existence: {e}");
                 return Err(StorageError::Aws(e.to_string()));
             }
         }
@@ -505,7 +504,7 @@ impl StorageProvider for S3Provider {
         info!("Checking if bucket exists: {}", bucket);
         info!("Using region: {}", self.region);
         if let Some(endpoint) = &self.endpoint {
-            info!("Using endpoint: {}", endpoint);
+            info!("Using endpoint: {endpoint}");
         }
 
         let head_bucket_request = self.client.head_bucket().bucket(bucket);
@@ -513,27 +512,26 @@ impl StorageProvider for S3Provider {
 
         match head_bucket_request.send().await {
             Ok(_) => {
-                info!("Bucket {} exists", bucket);
+                info!("Bucket {bucket} exists");
                 Ok(true)
             }
             Err(e) => {
                 let error_string = e.to_string();
-                info!("Received error response: {}", error_string);
+                info!("Received error response: {error_string}");
 
                 if error_string.contains("404") {
-                    info!("Bucket {} does not exist (404 Not Found)", bucket);
+                    info!("Bucket {bucket} does not exist (404 Not Found)");
                     Ok(false)
                 } else if error_string.contains("403") {
                     info!(
-                        "Bucket {} exists but access is forbidden (403 Forbidden)",
-                        bucket
+                        "Bucket {bucket} exists but access is forbidden (403 Forbidden)"
                     );
                     // For S3, a 403 means the bucket exists but we don't have permission to access it
                     // We'll treat this as the bucket existing
                     Ok(true)
                 } else {
-                    let error_msg = format!("Error checking if bucket exists: {}", e);
-                    error!("{}", error_msg);
+                    let error_msg = format!("Error checking if bucket exists: {e}");
+                    error!("{error_msg}");
                     Err(StorageError::AwsSdk(e.to_string()))
                 }
             }
@@ -543,7 +541,7 @@ impl StorageProvider for S3Provider {
     async fn list_buckets(&self) -> Result<Vec<Bucket>, StorageError> {
         let list_buckets_result: ListBucketsOutput =
             self.client.list_buckets().send().await.map_err(|e| {
-                error!("Failed to list buckets: {}", e);
+                error!("Failed to list buckets: {e}");
                 StorageError::Aws(e.to_string())
             })?;
 
@@ -575,7 +573,7 @@ impl StorageProvider for S3Provider {
 
         let list_objects_result: ListObjectsV2Output =
             list_objects_request.send().await.map_err(|e| {
-                error!("Failed to list objects in bucket {}: {}", bucket, e);
+                error!("Failed to list objects in bucket {bucket}: {e}");
                 StorageError::Aws(e.to_string())
             })?;
 
@@ -607,7 +605,7 @@ impl StorageProvider for S3Provider {
             StorageError::Io(e)
         })?;
         let metadata_fs = file.metadata().await.map_err(|e| {
-            error!("Failed to get file metadata: {}", e);
+            error!("Failed to get file metadata: {e}");
             StorageError::Io(e)
         })?;
         let file_size = metadata_fs.len();
@@ -635,7 +633,7 @@ impl StorageProvider for S3Provider {
                 }
             }
             put_object_request.send().await.map_err(|e| {
-                error!("Failed to upload file to {}/{}: {}", bucket, key, e);
+                error!("Failed to upload file to {bucket}/{key}: {e}");
                 StorageError::Aws(e.to_string())
             })?;
             info!(
@@ -664,7 +662,7 @@ impl StorageProvider for S3Provider {
             // Fill the buffer up to PART_SIZE or until EOF
             while filled < PART_SIZE {
                 let n = reader.read(&mut buf[filled..]).await.map_err(|e| {
-                    error!("[DEBUG] Failed to read file part: {}", e);
+                    error!("[DEBUG] Failed to read file part: {e}");
                     StorageError::Io(e)
                 })?;
                 if n == 0 {
@@ -679,8 +677,7 @@ impl StorageProvider for S3Provider {
             // S3: All parts except the last must be at least PART_SIZE (5MB)
             if !is_last_part && filled < PART_SIZE {
                 error!(
-                    "Part {} is too small ({} bytes, must be >= {} except last). Aborting upload.",
-                    part_number, filled, PART_SIZE
+                    "Part {part_number} is too small ({filled} bytes, must be >= {PART_SIZE} except last). Aborting upload."
                 );
                 // Abort upload
                 std::mem::drop(
@@ -692,11 +689,10 @@ impl StorageProvider for S3Provider {
                         .send(),
                 );
                 return Err(StorageError::Aws(format!(
-                    "Multipart upload failed: part {} too small ({} bytes)",
-                    part_number, filled
+                    "Multipart upload failed: part {part_number} too small ({filled} bytes)"
                 )));
             }
-            info!("Uploading part {} ({} bytes)", part_number, filled);
+            info!("Uploading part {part_number} ({filled} bytes)");
             // Upload part
             let upload_part_resp = self
                 .client
@@ -710,10 +706,9 @@ impl StorageProvider for S3Provider {
                 .await
                 .map_err(|e| {
                     error!(
-                        "Failed to upload part {} for {}/{}: {:?}",
-                        part_number, bucket, key, e
+                        "Failed to upload part {part_number} for {bucket}/{key}: {e:?}"
                     );
-                    debug!("S3 error debug: {:?}", e);
+                    debug!("S3 error debug: {e:?}");
                     report_s3_error_to_sentry(
                         "upload_file:upload_part",
                         &e as &dyn std::error::Error,
@@ -748,10 +743,9 @@ impl StorageProvider for S3Provider {
             .await
             .map_err(|e| {
                 error!(
-                    "Failed to complete multipart upload for {}/{}: {:?}",
-                    bucket, key, e
+                    "Failed to complete multipart upload for {bucket}/{key}: {e:?}"
                 );
-                debug!("S3 error debug: {:?}", e);
+                debug!("S3 error debug: {e:?}");
                 report_s3_error_to_sentry(
                     "upload_file:complete_multipart_upload",
                     &e as &dyn std::error::Error,
@@ -785,7 +779,7 @@ impl StorageProvider for S3Provider {
             .await?;
         while let Some(chunk_result) = s.next().await {
             let chunk = chunk_result.map_err(|e| {
-                error!("Failed to read stream chunk: {}", e);
+                error!("Failed to read stream chunk: {e}");
                 StorageError::Io(e)
             })?;
             buffer.extend_from_slice(&chunk);
@@ -803,8 +797,7 @@ impl StorageProvider for S3Provider {
                     .await
                     .map_err(|e| {
                         error!(
-                            "Failed to upload part {} for {}/{}: {:?}",
-                            part_number, bucket, key, e
+                            "Failed to upload part {part_number} for {bucket}/{key}: {e:?}"
                         );
                         StorageError::Aws(e.to_string())
                     })?;
@@ -830,8 +823,7 @@ impl StorageProvider for S3Provider {
                 .await
                 .map_err(|e| {
                     error!(
-                        "Failed to upload last part {} for {}/{}: {:?}",
-                        part_number, bucket, key, e
+                        "Failed to upload last part {part_number} for {bucket}/{key}: {e:?}"
                     );
                     StorageError::Aws(e.to_string())
                 })?;
@@ -855,8 +847,7 @@ impl StorageProvider for S3Provider {
             .await
             .map_err(|e| {
                 error!(
-                    "Failed to complete multipart upload for {}/{}: {:?}",
-                    bucket, key, e
+                    "Failed to complete multipart upload for {bucket}/{key}: {e:?}"
                 );
                 StorageError::Aws(e.to_string())
             })?;
@@ -879,8 +870,8 @@ fn report_s3_error_to_sentry(
         extra.insert("backup_id", backup_id);
     }
 
-    let error_message = format!("{}: {}", operation, error);
+    let error_message = format!("{operation}: {error}");
     let extra_json = serde_json::to_string(&extra).unwrap_or_default();
-    let sentry_message = format!("{} | context: {}", error_message, extra_json);
+    let sentry_message = format!("{error_message} | context: {extra_json}");
     sentry::capture_message(&sentry_message, sentry::Level::Error);
 }

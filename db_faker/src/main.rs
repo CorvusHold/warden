@@ -54,11 +54,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         write_schema(&mut out)?;
         write_users(&mut out, user_count)?;
         write_orders(&mut out, order_count, user_count)?;
-        println!("SQL file generated: {}", out_file);
+        println!("SQL file generated: {out_file}");
     } else {
-        println!("SQL file already exists: {}", out_file);
+        println!("SQL file already exists: {out_file}");
     }
-    println!("You can load it with: psql < {}", out_file);
+    println!("You can load it with: psql < {out_file}");
     if args.load {
         let db_url = args
             .db_url
@@ -110,7 +110,7 @@ fn load_sql_file(sql_path: &str, db_url: &str) -> Result<(), Box<dyn std::error:
     if status.success() {
         println!("Database loaded successfully.");
     } else {
-        eprintln!("psql failed with exit code: {}", status);
+        eprintln!("psql failed with exit code: {status}");
         std::process::exit(status.code().unwrap_or(1));
     }
     Ok(())

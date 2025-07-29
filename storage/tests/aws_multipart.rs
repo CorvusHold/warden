@@ -20,7 +20,7 @@ async fn test_multipart_upload_large_file() {
     let dir = tempdir().unwrap();
     let file_path = dir.path().join("large_test_file.bin");
     let size = 20 * 1024 * 1024; // 20MB
-    println!("[DEBUG] Test file size: {} bytes", size);
+    println!("[DEBUG] Test file size: {size} bytes");
     use rand::RngCore;
     let mut file = File::create(&file_path).unwrap();
     let mut buf = vec![0u8; size];
@@ -67,7 +67,7 @@ async fn test_multipart_upload_non_multiple_of_5mb() {
     let dir = tempdir().unwrap();
     let file_path = dir.path().join("non_multiple_5mb_file.bin");
     let size = 13 * 1024 * 1024; // 13MB (2*5MB + 3MB)
-    println!("[DEBUG] Test file size: {} bytes", size);
+    println!("[DEBUG] Test file size: {size} bytes");
     use rand::RngCore;
     let mut file = File::create(&file_path).unwrap();
     let mut buf = vec![0u8; size];
@@ -114,7 +114,7 @@ async fn test_single_part_upload_small_file() {
     let dir = tempdir().unwrap();
     let file_path = dir.path().join("small_test_file.bin");
     let size = 1024 * 1024; // 1MB
-    println!("[DEBUG] Test file size: {} bytes", size);
+    println!("[DEBUG] Test file size: {size} bytes");
     let mut file = File::create(&file_path).unwrap();
     file.write_all(&vec![21u8; size]).unwrap();
 

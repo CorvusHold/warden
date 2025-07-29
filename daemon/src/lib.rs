@@ -44,7 +44,7 @@ impl Daemon {
 
         // Create AMQP config from configuration
         // Use C2 server as default broker
-        let _default_broker = format!("amqp://{}", c2_server);
+        let _default_broker = format!("amqp://{c2_server}");
 
         // Create AMQP config based on available configuration
         let amqp_config = {
@@ -77,7 +77,7 @@ impl Daemon {
                 port,
                 username,
                 password,
-                client_id: format!("warden-{}", c2_auth_id),
+                client_id: format!("warden-{c2_auth_id}"),
                 vhost: Some("/".to_string()),
                 exchange: "warden".to_string(),
                 queues: vec![
@@ -185,21 +185,19 @@ impl Daemon {
             client
                 .declare_queue(queue)
                 .await
-                .context(format!("Failed to declare queue {}", queue))?;
+                .context(format!("Failed to declare queue {queue}"))?;
 
             client
                 .bind_queue(queue, exchange, routing_key)
                 .await
                 .context({
                     format!(
-                        "Failed to bind queue {} to exchange {} with routing key {}",
-                        queue, exchange, routing_key
+                        "Failed to bind queue {queue} to exchange {exchange} with routing key {routing_key}"
                     )
                 })?;
 
             info!(
-                "Bound queue {} to exchange {} with routing key {}",
-                queue, exchange, routing_key
+                "Bound queue {queue} to exchange {exchange} with routing key {routing_key}"
             );
         }
 
@@ -224,7 +222,7 @@ impl Daemon {
                 loop {
                     match client_clone.consume(&queue_name).await {
                         Ok(mut consumer) => {
-                            info!("Started consuming from queue: {}", queue_name);
+                            info!("Started consuming from queue: {queue_name}");
 
                             while let Some(delivery_result) = consumer.next().await {
                                 match delivery_result {
@@ -234,8 +232,7 @@ impl Daemon {
                                             String::from_utf8_lossy(&delivery.data).to_string();
 
                                         debug!(
-                                            "Received message on routing key {}: {}",
-                                            routing_key, payload
+                                            "Received message on routing key {routing_key}: {payload}"
                                         );
 
                                         // Get delivery tag before moving the delivery
@@ -247,8 +244,7 @@ impl Daemon {
                                             .await
                                         {
                                             error!(
-                                                "Failed to send message to processing channel: {}",
-                                                e
+                                                "Failed to send message to processing channel: {e}"
                                             );
                                         }
 
@@ -259,24 +255,23 @@ impl Daemon {
                                             .basic_ack(delivery_tag, BasicAckOptions::default())
                                             .await
                                         {
-                                            error!("Failed to acknowledge message: {}", e);
+                                            error!("Failed to acknowledge message: {e}");
                                         }
                                     }
                                     Err(e) => {
                                         error!(
-                                            "Error receiving message from queue {}: {}",
-                                            queue_name, e
+                                            "Error receiving message from queue {queue_name}: {e}"
                                         );
                                     }
                                 }
                             }
 
                             // If we get here, the consumer has ended - we'll try to reconnect
-                            warn!("Consumer for queue {} ended unexpectedly, reconnecting in 5 seconds...", queue_name);
+                            warn!("Consumer for queue {queue_name} ended unexpectedly, reconnecting in 5 seconds...");
                             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                         }
                         Err(e) => {
-                            error!("Failed to consume from queue {}: {}", queue_name, e);
+                            error!("Failed to consume from queue {queue_name}: {e}");
                             // Wait before retrying
                             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                         }
@@ -318,15 +313,14 @@ impl Daemon {
                     }
                     // Unknown message type
                     _ => {
-                        warn!("Received message on unknown routing key: {}", routing_key);
+                        warn!("Received message on unknown routing key: {routing_key}");
                         Ok(())
                     }
                 };
 
                 if let Err(e) = result {
                     error!(
-                        "Error processing message on routing key {}: {}",
-                        routing_key, e
+                        "Error processing message on routing key {routing_key}: {e}"
                     );
                 }
             }
@@ -349,7 +343,7 @@ impl Daemon {
                 .enumerate()
             {
                 if let Err(e) = task {
-                    error!("Consumer task {} failed: {}", i, e);
+                    error!("Consumer task {i} failed: {e}");
                 }
             }
         };
@@ -357,7 +351,7 @@ impl Daemon {
         // Create a future that completes when the process task completes
         let process_future = async {
             if let Err(e) = process_task.await {
-                error!("Message processing task failed: {}", e);
+                error!("Message processing task failed: {e}");
             }
         };
 
@@ -418,12 +412,12 @@ impl Daemon {
                 .await
             {
                 Ok(_) => info!("Published offline status"),
-                Err(e) => error!("Failed to publish offline status: {}", e),
+                Err(e) => error!("Failed to publish offline status: {e}"),
             }
 
             // Close connection gracefully
             if let Err(e) = client.close().await {
-                error!("Error closing AMQP connection: {}", e);
+                error!("Error closing AMQP connection: {e}");
             }
         }
 

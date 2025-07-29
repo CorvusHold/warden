@@ -51,7 +51,7 @@ impl SnapshotBackupManager {
         // Spawn the connection handler
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                error!("Connection error: {}", e);
+                error!("Connection error: {e}");
             }
         });
 
@@ -62,7 +62,7 @@ impl SnapshotBackupManager {
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
         let backup_path = self
             .backup_dir
-            .join(format!("snapshot_backup_{}", timestamp));
+            .join(format!("snapshot_backup_{timestamp}"));
 
         // Create backup directory
         if !backup_path.exists() {
@@ -81,7 +81,7 @@ impl SnapshotBackupManager {
 
         // Temporarily use a placeholder for WAL position to bypass the pg_lsn type issue
         let wal_start = "0/0000000".to_string();
-        debug!("Using placeholder WAL start position: {}", wal_start);
+        debug!("Using placeholder WAL start position: {wal_start}");
         backup.wal_start = Some(wal_start);
 
         // Perform the backup using pg_dump
@@ -118,7 +118,7 @@ impl SnapshotBackupManager {
 
                 // Temporarily use a placeholder for WAL position to bypass the pg_lsn type issue
                 let wal_end = "0/0000000".to_string();
-                debug!("Using placeholder WAL end position: {}", wal_end);
+                debug!("Using placeholder WAL end position: {wal_end}");
 
                 // Calculate backup size
                 let size_bytes = self.calculate_backup_size(&backup_path)?;
@@ -129,8 +129,8 @@ impl SnapshotBackupManager {
                 Ok(backup)
             }
             Err(e) => {
-                let error_msg = format!("Snapshot backup failed: {}", e);
-                error!("{}", error_msg);
+                let error_msg = format!("Snapshot backup failed: {e}");
+                error!("{error_msg}");
 
                 backup.fail(error_msg);
 
@@ -150,16 +150,14 @@ impl SnapshotBackupManager {
         // Verify backup directory exists
         if !backup_path.exists() {
             return Err(PostgresError::RestoreError(format!(
-                "Backup directory does not exist: {:?}",
-                backup_path
+                "Backup directory does not exist: {backup_path:?}"
             )));
         }
 
         // Verify backup directory is actually a directory
         if !backup_path.is_dir() {
             return Err(PostgresError::RestoreError(format!(
-                "Backup path is not a directory: {:?}",
-                backup_path
+                "Backup path is not a directory: {backup_path:?}"
             )));
         }
 
@@ -183,8 +181,7 @@ impl SnapshotBackupManager {
         for file in &backup_files {
             if !file.exists() {
                 return Err(PostgresError::RestoreError(format!(
-                    "Backup file does not exist: {:?}",
-                    file
+                    "Backup file does not exist: {file:?}"
                 )));
             }
 
@@ -233,7 +230,7 @@ impl SnapshotBackupManager {
             .map_err(PostgresError::Postgres)?;
 
         let version: String = row.get(0);
-        debug!("PostgreSQL server version: {}", version);
+        debug!("PostgreSQL server version: {version}");
 
         Ok(version)
     }
@@ -251,7 +248,7 @@ impl SnapshotBackupManager {
         // Extract the value from the result
         if let Some(tokio_postgres::SimpleQueryMessage::Row(row)) = result.into_iter().next() {
             if let Some(value) = row.get(0) {
-                debug!("Current WAL position: {}", value);
+                debug!("Current WAL position: {value}");
                 return Ok(value.to_string());
             }
         }
@@ -275,7 +272,7 @@ impl SnapshotBackupManager {
             }
         }
 
-        debug!("Backup size: {} bytes", total_size);
+        debug!("Backup size: {total_size} bytes");
 
         Ok(total_size)
     }

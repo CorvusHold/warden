@@ -15,7 +15,7 @@ pub async fn handle_config_update(payload: &str, config: &Arc<Mutex<WardenConfig
 
     // Update C2 server if provided
     if let Some(c2_server) = config_update.get("c2_server").and_then(|v| v.as_str()) {
-        info!("Updating C2 server to: {}", c2_server);
+        info!("Updating C2 server to: {c2_server}");
         current_config.c2_server = c2_server.to_string();
     }
 
@@ -35,12 +35,12 @@ pub async fn handle_config_update(payload: &str, config: &Arc<Mutex<WardenConfig
     // Update features if provided
     if let Some(features) = config_update.get("features") {
         if let Some(overwatch) = features.get("Overwatch").and_then(|v| v.as_bool()) {
-            info!("Updating Overwatch feature to: {}", overwatch);
+            info!("Updating Overwatch feature to: {overwatch}");
             current_config.features.overwatch = overwatch;
         }
 
         if let Some(postgres_backup) = features.get("PostgresBackup").and_then(|v| v.as_bool()) {
-            info!("Updating PostgreSQL backup feature to: {}", postgres_backup);
+            info!("Updating PostgreSQL backup feature to: {postgres_backup}");
             current_config.features.postgres_backup = postgres_backup;
         }
     }
@@ -52,7 +52,7 @@ pub async fn handle_config_update(payload: &str, config: &Arc<Mutex<WardenConfig
             Ok(())
         }
         Err(e) => {
-            error!("Failed to save updated configuration: {}", e);
+            error!("Failed to save updated configuration: {e}");
             Err(anyhow::anyhow!(
                 "Failed to save updated configuration: {}",
                 e

@@ -56,16 +56,15 @@ impl SnapshotRestoreManager {
             Path::new(&self.backup.backup_path).join(format!("snapshot_{}.dump", self.backup.id));
 
         if !snapshot_file.exists() {
-            let error_msg = format!("Snapshot file does not exist: {:?}", snapshot_file);
-            error!("{}", error_msg);
+            let error_msg = format!("Snapshot file does not exist: {snapshot_file:?}");
+            error!("{error_msg}");
 
             restore.status = RestoreStatus::Failed;
             restore.end_time = Some(Utc::now());
             restore.error_message = Some(error_msg);
 
             return Err(PostgresError::RestoreError(format!(
-                "Snapshot file does not exist: {:?}",
-                snapshot_file
+                "Snapshot file does not exist: {snapshot_file:?}"
             )));
         }
 
@@ -81,8 +80,8 @@ impl SnapshotRestoreManager {
                 restore.end_time = Some(Utc::now());
             }
             Err(e) => {
-                let error_msg = format!("Snapshot restore failed: {}", e);
-                error!("{}", error_msg);
+                let error_msg = format!("Snapshot restore failed: {e}");
+                error!("{error_msg}");
 
                 restore.status = RestoreStatus::Failed;
                 restore.end_time = Some(Utc::now());
@@ -105,8 +104,7 @@ impl SnapshotRestoreManager {
 
         if !snapshot_file.exists() {
             return Err(PostgresError::RestoreError(format!(
-                "Snapshot file does not exist: {:?}",
-                snapshot_file
+                "Snapshot file does not exist: {snapshot_file:?}"
             )));
         }
 

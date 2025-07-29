@@ -9,7 +9,7 @@ fn main() {
     let dest_path = std::path::Path::new(&out_dir).join("sentry_dsn.rs");
     fs::write(
         &dest_path,
-        format!(r#"pub const SENTRY_DSN: &str = "{}";"#, sentry_dsn),
+        format!(r#"pub const SENTRY_DSN: &str = "{sentry_dsn}";"#),
     )
     .unwrap();
 }

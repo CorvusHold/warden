@@ -22,7 +22,7 @@ pub async fn execute() -> Result<()> {
     if status.success() {
         info!("Daemon started successfully in the background");
     } else {
-        info!("Failed to start daemon: {:?}", status);
+        info!("Failed to start daemon: {status:?}");
     }
 
     Ok(())

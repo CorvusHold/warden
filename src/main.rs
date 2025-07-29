@@ -234,7 +234,7 @@ async fn main() -> Result<()> {
                 ssh_remote_port,
             } => {
                 eprintln!("[CLI] Starting snapshot-backup command...");
-                eprintln!("[CLI] Parameters: host={}, port={}, database={}, user={}, backup_dir={:?}, remote_storage={}", host, port, database, user, backup_dir, remote_storage);
+                eprintln!("[CLI] Parameters: host={host}, port={port}, database={database}, user={user}, backup_dir={backup_dir:?}, remote_storage={remote_storage}");
                 let ssh = postgres::cli::commands::SshOptions {
                     host: ssh_host,
                     user: ssh_user,
@@ -269,12 +269,11 @@ async fn main() -> Result<()> {
                 {
                     Ok(_) => {
                         eprintln!(
-                            "[CLI] snapshot-backup completed successfully. Backup dir: {:?}",
-                            backup_dir
+                            "[CLI] snapshot-backup completed successfully. Backup dir: {backup_dir:?}"
                         );
                     }
                     Err(e) => {
-                        eprintln!("[CLI] snapshot-backup failed: {}", e);
+                        eprintln!("[CLI] snapshot-backup failed: {e}");
                     }
                 }
             }
