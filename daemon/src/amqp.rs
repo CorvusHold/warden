@@ -117,9 +117,7 @@ impl AmqpClient {
             .await
             .context("Failed to bind queue to exchange")?;
 
-        debug!(
-            "Bound queue {queue} to exchange {exchange} with routing key {routing_key}"
-        );
+        debug!("Bound queue {queue} to exchange {exchange} with routing key {routing_key}");
         Ok(())
     }
 
@@ -159,9 +157,7 @@ impl AmqpClient {
             .context("Failed to get publish confirmation")?;
 
         if confirm.is_ack() {
-            debug!(
-                "Published message to {exchange}/{routing_key}: {json}"
-            );
+            debug!("Published message to {exchange}/{routing_key}: {json}");
             Ok(confirm)
         } else {
             Err(anyhow!("Message was not acknowledged by the broker"))

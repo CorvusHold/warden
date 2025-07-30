@@ -653,9 +653,7 @@ pub async fn restore(
         ssh_remote_port: ssh.remote_port,
     };
     let mut manager = PostgresManager::new(config, backup_dir)?;
-    info!(
-        "Restoring with incremental backups from {full_backup_id} to {target_dir:?}..."
-    );
+    info!("Restoring with incremental backups from {full_backup_id} to {target_dir:?}...");
     let full_backup_id =
         Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow::anyhow!(e))?;
     let restore = manager
@@ -762,9 +760,7 @@ pub async fn restore_point_in_time(
     let target_time = chrono::DateTime::parse_from_str(&target_time, "%Y-%m-%dT%H:%M:%S%z")
         .map_err(|e| anyhow::anyhow!("Invalid target time format: {}", e))?
         .with_timezone(&chrono::Utc);
-    info!(
-        "Restoring to point in time {target_time} from {full_backup_id} to {target_dir:?}..."
-    );
+    info!("Restoring to point in time {target_time} from {full_backup_id} to {target_dir:?}...");
     let full_backup_id = Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow!(e))?;
     let restore = manager
         .restore_point_in_time(&full_backup_id, target_dir, target_time)
@@ -852,9 +848,7 @@ pub async fn restore_snapshot(
         ssh_remote_port: ssh.remote_port,
     };
     let mut manager = PostgresManager::new(config, backup_dir)?;
-    info!(
-        "Restoring from snapshot backup {backup_id} to {target_dir:?}..."
-    );
+    info!("Restoring from snapshot backup {backup_id} to {target_dir:?}...");
     let backup_id = Uuid::parse_str(&backup_id).map_err(|e: uuid::Error| anyhow::anyhow!(e))?;
     let restore = manager
         .restore_snapshot_backup(&backup_id, target_dir)
@@ -1053,9 +1047,7 @@ async fn restart_postgresql_linux() -> Result<()> {
             .output()
         {
             if output.status.success() {
-                info!(
-                    "PostgreSQL {version} successfully restarted using systemctl"
-                );
+                info!("PostgreSQL {version} successfully restarted using systemctl");
                 return Ok(());
             }
         }

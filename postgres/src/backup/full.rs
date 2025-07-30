@@ -225,9 +225,7 @@ impl FullBackupManager {
             ));
         }
 
-        info!(
-            "Logical backup created successfully at {dump_file:?} and {sql_file:?}"
-        );
+        info!("Logical backup created successfully at {dump_file:?} and {sql_file:?}");
         Ok(())
     }
 }

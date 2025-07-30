@@ -78,9 +78,7 @@ impl PgRestore {
             )));
         }
 
-        info!(
-            "Database restored successfully from dump file: {dump_file:?}"
-        );
+        info!("Database restored successfully from dump file: {dump_file:?}");
         Ok(())
     }
 
@@ -92,9 +90,7 @@ impl PgRestore {
         options: &[&str],
     ) -> Result<(), PostgresError> {
         let dump_file = dump_file.as_ref();
-        info!(
-            "Restoring database from dump file with custom options: {dump_file:?}"
-        );
+        info!("Restoring database from dump file with custom options: {dump_file:?}");
 
         if !dump_file.exists() {
             return Err(PostgresError::RestoreError(format!(
@@ -150,9 +146,7 @@ impl PgRestore {
             )));
         }
 
-        info!(
-            "Database restored successfully from dump file: {dump_file:?}"
-        );
+        info!("Database restored successfully from dump file: {dump_file:?}");
         Ok(())
     }
 

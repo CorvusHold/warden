@@ -196,9 +196,7 @@ impl Daemon {
                     )
                 })?;
 
-            info!(
-                "Bound queue {queue} to exchange {exchange} with routing key {routing_key}"
-            );
+            info!("Bound queue {queue} to exchange {exchange} with routing key {routing_key}");
         }
 
         Ok(())
@@ -319,9 +317,7 @@ impl Daemon {
                 };
 
                 if let Err(e) = result {
-                    error!(
-                        "Error processing message on routing key {routing_key}: {e}"
-                    );
+                    error!("Error processing message on routing key {routing_key}: {e}");
                 }
             }
         });

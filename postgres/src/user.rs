@@ -59,16 +59,10 @@ impl UserManager {
         if version_num >= 140000 {
             // PostgreSQL 14 and above
             let grant_statements = [
-                format!(
-                    "GRANT EXECUTE ON FUNCTION pg_backup_start(text, boolean) to {username}"
-                ),
-                format!(
-                    "GRANT EXECUTE ON FUNCTION pg_backup_stop(boolean) to {username}"
-                ),
+                format!("GRANT EXECUTE ON FUNCTION pg_backup_start(text, boolean) to {username}"),
+                format!("GRANT EXECUTE ON FUNCTION pg_backup_stop(boolean) to {username}"),
                 format!("GRANT EXECUTE ON FUNCTION pg_switch_wal() to {username}"),
-                format!(
-                    "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) to {username}"
-                ),
+                format!("GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) to {username}"),
                 format!("GRANT pg_read_all_settings TO {username}"),
                 format!("GRANT pg_read_all_stats TO {username}"),
             ];

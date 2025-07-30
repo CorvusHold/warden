@@ -233,9 +233,7 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add a mock backup to the catalog
     let backup_id = Uuid::new_v4();
-    let backup_path = backup_dir
-        .path()
-        .join(format!("snapshot_{backup_id}.dump"));
+    let backup_path = backup_dir.path().join(format!("snapshot_{backup_id}.dump"));
 
     // Create an empty backup file
     std::fs::File::create(&backup_path)?;

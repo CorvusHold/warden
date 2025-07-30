@@ -355,18 +355,14 @@ impl FullRestoreManager {
                 info!("Created database {db_name}");
             } else {
                 // Database might already exist, which is fine
-                info!(
-                    "Database {db_name} might already exist, continuing with restore"
-                );
+                info!("Database {db_name} might already exist, continuing with restore");
             }
         }
 
         // Restore the database content
         if is_custom_format {
             // Use pg_restore for custom format dumps
-            info!(
-                "Restoring database content using pg_restore from {dump_file:?}"
-            );
+            info!("Restoring database content using pg_restore from {dump_file:?}");
             let restore_result = Command::new("pg_restore")
                 .args([
                     "-h",

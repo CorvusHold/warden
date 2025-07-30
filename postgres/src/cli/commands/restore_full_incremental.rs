@@ -77,9 +77,7 @@ pub async fn restore_full(
         }
     }
     let mut manager = PostgresManager::new(config.clone(), backup_dir.clone())?;
-    info!(
-        "Restoring from full backup {full_backup_id} to {target_dir:?}..."
-    );
+    info!("Restoring from full backup {full_backup_id} to {target_dir:?}...");
     let full_backup_id = Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow!(e))?;
     let restore = manager
         .restore_full_backup(&full_backup_id, target_dir)
@@ -200,9 +198,7 @@ pub async fn restore_incremental(
         }
     }
     let mut manager = PostgresManager::new(config.clone(), backup_dir.clone())?;
-    info!(
-        "Restoring with incremental backups from {full_backup_id} to {target_dir:?}..."
-    );
+    info!("Restoring with incremental backups from {full_backup_id} to {target_dir:?}...");
     let full_backup_id = Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow!(e))?;
     let restore = manager
         .restore_incremental_backup(&full_backup_id, target_dir)

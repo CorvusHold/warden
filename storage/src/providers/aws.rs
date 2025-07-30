@@ -68,9 +68,7 @@ impl S3Provider {
             }
         }
         let resp = req.send().await.map_err(|e| {
-            error!(
-                "Failed to initiate multipart upload for {bucket}/{key}: {e}"
-            );
+            error!("Failed to initiate multipart upload for {bucket}/{key}: {e}");
             StorageError::Aws(e.to_string())
         })?;
         resp.upload_id()
@@ -523,9 +521,7 @@ impl StorageProvider for S3Provider {
                     info!("Bucket {bucket} does not exist (404 Not Found)");
                     Ok(false)
                 } else if error_string.contains("403") {
-                    info!(
-                        "Bucket {bucket} exists but access is forbidden (403 Forbidden)"
-                    );
+                    info!("Bucket {bucket} exists but access is forbidden (403 Forbidden)");
                     // For S3, a 403 means the bucket exists but we don't have permission to access it
                     // We'll treat this as the bucket existing
                     Ok(true)
@@ -705,9 +701,7 @@ impl StorageProvider for S3Provider {
                 .send()
                 .await
                 .map_err(|e| {
-                    error!(
-                        "Failed to upload part {part_number} for {bucket}/{key}: {e:?}"
-                    );
+                    error!("Failed to upload part {part_number} for {bucket}/{key}: {e:?}");
                     debug!("S3 error debug: {e:?}");
                     report_s3_error_to_sentry(
                         "upload_file:upload_part",
@@ -742,9 +736,7 @@ impl StorageProvider for S3Provider {
             .send()
             .await
             .map_err(|e| {
-                error!(
-                    "Failed to complete multipart upload for {bucket}/{key}: {e:?}"
-                );
+                error!("Failed to complete multipart upload for {bucket}/{key}: {e:?}");
                 debug!("S3 error debug: {e:?}");
                 report_s3_error_to_sentry(
                     "upload_file:complete_multipart_upload",
@@ -796,9 +788,7 @@ impl StorageProvider for S3Provider {
                     .send()
                     .await
                     .map_err(|e| {
-                        error!(
-                            "Failed to upload part {part_number} for {bucket}/{key}: {e:?}"
-                        );
+                        error!("Failed to upload part {part_number} for {bucket}/{key}: {e:?}");
                         StorageError::Aws(e.to_string())
                     })?;
                 parts.push(
@@ -822,9 +812,7 @@ impl StorageProvider for S3Provider {
                 .send()
                 .await
                 .map_err(|e| {
-                    error!(
-                        "Failed to upload last part {part_number} for {bucket}/{key}: {e:?}"
-                    );
+                    error!("Failed to upload last part {part_number} for {bucket}/{key}: {e:?}");
                     StorageError::Aws(e.to_string())
                 })?;
             parts.push(
@@ -846,9 +834,7 @@ impl StorageProvider for S3Provider {
             .send()
             .await
             .map_err(|e| {
-                error!(
-                    "Failed to complete multipart upload for {bucket}/{key}: {e:?}"
-                );
+                error!("Failed to complete multipart upload for {bucket}/{key}: {e:?}");
                 StorageError::Aws(e.to_string())
             })?;
         info!("Multipart upload completed: {}/{}", bucket, key);

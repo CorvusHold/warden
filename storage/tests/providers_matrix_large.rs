@@ -30,9 +30,7 @@ async fn test_provider_matrix_large_file() {
     }
     // Print file size
     let actual_size = std::fs::metadata(&test_file).expect("file metadata").len();
-    println!(
-        "Test file size: {actual_size} bytes (expected: {LARGE_FILE_SIZE})"
-    );
+    println!("Test file size: {actual_size} bytes (expected: {LARGE_FILE_SIZE})");
 
     for (name, kind, endpoint) in providers {
         println!("\nTesting provider (large file): {name} ({endpoint})");

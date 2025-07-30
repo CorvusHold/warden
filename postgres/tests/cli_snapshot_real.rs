@@ -188,9 +188,7 @@ async fn snapshot_backup_and_restore_real() {
         );
     }
     if files.is_empty() {
-        panic!(
-            "No snapshot backup file was created.\nstdout:\n{stdout}\nstderr:\n{stderr}"
-        );
+        panic!("No snapshot backup file was created.\nstdout:\n{stdout}\nstderr:\n{stderr}");
     }
     println!("[TEST] Snapshot backup appears to have succeeded and files were created.");
 

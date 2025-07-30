@@ -150,9 +150,7 @@ impl PostgresBackupStorage {
         file_path: &Path,
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
-        info!(
-            "Streaming upload of backup file {file_name} for backup {backup_id}"
-        );
+        info!("Streaming upload of backup file {file_name} for backup {backup_id}");
 
         // Create the backup key
         let key = if self.prefix.is_empty() {

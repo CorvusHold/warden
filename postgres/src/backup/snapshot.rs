@@ -60,9 +60,7 @@ impl SnapshotBackupManager {
 
         // Create backup metadata
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
-        let backup_path = self
-            .backup_dir
-            .join(format!("snapshot_backup_{timestamp}"));
+        let backup_path = self.backup_dir.join(format!("snapshot_backup_{timestamp}"));
 
         // Create backup directory
         if !backup_path.exists() {

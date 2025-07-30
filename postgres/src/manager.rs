@@ -175,9 +175,7 @@ impl PostgresManager {
         full_backup_id: &Uuid,
         target_dir: PathBuf,
     ) -> Result<Restore, PostgresError> {
-        info!(
-            "Starting restore from incremental backups based on full backup: {full_backup_id}"
-        );
+        info!("Starting restore from incremental backups based on full backup: {full_backup_id}");
 
         // Find the full backup
         let full_backup = match self.catalog.get_backup(full_backup_id) {
