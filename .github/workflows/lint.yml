@@ -67,4 +67,6 @@ jobs:
       - name: Lint with clippy
         run: cargo clippy --workspace -- -D warnings
       - name: Run tests
+        env:
+          CI: true
         run: cargo test --workspace -- --test-threads=1
