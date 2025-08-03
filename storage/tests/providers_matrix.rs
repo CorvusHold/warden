@@ -23,6 +23,7 @@ async fn test_provider_matrix() {
         )
         .await
         .expect("provider init");
+        provider.create_bucket(&test_bucket).await.ok();
         provider
             .upload_file(&test_bucket, test_key, &test_file, None, None)
             .await
