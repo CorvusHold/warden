@@ -77,10 +77,7 @@ pub async fn restore_full(
         }
     }
     let mut manager = PostgresManager::new(config.clone(), backup_dir.clone())?;
-    info!(
-        "Restoring from full backup {} to {:?}...",
-        full_backup_id, target_dir
-    );
+    info!("Restoring from full backup {full_backup_id} to {target_dir:?}...");
     let full_backup_id = Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow!(e))?;
     let restore = manager
         .restore_full_backup(&full_backup_id, target_dir)
@@ -101,7 +98,7 @@ pub async fn restore_full(
         if is_active {
             let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
-                error!("Warning: Error closing SSH tunnel: {}", e);
+                error!("Warning: Error closing SSH tunnel: {e}");
             }
         }
     }
@@ -152,7 +149,7 @@ pub async fn restore_incremental(
                     anyhow!("Failed to list incremental backups: {}", e)
                 })?;
             for backup_id in incremental_backups {
-                info!("Downloading incremental backup {}...", backup_id);
+                info!("Downloading incremental backup {backup_id}...");
                 let backup_path = backup_dir.join(&backup_id);
                 if !backup_path.exists() {
                     std::fs::create_dir_all(&backup_path).map_err(|e: std::io::Error| {
@@ -201,10 +198,7 @@ pub async fn restore_incremental(
         }
     }
     let mut manager = PostgresManager::new(config.clone(), backup_dir.clone())?;
-    info!(
-        "Restoring with incremental backups from {} to {:?}...",
-        full_backup_id, target_dir
-    );
+    info!("Restoring with incremental backups from {full_backup_id} to {target_dir:?}...");
     let full_backup_id = Uuid::parse_str(&full_backup_id).map_err(|e: uuid::Error| anyhow!(e))?;
     let restore = manager
         .restore_incremental_backup(&full_backup_id, target_dir)
@@ -225,7 +219,7 @@ pub async fn restore_incremental(
         if is_active {
             let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
-                error!("Warning: Error closing SSH tunnel: {}", e);
+                error!("Warning: Error closing SSH tunnel: {e}");
             }
         }
     }

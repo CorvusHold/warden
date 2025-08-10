@@ -40,7 +40,7 @@ impl FullBackupManager {
         // Spawn the connection handler
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                error!("Connection error: {}", e);
+                error!("Connection error: {e}");
             }
         });
 
@@ -49,7 +49,7 @@ impl FullBackupManager {
 
         // Create backup metadata
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
-        let backup_path = self.backup_dir.join(format!("full_backup_{}", timestamp));
+        let backup_path = self.backup_dir.join(format!("full_backup_{timestamp}"));
 
         let mut backup = Backup::new(BackupType::Full, backup_path.clone(), server_version, None);
 
@@ -68,7 +68,7 @@ impl FullBackupManager {
             checkpoint: "fast".to_string(),
             wal_method: "stream".to_string(),
             compress: Some("9".to_string()),
-            label: Some(format!("full_backup_{}", timestamp)),
+            label: Some(format!("full_backup_{timestamp}")),
             progress: true,
             verbose: true,
         };
@@ -79,7 +79,7 @@ impl FullBackupManager {
 
                 // Create a logical backup (SQL dump) of the database
                 if let Err(e) = self.create_logical_backup(&backup_path).await {
-                    error!("Failed to create logical backup: {}", e);
+                    error!("Failed to create logical backup: {e}");
                     // Continue with the physical backup even if logical backup fails
                 } else {
                     info!("Logical backup completed successfully");
@@ -97,8 +97,8 @@ impl FullBackupManager {
                 Ok(backup)
             }
             Err(e) => {
-                let error_msg = format!("Full backup failed: {}", e);
-                error!("{}", error_msg);
+                let error_msg = format!("Full backup failed: {e}");
+                error!("{error_msg}");
 
                 backup.fail(error_msg);
 
@@ -115,7 +115,7 @@ impl FullBackupManager {
             .map_err(PostgresError::Postgres)?;
 
         let version: String = row.get(0);
-        debug!("PostgreSQL server version: {}", version);
+        debug!("PostgreSQL server version: {version}");
 
         Ok(version)
     }
@@ -128,7 +128,7 @@ impl FullBackupManager {
             .map_err(PostgresError::Postgres)?;
 
         let wal_position: String = row.get(0);
-        debug!("Current WAL position: {}", wal_position);
+        debug!("Current WAL position: {wal_position}");
 
         Ok(wal_position)
     }
@@ -147,7 +147,7 @@ impl FullBackupManager {
             }
         }
 
-        debug!("Backup size: {} bytes", total_size);
+        debug!("Backup size: {total_size} bytes");
 
         Ok(total_size)
     }
@@ -164,7 +164,7 @@ impl FullBackupManager {
         let user = &self.config.user;
 
         // Create dump file path
-        let dump_file = backup_path.join(format!("{}.dump", db_name));
+        let dump_file = backup_path.join(format!("{db_name}.dump"));
 
         // Use pg_dump to create a custom-format backup
         let result = Command::new("pg_dump")
@@ -187,7 +187,7 @@ impl FullBackupManager {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .status()
-            .map_err(|e| PostgresError::BackupError(format!("Failed to execute pg_dump: {}", e)))?;
+            .map_err(|e| PostgresError::BackupError(format!("Failed to execute pg_dump: {e}")))?;
 
         if !result.success() {
             return Err(PostgresError::BackupError(
@@ -196,7 +196,7 @@ impl FullBackupManager {
         }
 
         // Also create a plain SQL backup for flexibility
-        let sql_file = backup_path.join(format!("{}.sql", db_name));
+        let sql_file = backup_path.join(format!("{db_name}.sql"));
 
         let result = Command::new("pg_dump")
             .args([
@@ -216,7 +216,7 @@ impl FullBackupManager {
             .stderr(Stdio::inherit())
             .status()
             .map_err(|e| {
-                PostgresError::BackupError(format!("Failed to execute pg_dump for SQL: {}", e))
+                PostgresError::BackupError(format!("Failed to execute pg_dump for SQL: {e}"))
             })?;
 
         if !result.success() {
@@ -225,10 +225,7 @@ impl FullBackupManager {
             ));
         }
 
-        info!(
-            "Logical backup created successfully at {:?} and {:?}",
-            dump_file, sql_file
-        );
+        info!("Logical backup created successfully at {dump_file:?} and {sql_file:?}");
         Ok(())
     }
 }

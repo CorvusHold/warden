@@ -67,8 +67,8 @@ pub async fn handle_event(
     let event = match serde_json::from_str::<EventPayload>(payload) {
         Ok(evt) => evt,
         Err(e) => {
-            let error_msg = format!("Failed to parse event payload: {}", e);
-            error!("{}", error_msg);
+            let error_msg = format!("Failed to parse event payload: {e}");
+            error!("{error_msg}");
             return Err(anyhow!(error_msg));
         }
     };
@@ -77,7 +77,7 @@ pub async fn handle_event(
         "Received event: {:?} from {}",
         event.event_type, event.source
     );
-    debug!("Event details: {:?}", event);
+    debug!("Event details: {event:?}");
 
     // Get exchange name from config
     let exchange = {
@@ -104,7 +104,7 @@ pub async fn handle_event(
             // Process PostgreSQL alert
             match handle_postgres_event(&event, client).await {
                 Ok(_) => info!("PostgreSQL event handled successfully"),
-                Err(e) => error!("Failed to handle PostgreSQL event: {}", e),
+                Err(e) => error!("Failed to handle PostgreSQL event: {e}"),
             }
         }
         EventType::OverwatchAlert => {
@@ -117,25 +117,25 @@ pub async fn handle_event(
             // Process Overwatch alert
             match handle_overwatch_event(&event, client).await {
                 Ok(_) => info!("Overwatch event handled successfully"),
-                Err(e) => error!("Failed to handle Overwatch event: {}", e),
+                Err(e) => error!("Failed to handle Overwatch event: {e}"),
             }
         }
         EventType::SystemAlert => {
             // Process system alert
             match handle_system_event(&event, client).await {
                 Ok(_) => info!("System event handled successfully"),
-                Err(e) => error!("Failed to handle system event: {}", e),
+                Err(e) => error!("Failed to handle system event: {e}"),
             }
         }
         EventType::Custom(event_name) => {
             // Handle custom event
-            warn!("Received custom event: {}", event_name);
+            warn!("Received custom event: {event_name}");
             // For now, we just log custom events
         }
     }
 
     // Acknowledge event receipt
-    let ack_routing_key = format!("warden.events.{}.ack", subtopic);
+    let ack_routing_key = format!("warden.events.{subtopic}.ack");
     let ack_payload = serde_json::json!({
         "event_id": event.data.as_ref().and_then(|d| d.get("id")).unwrap_or(&serde_json::Value::Null),
         "status": "received",
@@ -155,7 +155,7 @@ pub async fn handle_event(
         .await
     {
         Ok(_) => debug!("Event acknowledgment sent"),
-        Err(e) => error!("Failed to send event acknowledgment: {}", e),
+        Err(e) => error!("Failed to send event acknowledgment: {e}"),
     }
 
     Ok(())
@@ -169,7 +169,7 @@ async fn handle_postgres_event(event: &EventPayload, _client: &Arc<AmqpClient>) 
             // like creating an emergency backup
             if let Some(data) = &event.data {
                 if let Some(db_name) = data.get("database").and_then(|v| v.as_str()) {
-                    info!("Creating emergency backup for database: {}", db_name);
+                    info!("Creating emergency backup for database: {db_name}");
 
                     // Call PostgreSQL backup functionality
                     //     match postgres::backup::create_backup().await {
@@ -270,7 +270,7 @@ async fn handle_overwatch_event(event: &EventPayload, client: &Arc<AmqpClient>) 
                                 .await?;
                         }
                         Err(e) => {
-                            error!("Failed to start Overwatch: {}", e);
+                            error!("Failed to start Overwatch: {e}");
 
                             // Notify about the failure
                             let routing_key = "warden.notifications.overwatch";
@@ -293,7 +293,7 @@ async fn handle_overwatch_event(event: &EventPayload, client: &Arc<AmqpClient>) 
                     }
                 }
                 Err(e) => {
-                    error!("Failed to stop Overwatch: {}", e);
+                    error!("Failed to stop Overwatch: {e}");
 
                     // Notify about the failure
                     let routing_key = "warden.notifications.overwatch";

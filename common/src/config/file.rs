@@ -116,15 +116,15 @@ pub fn update_config(config: &WardenConfig) -> Result<(), Box<dyn std::error::Er
         match fs::File::create(path_obj) {
             Ok(mut file) => {
                 if let Err(e) = file.write_all(toml_string.as_bytes()) {
-                    error!("Failed to write to {}: {}", expanded_path, e);
+                    error!("Failed to write to {expanded_path}: {e}");
                     continue;
                 }
 
-                info!("Configuration updated successfully at {}", expanded_path);
+                info!("Configuration updated successfully at {expanded_path}");
                 return Ok(());
             }
             Err(e) => {
-                error!("Failed to create file {}: {}", expanded_path, e);
+                error!("Failed to create file {expanded_path}: {e}");
                 continue;
             }
         }

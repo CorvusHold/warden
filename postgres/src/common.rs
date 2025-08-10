@@ -31,13 +31,13 @@ impl PostgresConfig {
         );
 
         if let Some(password) = &self.password {
-            conn_string.push_str(&format!(" password={}", password));
+            conn_string.push_str(&format!(" password={password}"));
         }
 
         if let Some(ssl_mode) = &self.ssl_mode {
-            conn_string.push_str(&format!(" sslmode={}", ssl_mode));
+            conn_string.push_str(&format!(" sslmode={ssl_mode}"));
         }
-        info!("Creating connection string for {}", conn_string);
+        info!("Creating connection string for {conn_string}");
 
         conn_string
     }

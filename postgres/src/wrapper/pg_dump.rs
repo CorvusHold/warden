@@ -124,7 +124,7 @@ impl PgDump {
             cmd.arg("--exclude-table").arg(table);
         }
 
-        debug!("Running pg_dump command: {:?}", cmd);
+        debug!("Running pg_dump command: {cmd:?}");
 
         let output = cmd
             .stdout(Stdio::inherit())
@@ -153,7 +153,7 @@ impl PgDump {
         }
 
         let version = String::from_utf8_lossy(&output.stdout);
-        debug!("pg_dump version: {}", version);
+        debug!("pg_dump version: {version}");
 
         Ok(())
     }

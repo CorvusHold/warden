@@ -27,10 +27,10 @@ impl Enroll {
     pub async fn run(self) -> Result<()> {
         info!("Enrolling with token: {}", self.enrollment_token);
         if let Some(name) = self.name {
-            info!("  Name: {}", name);
+            info!("  Name: {name}");
         }
         if let Some(tags) = self.tags {
-            info!("  Tags: {}", tags);
+            info!("  Tags: {tags}");
         }
 
         // TODO: Implement the actual enrollment logic here

@@ -12,18 +12,65 @@ env:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: warden_dev
+          POSTGRES_PASSWORD: warden_dev
+          POSTGRES_DB: warden_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U warden_dev" --health-interval 10s --health-timeout 5s --health-retries 5
+      minio:
+        image: ghcr.io/corvushold/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+          - 9001:9001
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      CARGO_TERM_COLOR: always
+      POSTGRES_USER: warden_dev
+      POSTGRES_PASSWORD: warden_dev
+      POSTGRES_DB: warden_dev
+      POSTGRES_PORT: 5432
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ENDPOINT: http://localhost:9000
+      AWS_CONSOLE_ENDPOINT: http://localhost:9001
+      AWS_TEST_BUCKET: testbucket
+      CI: true
     steps:
-    - uses: actions/checkout@v3
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: rustfmt, clippy
-    - name: Check formatting
-      run: cargo fmt -- --check
-    - name: Lint with clippy
-      run: cargo clippy --workspace -- -D warnings
-    - name: Run tests
-      run: cargo test --workspace -- --test-threads=1
+      - uses: actions/checkout@v4
+      - name: Install latest PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      - name: Generate fake database (medium)
+        env:
+          DATABASE_URL: "postgres://warden_dev:warden_dev@localhost:5432/warden_dev"
+        run: cargo run --release -p db_faker -- --db-url "$DATABASE_URL" --size medium
+      - name: Load fake data into PostgreSQL
+        run: psql -h localhost -U warden_dev -d warden_dev < fake_medium.sql
+        env:
+          PGPASSWORD: warden_dev
+      - name: Check formatting
+        run: cargo fmt -- --check
+      - name: Lint with clippy
+        run: cargo clippy --workspace -- -D warnings
+      - name: Run tests
+        env:
+          CI: true
+        run: cargo test --workspace -- --test-threads=1

@@ -47,7 +47,7 @@ impl AmqpClient {
             config.vhost.as_deref().unwrap_or("")
         );
 
-        info!("Connecting to AMQP broker at {}", uri);
+        info!("Connecting to AMQP broker at {uri}");
 
         let connection = Connection::connect(&uri, ConnectionProperties::default())
             .await
@@ -80,7 +80,7 @@ impl AmqpClient {
             .await
             .context("Failed to declare exchange")?;
 
-        debug!("Declared exchange: {}", name);
+        debug!("Declared exchange: {name}");
         Ok(())
     }
 
@@ -99,7 +99,7 @@ impl AmqpClient {
             .await
             .context("Failed to declare queue")?;
 
-        debug!("Declared queue: {}", name);
+        debug!("Declared queue: {name}");
         Ok(())
     }
 
@@ -117,10 +117,7 @@ impl AmqpClient {
             .await
             .context("Failed to bind queue to exchange")?;
 
-        debug!(
-            "Bound queue {} to exchange {} with routing key {}",
-            queue, exchange, routing_key
-        );
+        debug!("Bound queue {queue} to exchange {exchange} with routing key {routing_key}");
         Ok(())
     }
 
@@ -160,10 +157,7 @@ impl AmqpClient {
             .context("Failed to get publish confirmation")?;
 
         if confirm.is_ack() {
-            debug!(
-                "Published message to {}/{}: {}",
-                exchange, routing_key, json
-            );
+            debug!("Published message to {exchange}/{routing_key}: {json}");
             Ok(confirm)
         } else {
             Err(anyhow!("Message was not acknowledged by the broker"))
@@ -183,7 +177,7 @@ impl AmqpClient {
             .await
             .context("Failed to consume from queue")?;
 
-        debug!("Started consuming from queue: {}", queue);
+        debug!("Started consuming from queue: {queue}");
         Ok(consumer)
     }
 

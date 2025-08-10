@@ -53,7 +53,7 @@ impl IncrementalBackupManager {
         // Spawn the connection handler
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                error!("Connection error: {}", e);
+                error!("Connection error: {e}");
             }
         });
 
@@ -64,7 +64,7 @@ impl IncrementalBackupManager {
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
         let backup_path = self
             .backup_dir
-            .join(format!("incremental_backup_{}", timestamp));
+            .join(format!("incremental_backup_{timestamp}"));
 
         fs::create_dir_all(&backup_path).map_err(PostgresError::Io)?;
 
@@ -116,7 +116,7 @@ impl IncrementalBackupManager {
             .map_err(PostgresError::Postgres)?;
 
         let version: String = row.get(0);
-        debug!("PostgreSQL server version: {}", version);
+        debug!("PostgreSQL server version: {version}");
 
         Ok(version)
     }
@@ -129,7 +129,7 @@ impl IncrementalBackupManager {
             .map_err(PostgresError::Postgres)?;
 
         let wal_position: String = row.get(0);
-        debug!("Current WAL position: {}", wal_position);
+        debug!("Current WAL position: {wal_position}");
 
         Ok(wal_position)
     }
@@ -173,10 +173,9 @@ impl IncrementalBackupManager {
 
         // Get list of WAL files between start_lsn and current_lsn
         let query = format!(
-            "SELECT file_name FROM pg_walfile_name_offset('{}') 
+            "SELECT file_name FROM pg_walfile_name_offset('{start_lsn}') 
                             UNION 
-                            SELECT file_name FROM pg_walfile_name_offset('{}')",
-            start_lsn, current_lsn
+                            SELECT file_name FROM pg_walfile_name_offset('{current_lsn}')"
         );
 
         let rows = client
@@ -267,7 +266,7 @@ impl IncrementalBackupManager {
             }
         }
 
-        debug!("Backup size: {} bytes", total_size);
+        debug!("Backup size: {total_size} bytes");
 
         Ok(total_size)
     }

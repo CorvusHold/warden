@@ -43,7 +43,7 @@ impl PostgresBackupStorage {
 
         // Try to create the bucket regardless of whether it exists
         // This is a workaround for the "service error" issue
-        info!("Attempting to create bucket {} if it doesn't exist", bucket);
+        info!("Attempting to create bucket {bucket} if it doesn't exist");
         match provider.create_bucket(&bucket).await {
             Ok(_) => {}
             Err(e) => {
@@ -51,10 +51,10 @@ impl PostgresBackupStorage {
                 if e.to_string().contains("BucketAlreadyOwnedByYou")
                     || e.to_string().contains("BucketAlreadyExists")
                 {
-                    info!("Bucket {} already exists", bucket);
+                    info!("Bucket {bucket} already exists");
                 } else {
                     // Log the error but continue - we'll try to use the bucket anyway
-                    error!("Failed to create bucket {}: {}", bucket, e);
+                    error!("Failed to create bucket {bucket}: {e}");
                     // Don't return the error, try to proceed anyway
                 }
             }
@@ -138,7 +138,7 @@ impl PostgresBackupStorage {
             }
         }
 
-        info!("Backup {} uploaded successfully", backup_id);
+        info!("Backup {backup_id} uploaded successfully");
         Ok(())
     }
 
@@ -150,14 +150,11 @@ impl PostgresBackupStorage {
         file_path: &Path,
         metadata: Option<Metadata>,
     ) -> Result<(), StorageError> {
-        info!(
-            "Streaming upload of backup file {} for backup {}",
-            file_name, backup_id
-        );
+        info!("Streaming upload of backup file {file_name} for backup {backup_id}");
 
         // Create the backup key
         let key = if self.prefix.is_empty() {
-            format!("{}/{}", backup_id, file_name)
+            format!("{backup_id}/{file_name}")
         } else {
             format!("{}/{}/{}", self.prefix, backup_id, file_name)
         };
@@ -197,7 +194,7 @@ impl PostgresBackupStorage {
             .upload_stream(&self.bucket, &key, Box::pin(stream), content_type, metadata)
             .await?;
 
-        info!("Backup file {} streamed successfully", file_name);
+        info!("Backup file {file_name} streamed successfully");
         Ok(())
     }
 
@@ -250,7 +247,7 @@ impl PostgresBackupStorage {
             let file = match file_result {
                 Ok(f) => f,
                 Err(e) => {
-                    error!("Failed to read file in backup directory: {}", e);
+                    error!("Failed to read file in backup directory: {e}");
                     return Err(StorageError::Io(e));
                 }
             };
@@ -263,9 +260,9 @@ impl PostgresBackupStorage {
                     .upload_backup_stream(backup_id, &file_name, &file_path, metadata.clone())
                     .await
                 {
-                    Ok(_) => info!("Successfully uploaded file: {}", file_name),
+                    Ok(_) => info!("Successfully uploaded file: {file_name}"),
                     Err(e) => {
-                        error!("Failed to upload file {}: {}", file_name, e);
+                        error!("Failed to upload file {file_name}: {e}");
                         return Err(e);
                     }
                 }
@@ -312,8 +309,7 @@ impl PostgresBackupStorage {
 
         if objects.is_empty() {
             return Err(StorageError::NotFound(format!(
-                "No objects found for backup {}",
-                backup_id
+                "No objects found for backup {backup_id}"
             )));
         }
 
@@ -344,7 +340,7 @@ impl PostgresBackupStorage {
                 .await?;
         }
 
-        info!("Backup {} downloaded successfully", backup_id);
+        info!("Backup {backup_id} downloaded successfully");
         Ok(())
     }
 
@@ -364,7 +360,7 @@ impl PostgresBackupStorage {
 
         // Create the backup key
         let key = if self.prefix.is_empty() {
-            format!("{}/{}", backup_id, file_name)
+            format!("{backup_id}/{file_name}")
         } else {
             format!("{}/{}/{}", self.prefix, backup_id, file_name)
         };
@@ -381,7 +377,7 @@ impl PostgresBackupStorage {
             .download_file(&self.bucket, &key, target_path)
             .await?;
 
-        info!("Backup file {} downloaded successfully", file_name);
+        info!("Backup file {file_name} downloaded successfully");
         Ok(())
     }
 
@@ -418,7 +414,7 @@ impl PostgresBackupStorage {
                 if backup_ids.insert(backup_id.clone()) {
                     // Get metadata file if it exists
                     let _metadata_key = if self.prefix.is_empty() {
-                        format!("{}/metadata.json", backup_id)
+                        format!("{backup_id}/metadata.json")
                     } else {
                         format!("{}/{}/metadata.json", self.prefix, backup_id)
                     };
@@ -469,7 +465,7 @@ impl PostgresBackupStorage {
 
     /// Deletes a backup
     pub async fn delete_backup(&self, backup_id: &str) -> Result<(), StorageError> {
-        info!("Deleting backup {}", backup_id);
+        info!("Deleting backup {backup_id}");
 
         // Create the backup prefix
         let backup_prefix = if self.prefix.is_empty() {
@@ -486,8 +482,7 @@ impl PostgresBackupStorage {
 
         if objects.is_empty() {
             return Err(StorageError::NotFound(format!(
-                "No objects found for backup {}",
-                backup_id
+                "No objects found for backup {backup_id}"
             )));
         }
 
@@ -496,7 +491,7 @@ impl PostgresBackupStorage {
             self.provider.delete_object(&self.bucket, &obj.key).await?;
         }
 
-        info!("Backup {} deleted successfully", backup_id);
+        info!("Backup {backup_id} deleted successfully");
         Ok(())
     }
 
@@ -509,7 +504,7 @@ impl PostgresBackupStorage {
     ) -> Result<String, StorageError> {
         // Create the backup key
         let key = if self.prefix.is_empty() {
-            format!("{}/{}", backup_id, file_name)
+            format!("{backup_id}/{file_name}")
         } else {
             format!("{}/{}/{}", self.prefix, backup_id, file_name)
         };

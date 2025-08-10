@@ -48,7 +48,7 @@ pub struct ForwardCommand {
 
 /// Find an available local port
 pub fn find_available_port() -> Option<u16> {
-    (10000..65535).find(|port| TcpListener::bind(format!("127.0.0.1:{}", port)).is_ok())
+    (10000..65535).find(|port| TcpListener::bind(format!("127.0.0.1:{port}")).is_ok())
 }
 
 pub async fn forward(cmd: ForwardCommand) -> Result<()> {
@@ -67,24 +67,18 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
     let local_port =
         local_port.unwrap_or_else(|| find_available_port().expect("No available ports found"));
 
-    info!(
-        "Forwarding remote port {} on {} to local port {}",
-        remote_port, remote_host, local_port,
-    );
+    info!("Forwarding remote port {remote_port} on {remote_host} to local port {local_port}",);
 
     let mut tunnel = SSHTunnel::new(ssh_host.clone(), ssh_user.clone(), Some(ssh_port));
 
-    info!(
-        "Attempting SSH tunnel to {}@{}:{}",
-        ssh_user, ssh_host, ssh_port
-    );
+    info!("Attempting SSH tunnel to {ssh_user}@{ssh_host}:{ssh_port}",);
 
     // Set authentication
     if let Some(password) = &remote_password {
         info!("Using SSH password authentication");
         tunnel = tunnel.with_password(password.clone());
     } else if let Some(key_path) = &remote_key_path {
-        info!("Using SSH key authentication from {}", key_path);
+        info!("Using SSH key authentication from {key_path}");
         tunnel = tunnel.with_private_key_path(key_path.clone());
     } else {
         return Err(SshError::ConfigurationError(
@@ -102,7 +96,7 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
         info!("Received Ctrl+C, shutting down tunnel...");
         if let Some(tunnel) = tunnel_weak.upgrade() {
             if let Err(e) = tunnel.stop() {
-                warn!("Error stopping SSH tunnel: {}", e);
+                warn!("Error stopping SSH tunnel: {e}");
             } else {
                 info!("SSH tunnel closed successfully");
             }
@@ -111,20 +105,14 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
     .expect("Error setting Ctrl+C handler");
 
     // Forward the port
-    info!(
-        "Forwarding port {} to {}:{}",
-        local_port, remote_host, remote_port
-    );
+    info!("Forwarding port {local_port} to {remote_host}:{remote_port}",);
     match tunnel_ref
         .forward_port(local_port, remote_port, remote_host.clone())
         .await
     {
         Ok(_) => {
             info!("SSH tunnel established successfully");
-            info!(
-                "Connect to localhost:{} to access {}:{}",
-                local_port, remote_host, remote_port,
-            );
+            info!("Connect to localhost:{local_port} to access {remote_host}:{remote_port}",);
 
             // Keep the tunnel running until it's stopped (e.g., by Ctrl+C)
             while tunnel_ref.is_running() {
@@ -135,7 +123,7 @@ pub async fn forward(cmd: ForwardCommand) -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            warn!("SSH tunnel error: {}", e);
+            warn!("SSH tunnel error: {e}");
             Err(SshError::TunnelError(e.to_string()).into())
         }
     }

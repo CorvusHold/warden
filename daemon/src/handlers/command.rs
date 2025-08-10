@@ -58,8 +58,8 @@ pub async fn handle_command(
     let command = match serde_json::from_str::<CommandPayload>(payload) {
         Ok(cmd) => cmd,
         Err(e) => {
-            let error_msg = format!("Failed to parse command payload: {}", e);
-            error!("{}", error_msg);
+            let error_msg = format!("Failed to parse command payload: {e}");
+            error!("{error_msg}");
 
             // Send error response
             let response = ResponsePayload {
@@ -84,7 +84,7 @@ pub async fn handle_command(
             client
                 .publish(
                     &exchange,
-                    &format!("warden.responses.{}", subtopic),
+                    &format!("warden.responses.{subtopic}"),
                     MessageType::Response,
                     &serde_json::to_string(&response)?,
                 )
@@ -94,7 +94,7 @@ pub async fn handle_command(
         }
     };
 
-    info!("Received command: {:?}", command);
+    info!("Received command: {command:?}");
 
     // Get exchange name from config
     let exchange = {
@@ -149,10 +149,10 @@ pub async fn handle_command(
                             // Save the config to disk
                             let config_guard = config.lock().unwrap();
                             if let Err(e) = common::config::update_config(&config_guard) {
-                                error!("Failed to save config: {}", e);
+                                error!("Failed to save config: {e}");
                                 ResponsePayload {
                                     success: false,
-                                    message: format!("Failed to save config: {}", e),
+                                    message: format!("Failed to save config: {e}"),
                                     data: None,
                                 }
                             } else {
@@ -165,7 +165,7 @@ pub async fn handle_command(
                         }
                         Err(e) => ResponsePayload {
                             success: false,
-                            message: format!("Invalid configuration format: {}", e),
+                            message: format!("Invalid configuration format: {e}"),
                             data: None,
                         },
                     }
@@ -324,7 +324,7 @@ pub async fn handle_command(
                     },
                     Err(e) => ResponsePayload {
                         success: false,
-                        message: format!("Failed to start Overwatch: {}", e),
+                        message: format!("Failed to start Overwatch: {e}"),
                         data: None,
                     },
                 }
@@ -348,7 +348,7 @@ pub async fn handle_command(
                     },
                     Err(e) => ResponsePayload {
                         success: false,
-                        message: format!("Failed to stop Overwatch: {}", e),
+                        message: format!("Failed to stop Overwatch: {e}"),
                         data: None,
                     },
                 }
@@ -365,10 +365,10 @@ pub async fn handle_command(
         }
         CommandType::Custom(cmd_name) => {
             // Handle custom commands
-            warn!("Received custom command: {}", cmd_name);
+            warn!("Received custom command: {cmd_name}");
             ResponsePayload {
                 success: false,
-                message: format!("Custom command '{}' not implemented", cmd_name),
+                message: format!("Custom command '{cmd_name}' not implemented"),
                 data: None,
             }
         }
@@ -378,7 +378,7 @@ pub async fn handle_command(
     client
         .publish(
             &exchange,
-            &format!("warden.responses.{}", subtopic),
+            &format!("warden.responses.{subtopic}"),
             MessageType::Response,
             &serde_json::to_string(&response)?,
         )

@@ -11,9 +11,16 @@ const LARGE_FILE_SIZE: usize = 20 * 1024 * 1024;
 #[tokio::test]
 async fn test_provider_matrix_large_file() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let providers = vec![("minio", ProviderKind::Minio, "http://localhost:9000")];
-    let test_bucket = env::var("AWS_TEST_BUCKET").unwrap_or_else(|_| "test-bucket".to_string());
-    let test_file = PathBuf::from("testdata/large_test_file.bin");
+    let providers = vec![("minio", ProviderKind::Minio)];
+    let region = env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+    let endpoint = env::var("AWS_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
+    let access_key = env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| "minioadmin".to_string());
+    let secret_key = env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string());
+    let test_bucket = env::var("AWS_TEST_BUCKET").unwrap_or_else(|_| "testbucket".to_string());
+    let base_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
+    let testdata_dir = base_dir.join("testdata");
+    let test_file = testdata_dir.join("large_test_file.bin");
     let test_key = "matrix/large_test_file.bin";
 
     // Generate a large file if it doesn't exist or if it's not exactly 20MB
@@ -25,23 +32,20 @@ async fn test_provider_matrix_large_file() {
         for (i, v) in data.iter_mut().enumerate().take(LARGE_FILE_SIZE) {
             *v = (i % 256) as u8;
         }
-        std::fs::create_dir_all("testdata").unwrap();
+        std::fs::create_dir_all(&testdata_dir).unwrap();
         std::fs::write(&test_file, &data).expect("write large test file");
     }
     // Print file size
     let actual_size = std::fs::metadata(&test_file).expect("file metadata").len();
-    println!(
-        "Test file size: {} bytes (expected: {})",
-        actual_size, LARGE_FILE_SIZE
-    );
+    println!("Test file size: {actual_size} bytes (expected: {LARGE_FILE_SIZE})");
 
-    for (name, kind, endpoint) in providers {
+    for (name, kind) in providers {
         println!("\nTesting provider (large file): {name} ({endpoint})");
         let provider = S3Provider::new_with_kind(
-            Some("us-east-1".to_string()),
-            Some(endpoint.to_string()),
-            Some("root".to_string()),
-            Some("password".to_string()),
+            Some(region.clone()),
+            Some(endpoint.clone()),
+            Some(access_key.clone()),
+            Some(secret_key.clone()),
             kind.clone(),
         )
         .await
@@ -53,7 +57,7 @@ async fn test_provider_matrix_large_file() {
             .unwrap();
 
         // Download and verify
-        let download_path = PathBuf::from("testdata/large_downloaded_file.bin");
+        let download_path = env::temp_dir().join("large_downloaded_file.bin");
         provider
             .download_file(&test_bucket, test_key, &download_path)
             .await

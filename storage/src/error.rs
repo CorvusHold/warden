@@ -30,17 +30,17 @@ pub enum StorageError {
 impl fmt::Display for StorageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StorageError::Aws(msg) => write!(f, "AWS SDK error: {}", msg),
-            StorageError::AwsSdk(msg) => write!(f, "AWS SDK error: {}", msg),
-            StorageError::Authentication(msg) => write!(f, "Authentication error: {}", msg),
-            StorageError::Configuration(msg) => write!(f, "Configuration error: {}", msg),
-            StorageError::Google(msg) => write!(f, "Google error: {}", msg),
-            StorageError::Io(err) => write!(f, "I/O error: {}", err),
-            StorageError::NotFound(msg) => write!(f, "Not found: {}", msg),
-            StorageError::PermissionDenied(msg) => write!(f, "Permission denied: {}", msg),
-            StorageError::Request(msg) => write!(f, "Request error: {}", msg),
-            StorageError::Serialization(msg) => write!(f, "Serialization error: {}", msg),
-            StorageError::Unexpected(msg) => write!(f, "Unexpected error: {}", msg),
+            StorageError::Aws(msg) => write!(f, "AWS SDK error: {msg}"),
+            StorageError::AwsSdk(msg) => write!(f, "AWS SDK error: {msg}"),
+            StorageError::Authentication(msg) => write!(f, "Authentication error: {msg}"),
+            StorageError::Configuration(msg) => write!(f, "Configuration error: {msg}"),
+            StorageError::Google(msg) => write!(f, "Google error: {msg}"),
+            StorageError::Io(err) => write!(f, "I/O error: {err}"),
+            StorageError::NotFound(msg) => write!(f, "Not found: {msg}"),
+            StorageError::PermissionDenied(msg) => write!(f, "Permission denied: {msg}"),
+            StorageError::Request(msg) => write!(f, "Request error: {msg}"),
+            StorageError::Serialization(msg) => write!(f, "Serialization error: {msg}"),
+            StorageError::Unexpected(msg) => write!(f, "Unexpected error: {msg}"),
         }
     }
 }

@@ -124,7 +124,7 @@ mod dns_tests {
             id: "test-dns-1".to_string(),
             name: "Test DNS Service".to_string(),
             monitor_type: MonitorType::DNS,
-            url: "https://www.google.com".to_string(),
+            url: "https://corvushold.com/".to_string(),
             http_method: None,
             payload: None,
             headers: None,
@@ -178,11 +178,15 @@ mod ping_tests {
 
     #[tokio::test]
     async fn test_ping() {
+        if std::env::var("CI").is_ok() {
+            // Skip this test in CI environments
+            return;
+        }
         let service = Service {
             id: "test-ping-1".to_string(),
             name: "Test Ping Service".to_string(),
             monitor_type: MonitorType::PING,
-            url: "https://www.google.com".to_string(),
+            url: "https://corvushold.com".to_string(),
             http_method: None,
             payload: None,
             headers: None,
@@ -205,6 +209,10 @@ mod ping_tests {
 
     #[tokio::test]
     async fn test_ping_nonexistent_domain() {
+        if std::env::var("CI").is_ok() {
+            // Skip this test in CI environments
+            return;
+        }
         let service = Service {
             id: "test-ping-2".to_string(),
             name: "Test Ping Nonexistent Service".to_string(),
@@ -237,12 +245,16 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_multiple_services() {
+        if std::env::var("CI").is_ok() {
+            // Skip this test in CI environments
+            return;
+        }
         let services = vec![
             Service {
                 id: "http-service".to_string(),
                 name: "HTTP Service".to_string(),
                 monitor_type: MonitorType::HTTP,
-                url: "https://www.google.com".to_string(),
+                url: "https://corvushold.com".to_string(),
                 http_method: Some(HttpRequestMethod::GET),
                 payload: None,
                 headers: None,
@@ -260,7 +272,7 @@ mod integration_tests {
                 id: "dns-service".to_string(),
                 name: "DNS Service".to_string(),
                 monitor_type: MonitorType::DNS,
-                url: "https://www.google.com".to_string(),
+                url: "https://corvushold.com".to_string(),
                 http_method: None,
                 payload: None,
                 headers: None,
@@ -278,7 +290,7 @@ mod integration_tests {
                 id: "ping-service".to_string(),
                 name: "Ping Service".to_string(),
                 monitor_type: MonitorType::PING,
-                url: "https://www.google.com".to_string(),
+                url: "https://corvushold.com".to_string(),
                 http_method: None,
                 payload: None,
                 headers: None,

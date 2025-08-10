@@ -37,15 +37,15 @@ impl Config {
                 match format.as_str() {
                     "json" => {
                         let json = serde_json::to_string_pretty(&config)?;
-                        info!("{}", json);
+                        info!("{json}");
                     }
                     "yaml" => {
                         let yaml = serde_yaml::to_string(&config)?;
-                        info!("{}", yaml);
+                        info!("{yaml}");
                     }
                     "toml" => {
                         let toml = toml::to_string_pretty(&config)?;
-                        info!("{}", toml);
+                        info!("{toml}");
                     }
                     "text" => {
                         info!("Warden Configuration:");

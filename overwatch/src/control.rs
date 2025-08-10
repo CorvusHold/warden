@@ -17,7 +17,7 @@ pub async fn start() -> Result<()> {
         Ok(())
     } else {
         let error = String::from_utf8_lossy(&output.stderr);
-        error!("Failed to start Overwatch service: {}", error);
+        error!("Failed to start Overwatch service: {error}");
         Err(anyhow::anyhow!(
             "Failed to start Overwatch service: {}",
             error
@@ -40,7 +40,7 @@ pub async fn stop() -> Result<()> {
         Ok(())
     } else {
         let error = String::from_utf8_lossy(&output.stderr);
-        error!("Failed to stop Overwatch service: {}", error);
+        error!("Failed to stop Overwatch service: {error}");
         Err(anyhow::anyhow!(
             "Failed to stop Overwatch service: {}",
             error
@@ -63,7 +63,7 @@ pub async fn restart() -> Result<()> {
         Ok(())
     } else {
         let error = String::from_utf8_lossy(&output.stderr);
-        error!("Failed to restart Overwatch service: {}", error);
+        error!("Failed to restart Overwatch service: {error}");
         Err(anyhow::anyhow!(
             "Failed to restart Overwatch service: {}",
             error

@@ -38,7 +38,7 @@ async fn main() {
         id: "http-service".to_string(),
         name: "Google HTTP Service".to_string(),
         monitor_type: MonitorType::HTTP,
-        url: "https://www.google.com".to_string(),
+        url: "https://corvushold.com".to_string(),
         http_method: Some(HttpRequestMethod::GET),
         payload: None,
         headers: None,
