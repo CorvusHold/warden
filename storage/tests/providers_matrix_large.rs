@@ -17,7 +17,8 @@ async fn test_provider_matrix_large_file() {
     let access_key = env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| "minioadmin".to_string());
     let secret_key = env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string());
     let test_bucket = env::var("AWS_TEST_BUCKET").unwrap_or_else(|_| "testbucket".to_string());
-    let base_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
+    let base_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
     let testdata_dir = base_dir.join("testdata");
     let test_file = testdata_dir.join("large_test_file.bin");
     let test_key = "matrix/large_test_file.bin";
