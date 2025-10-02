@@ -526,19 +526,44 @@ pub async fn list_backups(
         let storage_instance = create_storage_provider(&storage).await?;
 
         if let Some(storage) = storage_instance {
-            // List all backups from the remote storage
+            // List all backups from the remote storage with detailed metadata
             let backups = storage
-                .list_backups()
+                .list_remote_backups_detailed()
                 .await
                 .map_err(|e| anyhow!("Failed to list backups from remote storage: {}", e))?;
 
-            info!("All backups in remote storage:");
-            for backup in backups {
-                info!(
-                    "Backup ID: {}, Type: {:?}, Time: {}",
-                    backup.id, backup.backup_type, backup.timestamp
-                );
+            println!("\n=== Remote Backups ({}) ===", backups.len());
+            
+            let mut total_size = 0u64;
+            for backup in &backups {
+                total_size += backup.size_bytes;
+                
+                println!("\n📦 Backup: {}", backup.id);
+                println!("   Type: {:?}", backup.backup_type);
+                println!("   Status: {:?}", backup.status);
+                println!("   Created: {}", backup.start_time);
+                if let Some(end_time) = backup.end_time {
+                    let duration = end_time - backup.start_time;
+                    println!("   Duration: {}s", duration.num_seconds());
+                }
+                println!("   Size: {:.2} GB", backup.size_bytes as f64 / 1024.0 / 1024.0 / 1024.0);
+                println!("   Server: {}", backup.server_version);
+                
+                if let Some(base_id) = &backup.base_backup_id {
+                    println!("   Base Backup: {}", base_id);
+                }
+                if backup.pinned {
+                    println!("   📌 PINNED");
+                }
+                if !backup.tags.is_empty() {
+                    println!("   Tags: {}", backup.tags.join(", "));
+                }
+                println!("   Files: {} files", backup.files.len());
             }
+            
+            println!("\n=== Summary ===");
+            println!("Total backups: {}", backups.len());
+            println!("Total size: {:.2} GB", total_size as f64 / 1024.0 / 1024.0 / 1024.0);
 
             return Ok(());
         }
@@ -1194,5 +1219,318 @@ pub async fn list_snapshot_contents(
     for item in contents.split('\n').filter(|s| !s.is_empty()) {
         info!("{}", item);
     }
+    Ok(())
+}
+
+/// Inspect detailed backup metadata from remote storage
+pub async fn inspect_backup(storage: StorageOptions, backup_id: String) -> Result<()> {
+    info!("Inspecting backup {} from remote storage...", backup_id);
+
+    let storage_instance = create_storage_provider(&storage)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    let metadata = storage_instance
+        .get_remote_backup_metadata(&backup_id)
+        .await
+        .map_err(|e| anyhow!("Failed to get backup metadata: {}", e))?;
+
+    // Display metadata in a readable format
+    println!("\n=== Backup Metadata ===");
+    println!("ID: {}", metadata.id);
+    println!("Type: {:?}", metadata.backup_type);
+    println!("Status: {:?}", metadata.status);
+    println!("Start Time: {}", metadata.start_time);
+    if let Some(end_time) = metadata.end_time {
+        println!("End Time: {}", end_time);
+        let duration = end_time - metadata.start_time;
+        println!("Duration: {} seconds", duration.num_seconds());
+    }
+    println!("Size: {} bytes ({:.2} GB)", metadata.size_bytes, metadata.size_bytes as f64 / 1024.0 / 1024.0 / 1024.0);
+    println!("Server Version: {}", metadata.server_version);
+    
+    if let Some(base_id) = &metadata.base_backup_id {
+        println!("Base Backup ID: {}", base_id);
+    }
+    if let Some(wal_start) = &metadata.wal_start {
+        println!("WAL Start: {}", wal_start);
+    }
+    if let Some(wal_end) = &metadata.wal_end {
+        println!("WAL End: {}", wal_end);
+    }
+    if let Some(checksum) = &metadata.checksum {
+        println!("Checksum: {}", checksum);
+    }
+    
+    println!("Pinned: {}", metadata.pinned);
+    if !metadata.tags.is_empty() {
+        println!("Tags: {}", metadata.tags.join(", "));
+    }
+    
+    println!("\n=== Files ({}) ===", metadata.files.len());
+    for file in &metadata.files {
+        println!("  {} ({} bytes)", file.name, file.size);
+        if let Some(checksum) = &file.checksum {
+            println!("    Checksum: {}", checksum);
+        }
+    }
+
+    Ok(())
+}
+
+/// Download backup from remote storage
+pub async fn download_backup(
+    storage: StorageOptions,
+    backup_id: String,
+    target_dir: PathBuf,
+    _verify_checksums: bool,
+) -> Result<()> {
+    info!("Downloading backup {} to {:?}...", backup_id, target_dir);
+
+    let storage_instance = create_storage_provider(&storage)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    // Create target directory
+    std::fs::create_dir_all(&target_dir)
+        .map_err(|e| anyhow!("Failed to create target directory: {}", e))?;
+
+    // Download the backup
+    storage_instance
+        .download_backup(&backup_id, &target_dir)
+        .await
+        .map_err(|e| anyhow!("Failed to download backup: {}", e))?;
+
+    info!("Backup {} downloaded successfully to {:?}", backup_id, target_dir);
+
+    Ok(())
+}
+
+/// Initialize or update retention policy
+pub async fn init_retention_policy(
+    storage: StorageOptions,
+    policy_file: PathBuf,
+) -> Result<()> {
+    info!("Initializing retention policy from {:?}...", policy_file);
+
+    // Read and parse the policy file
+    let policy_json = std::fs::read_to_string(&policy_file)
+        .map_err(|e| anyhow!("Failed to read policy file: {}", e))?;
+
+    let policy: storage::RetentionPolicy = serde_json::from_str(&policy_json)
+        .map_err(|e| anyhow!("Failed to parse policy file: {}", e))?;
+
+    // Validate policy
+    info!("Policy version: {}", policy.version);
+    info!("Policy enabled: {}", policy.enabled);
+    info!("Policy type: {:?}", policy.policy_type);
+
+    let storage_instance = create_storage_provider(&storage)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    // Upload the policy
+    storage_instance
+        .save_retention_policy(&policy)
+        .await
+        .map_err(|e| anyhow!("Failed to save retention policy: {}", e))?;
+
+    info!("Retention policy saved successfully to bucket {}", storage.bucket.unwrap_or_default());
+
+    Ok(())
+}
+
+/// Show current retention policy
+pub async fn show_retention_policy(storage: StorageOptions) -> Result<()> {
+    info!("Loading retention policy...");
+
+    let storage_instance = create_storage_provider(&storage)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    match storage_instance.load_retention_policy().await {
+        Ok(Some(policy)) => {
+            println!("\n=== Retention Policy ===");
+            println!("{}", serde_json::to_string_pretty(&policy).unwrap());
+        }
+        Ok(None) => {
+            println!("No retention policy found for this bucket.");
+            println!("Use 'init-retention-policy' to create one.");
+        }
+        Err(e) => {
+            return Err(anyhow!("Failed to load retention policy: {}", e));
+        }
+    }
+
+    Ok(())
+}
+
+/// Evaluate purge policy (dry run)
+pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
+    info!("Evaluating purge policy...");
+
+    let storage_instance = create_storage_provider(&storage)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    // Load policy
+    let policy = storage_instance
+        .load_retention_policy()
+        .await
+        .map_err(|e| anyhow!("Failed to load retention policy: {}", e))?
+        .ok_or_else(|| anyhow!("No retention policy found. Use 'init-retention-policy' to create one."))?;
+
+    // Evaluate purge
+    let evaluation = storage_instance
+        .evaluate_purge(&policy)
+        .await
+        .map_err(|e| anyhow!("Failed to evaluate purge: {}", e))?;
+
+    match format.as_str() {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&evaluation).unwrap());
+        }
+        "yaml" => {
+            println!("{}", serde_yaml::to_string(&evaluation).unwrap());
+        }
+        "table" | _ => {
+            println!("\n=== Purge Evaluation ===");
+            println!("Timestamp: {}", evaluation.timestamp);
+            println!("Total backups: {}", evaluation.total_backups);
+            println!("To keep: {}", evaluation.to_keep.len());
+            println!("To delete: {}", evaluation.to_delete.len());
+            println!("Space to free: {} bytes ({:.2} GB)", 
+                evaluation.estimated_space_freed,
+                evaluation.estimated_space_freed as f64 / 1024.0 / 1024.0 / 1024.0
+            );
+
+            if !evaluation.warnings.is_empty() {
+                println!("\n=== Warnings ===");
+                for warning in &evaluation.warnings {
+                    println!("  ⚠️  {}", warning);
+                }
+            }
+
+            if !evaluation.to_delete.is_empty() {
+                println!("\n=== Backups to Delete ===");
+                for decision in &evaluation.to_delete {
+                    println!("  🗑️  {} ({:?}) - {} - {:.2} GB",
+                        decision.backup_id,
+                        decision.backup_type,
+                        decision.reason,
+                        decision.size_bytes as f64 / 1024.0 / 1024.0 / 1024.0
+                    );
+                }
+            }
+
+            if !evaluation.to_keep.is_empty() {
+                println!("\n=== Backups to Keep ===");
+                for decision in &evaluation.to_keep {
+                    println!("  ✅ {} ({:?}) - {}",
+                        decision.backup_id,
+                        decision.backup_type,
+                        decision.reason
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Execute purge according to retention policy
+pub async fn purge(storage: StorageOptions, apply: bool, yes: bool) -> Result<()> {
+    let storage_instance = create_storage_provider(&storage)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    // Load policy
+    let policy = storage_instance
+        .load_retention_policy()
+        .await
+        .map_err(|e| anyhow!("Failed to load retention policy: {}", e))?
+        .ok_or_else(|| anyhow!("No retention policy found. Use 'init-retention-policy' to create one."))?;
+
+    // Evaluate purge
+    let evaluation = storage_instance
+        .evaluate_purge(&policy)
+        .await
+        .map_err(|e| anyhow!("Failed to evaluate purge: {}", e))?;
+
+    if !apply {
+        println!("\n⚠️  DRY RUN MODE - No backups will be deleted");
+        println!("Use --apply to actually execute the purge\n");
+    }
+
+    println!("=== Purge Summary ===");
+    println!("Total backups: {}", evaluation.total_backups);
+    println!("To delete: {}", evaluation.to_delete.len());
+    println!("To keep: {}", evaluation.to_keep.len());
+    println!("Space to free: {} bytes ({:.2} GB)", 
+        evaluation.estimated_space_freed,
+        evaluation.estimated_space_freed as f64 / 1024.0 / 1024.0 / 1024.0
+    );
+
+    if !evaluation.to_delete.is_empty() {
+        println!("\nBackups to be deleted:");
+        for decision in &evaluation.to_delete {
+            println!("  - {} ({:?}) - {}", 
+                decision.backup_id,
+                decision.backup_type,
+                decision.reason
+            );
+        }
+    }
+
+    // Confirm if applying and confirmation required
+    if apply && !yes && policy.safety.require_confirmation {
+        use std::io::{self, Write};
+        print!("\nAre you sure you want to delete {} backups? (yes/no): ", evaluation.to_delete.len());
+        io::stdout().flush().unwrap();
+        
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        
+        if input.trim().to_lowercase() != "yes" {
+            println!("Purge cancelled.");
+            return Ok(());
+        }
+    }
+
+    // Execute purge
+    let report = storage_instance
+        .execute_purge(&evaluation, !apply)
+        .await
+        .map_err(|e| anyhow!("Failed to execute purge: {}", e))?;
+
+    println!("\n=== Purge Report ===");
+    println!("Dry run: {}", report.dry_run);
+    println!("Total evaluated: {}", report.total_evaluated);
+    println!("Kept: {}", report.kept);
+    println!("Deleted: {}", report.deleted);
+    println!("Failed: {}", report.failed);
+    println!("Space freed: {} bytes ({:.2} GB)", 
+        report.space_freed,
+        report.space_freed as f64 / 1024.0 / 1024.0 / 1024.0
+    );
+    println!("Duration: {} seconds", report.duration_secs);
+
+    if !report.errors.is_empty() {
+        println!("\n=== Errors ===");
+        for error in &report.errors {
+            println!("  ❌ {}", error);
+        }
+    }
+
+    // Report to Sentry
+    storage::purge::report_purge_to_sentry(&report, &policy);
+
+    if report.dry_run {
+        println!("\n⚠️  This was a dry run. Use --apply to actually delete backups.");
+    } else {
+        println!("\n✅ Purge completed successfully.");
+    }
+
     Ok(())
 }
