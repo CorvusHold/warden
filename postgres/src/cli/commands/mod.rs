@@ -1408,7 +1408,7 @@ pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
         "yaml" => {
             println!("{}", serde_yaml::to_string(&evaluation).unwrap());
         }
-        "table" | _ => {
+        _ => {
             println!("\n=== Purge Evaluation ===");
             println!("Timestamp: {}", evaluation.timestamp);
             println!("Total backups: {}", evaluation.total_backups);

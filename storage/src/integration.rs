@@ -521,6 +521,7 @@ impl PostgresBackupStorage {
     }
 
     /// Creates backup metadata from a backup directory
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_backup_metadata(
         &self,
         backup_id: &str,
@@ -554,7 +555,7 @@ impl PostgresBackupStorage {
                     .strip_prefix(backup_path)
                     .map_err(|e| StorageError::Unexpected(e.to_string()))?;
 
-                let metadata = std::fs::metadata(file_path).map_err(|e| StorageError::Io(e))?;
+                let metadata = std::fs::metadata(file_path).map_err(StorageError::Io)?;
                 let file_size = metadata.len();
                 total_size += file_size;
 
@@ -690,7 +691,7 @@ impl PostgresBackupStorage {
             // Extract backup ID from key
             let parts: Vec<&str> = obj.key.split('/').collect();
             let backup_id = if self.prefix.is_empty() {
-                parts.get(0).map(|s| s.to_string())
+                parts.first().map(|s| s.to_string())
             } else {
                 parts.get(1).map(|s| s.to_string())
             };

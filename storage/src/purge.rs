@@ -18,7 +18,7 @@ pub fn evaluate_retention_policy(
             total_backups: backups.len(),
             to_keep: backups
                 .iter()
-                .map(|b| create_keep_decision(b, "Policy is disabled"))
+                .map(|b| create_keep_decision(b, "Policy is disabled", false))
                 .collect(),
             to_delete: Vec::new(),
             warnings: vec!["Retention policy is disabled".to_string()],
@@ -113,7 +113,7 @@ fn evaluate_time_based(
         preserve_backup_chains(backups, &mut to_keep_ids);
     }
 
-    build_evaluation(backups, to_keep_ids, &mut warnings)
+    build_evaluation(backups, to_keep_ids, &warnings)
 }
 
 /// Evaluates count-based retention policy
@@ -125,7 +125,7 @@ fn evaluate_count_based(
     policy: &RetentionPolicy,
 ) -> Result<PurgeEvaluation, StorageError> {
     let mut to_keep_ids = HashSet::new();
-    let mut warnings = Vec::new();
+    let warnings = Vec::new();
 
     // Get completed backups sorted by time (newest first)
     let mut sorted_backups: Vec<_> = backups
@@ -180,7 +180,7 @@ fn evaluate_count_based(
         preserve_backup_chains(backups, &mut to_keep_ids);
     }
 
-    build_evaluation(backups, to_keep_ids, &mut warnings)
+    build_evaluation(backups, to_keep_ids, &warnings)
 }
 
 /// Evaluates interval-based retention policy (e.g., daily, weekly, monthly, yearly)
@@ -287,7 +287,7 @@ fn evaluate_interval_based(
         ));
     }
 
-    build_evaluation(backups, to_keep_ids, &mut warnings)
+    build_evaluation(backups, to_keep_ids, &warnings)
 }
 
 /// Selects backups spaced by a specific interval
@@ -333,7 +333,7 @@ fn select_spaced_backups(
 
 /// Preserves backup chains by keeping all incrementals for kept full backups
 fn preserve_backup_chains(backups: &[BackupMetadata], to_keep_ids: &mut HashSet<String>) {
-    // Find all full backups we're keeping
+    // First pass: propagate downward from kept full backups to their incrementals
     let kept_full_backups: HashSet<_> = to_keep_ids
         .iter()
         .filter(|id| {
@@ -356,13 +356,37 @@ fn preserve_backup_chains(backups: &[BackupMetadata], to_keep_ids: &mut HashSet<
             }
         }
     }
+
+    // Second pass: propagate upward from kept incrementals to their base backups
+    // Repeat until no new IDs are added to ensure full chain preservation
+    loop {
+        let initial_size = to_keep_ids.len();
+
+        for backup in backups {
+            // If this backup is kept and is an incremental, ensure its base is also kept
+            if to_keep_ids.contains(&backup.id) && backup.backup_type == BackupType::Incremental {
+                if let Some(base_id) = &backup.base_backup_id {
+                    // Check if the base backup exists
+                    if backups.iter().any(|b| b.id == *base_id) {
+                        to_keep_ids.insert(base_id.clone());
+                    }
+                    // If base doesn't exist, we skip it (orphaned incremental)
+                }
+            }
+        }
+
+        // If no new IDs were added, we're done
+        if to_keep_ids.len() == initial_size {
+            break;
+        }
+    }
 }
 
 /// Builds the final purge evaluation
 fn build_evaluation(
     backups: &[BackupMetadata],
     to_keep_ids: HashSet<String>,
-    warnings: &mut Vec<String>,
+    warnings: &[String],
 ) -> Result<PurgeEvaluation, StorageError> {
     let mut to_keep = Vec::new();
     let mut to_delete = Vec::new();
@@ -379,11 +403,18 @@ fn build_evaluation(
     }
 
     for backup in backups {
+        // Check if this backup has dependents
+        let has_deps = has_dependents.get(&backup.id).copied().unwrap_or(false);
+
         let decision = if to_keep_ids.contains(&backup.id) {
-            create_keep_decision(backup, &determine_keep_reason(backup, &to_keep_ids))
+            create_keep_decision(
+                backup,
+                &determine_keep_reason(backup, &to_keep_ids),
+                has_deps,
+            )
         } else {
             estimated_space_freed += backup.size_bytes;
-            create_delete_decision(backup, &determine_delete_reason(backup))
+            create_delete_decision(backup, &determine_delete_reason(backup), has_deps)
         };
 
         if to_keep_ids.contains(&backup.id) {
@@ -402,12 +433,16 @@ fn build_evaluation(
         total_backups: backups.len(),
         to_keep,
         to_delete,
-        warnings: warnings.clone(),
+        warnings: warnings.to_vec(),
         estimated_space_freed,
     })
 }
 
-fn create_keep_decision(backup: &BackupMetadata, reason: &str) -> BackupPurgeDecision {
+fn create_keep_decision(
+    backup: &BackupMetadata,
+    reason: &str,
+    has_dependents: bool,
+) -> BackupPurgeDecision {
     BackupPurgeDecision {
         backup_id: backup.id.clone(),
         backup_type: backup.backup_type.clone(),
@@ -415,11 +450,15 @@ fn create_keep_decision(backup: &BackupMetadata, reason: &str) -> BackupPurgeDec
         size_bytes: backup.size_bytes,
         reason: reason.to_string(),
         pinned: backup.pinned,
-        has_dependents: false, // Will be updated if needed
+        has_dependents,
     }
 }
 
-fn create_delete_decision(backup: &BackupMetadata, reason: &str) -> BackupPurgeDecision {
+fn create_delete_decision(
+    backup: &BackupMetadata,
+    reason: &str,
+    has_dependents: bool,
+) -> BackupPurgeDecision {
     BackupPurgeDecision {
         backup_id: backup.id.clone(),
         backup_type: backup.backup_type.clone(),
@@ -427,7 +466,7 @@ fn create_delete_decision(backup: &BackupMetadata, reason: &str) -> BackupPurgeD
         size_bytes: backup.size_bytes,
         reason: reason.to_string(),
         pinned: backup.pinned,
-        has_dependents: false,
+        has_dependents,
     }
 }
 
