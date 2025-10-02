@@ -533,11 +533,11 @@ pub async fn list_backups(
                 .map_err(|e| anyhow!("Failed to list backups from remote storage: {}", e))?;
 
             println!("\n=== Remote Backups ({}) ===", backups.len());
-            
+
             let mut total_size = 0u64;
             for backup in &backups {
                 total_size += backup.size_bytes;
-                
+
                 println!("\n📦 Backup: {}", backup.id);
                 println!("   Type: {:?}", backup.backup_type);
                 println!("   Status: {:?}", backup.status);
@@ -546,9 +546,12 @@ pub async fn list_backups(
                     let duration = end_time - backup.start_time;
                     println!("   Duration: {}s", duration.num_seconds());
                 }
-                println!("   Size: {:.2} GB", backup.size_bytes as f64 / 1024.0 / 1024.0 / 1024.0);
+                println!(
+                    "   Size: {:.2} GB",
+                    backup.size_bytes as f64 / 1024.0 / 1024.0 / 1024.0
+                );
                 println!("   Server: {}", backup.server_version);
-                
+
                 if let Some(base_id) = &backup.base_backup_id {
                     println!("   Base Backup: {}", base_id);
                 }
@@ -560,10 +563,13 @@ pub async fn list_backups(
                 }
                 println!("   Files: {} files", backup.files.len());
             }
-            
+
             println!("\n=== Summary ===");
             println!("Total backups: {}", backups.len());
-            println!("Total size: {:.2} GB", total_size as f64 / 1024.0 / 1024.0 / 1024.0);
+            println!(
+                "Total size: {:.2} GB",
+                total_size as f64 / 1024.0 / 1024.0 / 1024.0
+            );
 
             return Ok(());
         }
@@ -1246,9 +1252,13 @@ pub async fn inspect_backup(storage: StorageOptions, backup_id: String) -> Resul
         let duration = end_time - metadata.start_time;
         println!("Duration: {} seconds", duration.num_seconds());
     }
-    println!("Size: {} bytes ({:.2} GB)", metadata.size_bytes, metadata.size_bytes as f64 / 1024.0 / 1024.0 / 1024.0);
+    println!(
+        "Size: {} bytes ({:.2} GB)",
+        metadata.size_bytes,
+        metadata.size_bytes as f64 / 1024.0 / 1024.0 / 1024.0
+    );
     println!("Server Version: {}", metadata.server_version);
-    
+
     if let Some(base_id) = &metadata.base_backup_id {
         println!("Base Backup ID: {}", base_id);
     }
@@ -1261,12 +1271,12 @@ pub async fn inspect_backup(storage: StorageOptions, backup_id: String) -> Resul
     if let Some(checksum) = &metadata.checksum {
         println!("Checksum: {}", checksum);
     }
-    
+
     println!("Pinned: {}", metadata.pinned);
     if !metadata.tags.is_empty() {
         println!("Tags: {}", metadata.tags.join(", "));
     }
-    
+
     println!("\n=== Files ({}) ===", metadata.files.len());
     for file in &metadata.files {
         println!("  {} ({} bytes)", file.name, file.size);
@@ -1301,16 +1311,16 @@ pub async fn download_backup(
         .await
         .map_err(|e| anyhow!("Failed to download backup: {}", e))?;
 
-    info!("Backup {} downloaded successfully to {:?}", backup_id, target_dir);
+    info!(
+        "Backup {} downloaded successfully to {:?}",
+        backup_id, target_dir
+    );
 
     Ok(())
 }
 
 /// Initialize or update retention policy
-pub async fn init_retention_policy(
-    storage: StorageOptions,
-    policy_file: PathBuf,
-) -> Result<()> {
+pub async fn init_retention_policy(storage: StorageOptions, policy_file: PathBuf) -> Result<()> {
     info!("Initializing retention policy from {:?}...", policy_file);
 
     // Read and parse the policy file
@@ -1335,7 +1345,10 @@ pub async fn init_retention_policy(
         .await
         .map_err(|e| anyhow!("Failed to save retention policy: {}", e))?;
 
-    info!("Retention policy saved successfully to bucket {}", storage.bucket.unwrap_or_default());
+    info!(
+        "Retention policy saved successfully to bucket {}",
+        storage.bucket.unwrap_or_default()
+    );
 
     Ok(())
 }
@@ -1378,7 +1391,9 @@ pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
         .load_retention_policy()
         .await
         .map_err(|e| anyhow!("Failed to load retention policy: {}", e))?
-        .ok_or_else(|| anyhow!("No retention policy found. Use 'init-retention-policy' to create one."))?;
+        .ok_or_else(|| {
+            anyhow!("No retention policy found. Use 'init-retention-policy' to create one.")
+        })?;
 
     // Evaluate purge
     let evaluation = storage_instance
@@ -1399,7 +1414,8 @@ pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
             println!("Total backups: {}", evaluation.total_backups);
             println!("To keep: {}", evaluation.to_keep.len());
             println!("To delete: {}", evaluation.to_delete.len());
-            println!("Space to free: {} bytes ({:.2} GB)", 
+            println!(
+                "Space to free: {} bytes ({:.2} GB)",
                 evaluation.estimated_space_freed,
                 evaluation.estimated_space_freed as f64 / 1024.0 / 1024.0 / 1024.0
             );
@@ -1414,7 +1430,8 @@ pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
             if !evaluation.to_delete.is_empty() {
                 println!("\n=== Backups to Delete ===");
                 for decision in &evaluation.to_delete {
-                    println!("  🗑️  {} ({:?}) - {} - {:.2} GB",
+                    println!(
+                        "  🗑️  {} ({:?}) - {} - {:.2} GB",
                         decision.backup_id,
                         decision.backup_type,
                         decision.reason,
@@ -1426,10 +1443,9 @@ pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
             if !evaluation.to_keep.is_empty() {
                 println!("\n=== Backups to Keep ===");
                 for decision in &evaluation.to_keep {
-                    println!("  ✅ {} ({:?}) - {}",
-                        decision.backup_id,
-                        decision.backup_type,
-                        decision.reason
+                    println!(
+                        "  ✅ {} ({:?}) - {}",
+                        decision.backup_id, decision.backup_type, decision.reason
                     );
                 }
             }
@@ -1450,7 +1466,9 @@ pub async fn purge(storage: StorageOptions, apply: bool, yes: bool) -> Result<()
         .load_retention_policy()
         .await
         .map_err(|e| anyhow!("Failed to load retention policy: {}", e))?
-        .ok_or_else(|| anyhow!("No retention policy found. Use 'init-retention-policy' to create one."))?;
+        .ok_or_else(|| {
+            anyhow!("No retention policy found. Use 'init-retention-policy' to create one.")
+        })?;
 
     // Evaluate purge
     let evaluation = storage_instance
@@ -1467,7 +1485,8 @@ pub async fn purge(storage: StorageOptions, apply: bool, yes: bool) -> Result<()
     println!("Total backups: {}", evaluation.total_backups);
     println!("To delete: {}", evaluation.to_delete.len());
     println!("To keep: {}", evaluation.to_keep.len());
-    println!("Space to free: {} bytes ({:.2} GB)", 
+    println!(
+        "Space to free: {} bytes ({:.2} GB)",
         evaluation.estimated_space_freed,
         evaluation.estimated_space_freed as f64 / 1024.0 / 1024.0 / 1024.0
     );
@@ -1475,10 +1494,9 @@ pub async fn purge(storage: StorageOptions, apply: bool, yes: bool) -> Result<()
     if !evaluation.to_delete.is_empty() {
         println!("\nBackups to be deleted:");
         for decision in &evaluation.to_delete {
-            println!("  - {} ({:?}) - {}", 
-                decision.backup_id,
-                decision.backup_type,
-                decision.reason
+            println!(
+                "  - {} ({:?}) - {}",
+                decision.backup_id, decision.backup_type, decision.reason
             );
         }
     }
@@ -1486,12 +1504,15 @@ pub async fn purge(storage: StorageOptions, apply: bool, yes: bool) -> Result<()
     // Confirm if applying and confirmation required
     if apply && !yes && policy.safety.require_confirmation {
         use std::io::{self, Write};
-        print!("\nAre you sure you want to delete {} backups? (yes/no): ", evaluation.to_delete.len());
+        print!(
+            "\nAre you sure you want to delete {} backups? (yes/no): ",
+            evaluation.to_delete.len()
+        );
         io::stdout().flush().unwrap();
-        
+
         let mut input = String::new();
         io::stdin().read_line(&mut input).unwrap();
-        
+
         if input.trim().to_lowercase() != "yes" {
             println!("Purge cancelled.");
             return Ok(());
@@ -1510,7 +1531,8 @@ pub async fn purge(storage: StorageOptions, apply: bool, yes: bool) -> Result<()
     println!("Kept: {}", report.kept);
     println!("Deleted: {}", report.deleted);
     println!("Failed: {}", report.failed);
-    println!("Space freed: {} bytes ({:.2} GB)", 
+    println!(
+        "Space freed: {} bytes ({:.2} GB)",
         report.space_freed,
         report.space_freed as f64 / 1024.0 / 1024.0 / 1024.0
     );

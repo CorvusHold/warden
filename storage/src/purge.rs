@@ -46,7 +46,13 @@ pub fn evaluate_retention_policy(
             intervals,
             minimum_backups,
             preserve_chains,
-        } => evaluate_interval_based(backups, intervals, *minimum_backups, *preserve_chains, policy),
+        } => evaluate_interval_based(
+            backups,
+            intervals,
+            *minimum_backups,
+            *preserve_chains,
+            policy,
+        ),
     }
 }
 
@@ -63,7 +69,10 @@ fn evaluate_time_based(
     let mut warnings = Vec::new();
 
     // Keep all completed backups within the time window
-    for backup in backups.iter().filter(|b| b.status == BackupStatus::Completed) {
+    for backup in backups
+        .iter()
+        .filter(|b| b.status == BackupStatus::Completed)
+    {
         if backup.end_time.unwrap_or(backup.start_time) >= cutoff {
             to_keep_ids.insert(backup.id.clone());
         }
@@ -223,8 +232,11 @@ fn evaluate_interval_based(
             .collect();
 
         // Select backups spaced by spacing_days
-        let selected =
-            select_spaced_backups(&backups_in_interval, interval.keep_count, interval.spacing_days);
+        let selected = select_spaced_backups(
+            &backups_in_interval,
+            interval.keep_count,
+            interval.spacing_days,
+        );
 
         for backup_id in selected {
             to_keep_ids.insert(backup_id);

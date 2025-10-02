@@ -686,7 +686,13 @@ async fn main() -> Result<()> {
                     access_key: storage_access_key,
                     secret_key: storage_secret_key,
                 };
-                postgres::cli::commands::download_backup(storage, backup_id, target_dir, verify_checksums).await?;
+                postgres::cli::commands::download_backup(
+                    storage,
+                    backup_id,
+                    target_dir,
+                    verify_checksums,
+                )
+                .await?;
             }
             postgres::cli::PostgresqlCommands::InitRetentionPolicy {
                 policy_file,

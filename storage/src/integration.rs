@@ -536,7 +536,7 @@ impl PostgresBackupStorage {
     ) -> Result<crate::BackupMetadata, StorageError> {
         use sha2::{Digest, Sha256};
         use std::io::Read;
-        
+
         let mut total_size = 0u64;
         let mut files = Vec::new();
         let mut hasher = Sha256::new();
@@ -554,16 +554,14 @@ impl PostgresBackupStorage {
                     .strip_prefix(backup_path)
                     .map_err(|e| StorageError::Unexpected(e.to_string()))?;
 
-                let metadata = std::fs::metadata(file_path)
-                    .map_err(|e| StorageError::Io(e))?;
+                let metadata = std::fs::metadata(file_path).map_err(|e| StorageError::Io(e))?;
                 let file_size = metadata.len();
                 total_size += file_size;
 
                 // Calculate file checksum
                 let file_checksum = if file_size < 100 * 1024 * 1024 {
                     // Only calculate checksum for files < 100MB
-                    let mut file = std::fs::File::open(file_path)
-                        .map_err(StorageError::Io)?;
+                    let mut file = std::fs::File::open(file_path).map_err(StorageError::Io)?;
                     let mut file_hasher = Sha256::new();
                     let mut buffer = vec![0u8; 8192];
                     loop {
@@ -626,10 +624,8 @@ impl PostgresBackupStorage {
         let json = serde_json::to_string_pretty(metadata)
             .map_err(|e| StorageError::Unexpected(e.to_string()))?;
 
-        let temp_file = tempfile::NamedTempFile::new()
-            .map_err(StorageError::Io)?;
-        std::fs::write(temp_file.path(), json)
-            .map_err(StorageError::Io)?;
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
+        std::fs::write(temp_file.path(), json).map_err(StorageError::Io)?;
 
         self.provider
             .upload_file(
@@ -656,15 +652,13 @@ impl PostgresBackupStorage {
             format!("{}/{}/backup_metadata.json", self.prefix, backup_id)
         };
 
-        let temp_file = tempfile::NamedTempFile::new()
-            .map_err(StorageError::Io)?;
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
 
         self.provider
             .download_file(&self.bucket, &key, temp_file.path())
             .await?;
 
-        let json = std::fs::read_to_string(temp_file.path())
-            .map_err(StorageError::Io)?;
+        let json = std::fs::read_to_string(temp_file.path()).map_err(StorageError::Io)?;
 
         let metadata: crate::BackupMetadata = serde_json::from_str(&json)
             .map_err(|e| StorageError::Unexpected(format!("Failed to parse metadata: {}", e)))?;
@@ -673,7 +667,9 @@ impl PostgresBackupStorage {
     }
 
     /// Lists all remote backups with detailed metadata
-    pub async fn list_remote_backups_detailed(&self) -> Result<Vec<crate::BackupMetadata>, StorageError> {
+    pub async fn list_remote_backups_detailed(
+        &self,
+    ) -> Result<Vec<crate::BackupMetadata>, StorageError> {
         let prefix = if self.prefix.is_empty() {
             None
         } else {
@@ -716,7 +712,9 @@ impl PostgresBackupStorage {
     }
 
     /// Loads retention policy from bucket root
-    pub async fn load_retention_policy(&self) -> Result<Option<crate::RetentionPolicy>, StorageError> {
+    pub async fn load_retention_policy(
+        &self,
+    ) -> Result<Option<crate::RetentionPolicy>, StorageError> {
         let key = if self.prefix.is_empty() {
             "retention_policy.json".to_string()
         } else {
@@ -728,24 +726,26 @@ impl PostgresBackupStorage {
             return Ok(None);
         }
 
-        let temp_file = tempfile::NamedTempFile::new()
-            .map_err(StorageError::Io)?;
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
 
         self.provider
             .download_file(&self.bucket, &key, temp_file.path())
             .await?;
 
-        let json = std::fs::read_to_string(temp_file.path())
-            .map_err(StorageError::Io)?;
+        let json = std::fs::read_to_string(temp_file.path()).map_err(StorageError::Io)?;
 
-        let policy: crate::RetentionPolicy = serde_json::from_str(&json)
-            .map_err(|e| StorageError::Unexpected(format!("Failed to parse retention policy: {}", e)))?;
+        let policy: crate::RetentionPolicy = serde_json::from_str(&json).map_err(|e| {
+            StorageError::Unexpected(format!("Failed to parse retention policy: {}", e))
+        })?;
 
         Ok(Some(policy))
     }
 
     /// Saves retention policy to bucket root
-    pub async fn save_retention_policy(&self, policy: &crate::RetentionPolicy) -> Result<(), StorageError> {
+    pub async fn save_retention_policy(
+        &self,
+        policy: &crate::RetentionPolicy,
+    ) -> Result<(), StorageError> {
         let key = if self.prefix.is_empty() {
             "retention_policy.json".to_string()
         } else {
@@ -755,10 +755,8 @@ impl PostgresBackupStorage {
         let json = serde_json::to_string_pretty(policy)
             .map_err(|e| StorageError::Unexpected(e.to_string()))?;
 
-        let temp_file = tempfile::NamedTempFile::new()
-            .map_err(StorageError::Io)?;
-        std::fs::write(temp_file.path(), json)
-            .map_err(StorageError::Io)?;
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
+        std::fs::write(temp_file.path(), json).map_err(StorageError::Io)?;
 
         self.provider
             .upload_file(
@@ -835,7 +833,10 @@ impl PostgresBackupStorage {
 
         // Delete each backup
         for decision in &evaluation.to_delete {
-            info!("Deleting backup {}: {}", decision.backup_id, decision.reason);
+            info!(
+                "Deleting backup {}: {}",
+                decision.backup_id, decision.reason
+            );
 
             match self.delete_backup(&decision.backup_id).await {
                 Ok(_) => {
@@ -845,15 +846,13 @@ impl PostgresBackupStorage {
                 }
                 Err(e) => {
                     failed += 1;
-                    let error_msg = format!(
-                        "Failed to delete backup {}: {}",
-                        decision.backup_id, e
-                    );
+                    let error_msg =
+                        format!("Failed to delete backup {}: {}", decision.backup_id, e);
                     error!("{}", error_msg);
-                    
+
                     // Report to Sentry
                     sentry::capture_message(&error_msg, sentry::Level::Error);
-                    
+
                     errors.push(error_msg);
                 }
             }
