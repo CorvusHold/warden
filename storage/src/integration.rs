@@ -541,6 +541,7 @@ impl PostgresBackupStorage {
         let mut total_size = 0u64;
         let mut files = Vec::new();
         let mut hasher = Sha256::new();
+        let mut aggregate_has_bytes = false;
 
         // Walk through the backup directory
         let walker = walkdir::WalkDir::new(backup_path)
@@ -572,6 +573,7 @@ impl PostgresBackupStorage {
                         }
                         file_hasher.update(&buffer[..n]);
                         hasher.update(&buffer[..n]);
+                        aggregate_has_bytes = true;
                     }
                     Some(format!("{:x}", file_hasher.finalize()))
                 } else {
@@ -586,7 +588,7 @@ impl PostgresBackupStorage {
             }
         }
 
-        let checksum = if !files.is_empty() {
+        let checksum = if aggregate_has_bytes {
             Some(format!("{:x}", hasher.finalize()))
         } else {
             None
