@@ -1556,3 +1556,168 @@ pub async fn purge(storage: StorageOptions, apply: bool, yes: bool) -> Result<()
 
     Ok(())
 }
+
+/// Reconstruct metadata for existing backups
+pub async fn reconstruct_metadata(
+    storage: StorageOptions,
+    server_version: String,
+    dry_run: bool,
+    skip_checksums: bool,
+) -> Result<()> {
+    use chrono::Utc;
+    use storage::{BackupFile, BackupMetadata, BackupStatus, BackupType};
+
+    info!("Scanning for backups without metadata...");
+
+    let storage_instance = create_storage_provider(&storage)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    // List all objects in the bucket to find backup directories
+    let prefix = storage.prefix.clone().unwrap_or_default();
+    let all_objects = storage_instance
+        .list_all_objects()
+        .await
+        .map_err(|e| anyhow!("Failed to list objects: {}", e))?;
+
+    info!("Found {} total objects in storage", all_objects.len());
+
+    // Group objects by backup ID (first directory level after prefix)
+    use std::collections::HashMap;
+    let mut backup_dirs: HashMap<String, Vec<_>> = HashMap::new();
+
+    for obj in &all_objects {
+        // Skip metadata files
+        if obj.key.ends_with("/backup_metadata.json") || obj.key.ends_with(".retention_policy") {
+            continue;
+        }
+
+        // Extract backup ID from path
+        let path_after_prefix = if prefix.is_empty() {
+            obj.key.as_str()
+        } else {
+            obj.key.strip_prefix(&format!("{}/", prefix)).unwrap_or(&obj.key)
+        };
+
+        if let Some(backup_id) = path_after_prefix.split('/').next() {
+            if !backup_id.is_empty() {
+                backup_dirs.entry(backup_id.to_string()).or_default().push(obj.clone());
+            }
+        }
+    }
+
+    info!("Identified {} potential backup directories", backup_dirs.len());
+
+    // Check which ones already have metadata
+    let mut backups_without_metadata = Vec::new();
+    for (backup_id, _) in &backup_dirs {
+        let metadata_key = if prefix.is_empty() {
+            format!("{}/backup_metadata.json", backup_id)
+        } else {
+            format!("{}/{}/backup_metadata.json", prefix, backup_id)
+        };
+
+        let has_metadata = all_objects.iter().any(|obj| obj.key == metadata_key);
+        if !has_metadata {
+            backups_without_metadata.push(backup_id.clone());
+        }
+    }
+
+    info!("Found {} backups without metadata", backups_without_metadata.len());
+
+    if backups_without_metadata.is_empty() {
+        println!("✅ All backups already have metadata!");
+        return Ok(());
+    }
+
+    // Reconstruct metadata for each backup
+    let mut reconstructed_count = 0;
+    for backup_id in &backups_without_metadata {
+        let objects = &backup_dirs[backup_id];
+        
+        println!("\n📦 Processing backup: {}", backup_id);
+        println!("   Found {} files", objects.len());
+
+        // Calculate total size
+        let total_size: u64 = objects.iter().filter_map(|obj| obj.size).sum();
+        println!("   Total size: {} bytes ({:.2} GB)", total_size, total_size as f64 / 1024.0 / 1024.0 / 1024.0);
+
+        // Get timestamps from objects
+        let timestamps: Vec<_> = objects.iter().filter_map(|obj| obj.last_modified).collect();
+        let start_time = timestamps.iter().min().copied().unwrap_or(Utc::now());
+        let end_time = timestamps.iter().max().copied();
+        println!("   Start time: {}", start_time);
+        if let Some(end) = end_time {
+            println!("   End time: {}", end);
+        }
+
+        // Infer backup type from directory structure
+        let has_base_backup = objects.iter().any(|obj| obj.key.contains("/base"));
+        let has_pg_wal = objects.iter().any(|obj| obj.key.contains("/pg_wal"));
+        let backup_type = if has_base_backup && has_pg_wal {
+            BackupType::Full
+        } else if has_pg_wal {
+            BackupType::Incremental
+        } else {
+            BackupType::Snapshot
+        };
+        println!("   Inferred type: {:?}", backup_type);
+
+        // Build files list
+        let files: Vec<BackupFile> = objects
+            .iter()
+            .map(|obj| {
+                let name = if prefix.is_empty() {
+                    obj.key.strip_prefix(&format!("{}/", backup_id)).unwrap_or(&obj.key).to_string()
+                } else {
+                    obj.key.strip_prefix(&format!("{}/{}/", prefix, backup_id)).unwrap_or(&obj.key).to_string()
+                };
+                BackupFile {
+                    name,
+                    size: obj.size.unwrap_or(0),
+                    checksum: if skip_checksums { None } else { obj.etag.clone() },
+                }
+            })
+            .collect();
+
+        // Create metadata
+        let metadata = BackupMetadata {
+            id: backup_id.clone(),
+            backup_type,
+            status: BackupStatus::Completed,
+            start_time,
+            end_time,
+            base_backup_id: None,
+            wal_start: None,
+            wal_end: None,
+            size_bytes: total_size,
+            server_version: server_version.clone(),
+            checksum: None,
+            files,
+            tags: vec!["reconstructed".to_string()],
+            pinned: false,
+        };
+
+        if dry_run {
+            println!("   [DRY RUN] Would create metadata file");
+        } else {
+            // Save metadata
+            storage_instance
+                .upload_backup_metadata(backup_id, &metadata)
+                .await
+                .map_err(|e| anyhow!("Failed to save metadata for {}: {}", backup_id, e))?;
+            println!("   ✅ Created metadata file");
+            reconstructed_count += 1;
+        }
+    }
+
+    println!("\n{}", "=".repeat(60));
+    if dry_run {
+        println!("🔍 Dry run complete: Found {} backups that need metadata", backups_without_metadata.len());
+        println!("   Run without --dry-run to create metadata files");
+    } else {
+        println!("✅ Successfully reconstructed metadata for {} backups", reconstructed_count);
+    }
+
+    Ok(())
+}

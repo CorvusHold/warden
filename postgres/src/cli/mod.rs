@@ -1174,4 +1174,55 @@ pub enum PostgresqlCommands {
         #[clap(long)]
         yes: bool,
     },
+
+    /// Reconstruct metadata for existing backups without metadata files
+    ReconstructMetadata {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+
+        /// PostgreSQL server version (if known)
+        #[clap(long, default_value = "unknown")]
+        server_version: String,
+
+        /// Dry run - show what would be created without creating metadata
+        #[clap(long)]
+        dry_run: bool,
+
+        /// Skip computing checksums (faster but less accurate)
+        #[clap(long)]
+        skip_checksums: bool,
+    },
 }

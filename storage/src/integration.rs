@@ -669,6 +669,17 @@ impl PostgresBackupStorage {
         Ok(metadata)
     }
 
+    /// Lists all objects in the storage bucket (raw storage API)
+    pub async fn list_all_objects(&self) -> Result<Vec<crate::StorageObject>, StorageError> {
+        let prefix = if self.prefix.is_empty() {
+            None
+        } else {
+            Some(self.prefix.as_str())
+        };
+
+        self.provider.list_objects(&self.bucket, prefix).await
+    }
+
     /// Lists all remote backups with detailed metadata
     pub async fn list_remote_backups_detailed(
         &self,

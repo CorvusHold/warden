@@ -794,6 +794,38 @@ async fn main() -> Result<()> {
                 };
                 postgres::cli::commands::purge(storage, apply, yes).await?;
             }
+            postgres::cli::PostgresqlCommands::ReconstructMetadata {
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+                server_version,
+                dry_run,
+                skip_checksums,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::reconstruct_metadata(
+                    storage,
+                    server_version,
+                    dry_run,
+                    skip_checksums,
+                )
+                .await?;
+            }
         },
         Commands::Ssh {
             command: SshCommands::Forward { cmd },
