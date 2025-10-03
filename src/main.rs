@@ -644,6 +644,8 @@ async fn main() -> Result<()> {
             }
             postgres::cli::PostgresqlCommands::InspectBackup {
                 backup_id,
+                backup_dir: _,
+                remote_storage,
                 storage_provider,
                 storage_bucket,
                 storage_prefix,
@@ -653,9 +655,9 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 let storage = postgres::cli::commands::StorageOptions {
-                    remote_storage: true,
+                    remote_storage,
                     provider_type: Some(storage_provider),
-                    bucket: Some(storage_bucket),
+                    bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
                     endpoint: storage_endpoint,
@@ -668,6 +670,8 @@ async fn main() -> Result<()> {
                 backup_id,
                 target_dir,
                 verify_checksums,
+                backup_dir: _,
+                remote_storage,
                 storage_provider,
                 storage_bucket,
                 storage_prefix,
@@ -677,9 +681,9 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 let storage = postgres::cli::commands::StorageOptions {
-                    remote_storage: true,
+                    remote_storage,
                     provider_type: Some(storage_provider),
-                    bucket: Some(storage_bucket),
+                    bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
                     endpoint: storage_endpoint,
@@ -696,6 +700,8 @@ async fn main() -> Result<()> {
             }
             postgres::cli::PostgresqlCommands::InitRetentionPolicy {
                 policy_file,
+                backup_dir: _,
+                remote_storage,
                 storage_provider,
                 storage_bucket,
                 storage_prefix,
@@ -705,9 +711,9 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 let storage = postgres::cli::commands::StorageOptions {
-                    remote_storage: true,
+                    remote_storage,
                     provider_type: Some(storage_provider),
-                    bucket: Some(storage_bucket),
+                    bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
                     endpoint: storage_endpoint,
@@ -717,6 +723,8 @@ async fn main() -> Result<()> {
                 postgres::cli::commands::init_retention_policy(storage, policy_file).await?;
             }
             postgres::cli::PostgresqlCommands::ShowRetentionPolicy {
+                backup_dir: _,
+                remote_storage,
                 storage_provider,
                 storage_bucket,
                 storage_prefix,
@@ -726,9 +734,9 @@ async fn main() -> Result<()> {
                 storage_secret_key,
             } => {
                 let storage = postgres::cli::commands::StorageOptions {
-                    remote_storage: true,
+                    remote_storage,
                     provider_type: Some(storage_provider),
-                    bucket: Some(storage_bucket),
+                    bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
                     endpoint: storage_endpoint,
@@ -738,6 +746,8 @@ async fn main() -> Result<()> {
                 postgres::cli::commands::show_retention_policy(storage).await?;
             }
             postgres::cli::PostgresqlCommands::PurgePlan {
+                backup_dir: _,
+                remote_storage,
                 storage_provider,
                 storage_bucket,
                 storage_prefix,
@@ -748,9 +758,9 @@ async fn main() -> Result<()> {
                 format,
             } => {
                 let storage = postgres::cli::commands::StorageOptions {
-                    remote_storage: true,
+                    remote_storage,
                     provider_type: Some(storage_provider),
-                    bucket: Some(storage_bucket),
+                    bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
                     endpoint: storage_endpoint,
@@ -760,6 +770,8 @@ async fn main() -> Result<()> {
                 postgres::cli::commands::purge_plan(storage, format).await?;
             }
             postgres::cli::PostgresqlCommands::Purge {
+                backup_dir: _,
+                remote_storage,
                 storage_provider,
                 storage_bucket,
                 storage_prefix,
@@ -771,9 +783,9 @@ async fn main() -> Result<()> {
                 yes,
             } => {
                 let storage = postgres::cli::commands::StorageOptions {
-                    remote_storage: true,
+                    remote_storage,
                     provider_type: Some(storage_provider),
-                    bucket: Some(storage_bucket),
+                    bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
                     endpoint: storage_endpoint,

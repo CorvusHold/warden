@@ -915,13 +915,21 @@ pub enum PostgresqlCommands {
         #[clap(long)]
         backup_id: String,
 
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
         /// Storage provider type (s3)
         #[clap(long, default_value = "s3")]
         storage_provider: String,
 
         /// Storage bucket name
         #[clap(long)]
-        storage_bucket: String,
+        storage_bucket: Option<String>,
 
         /// Storage prefix for backups
         #[clap(long)]
@@ -958,13 +966,21 @@ pub enum PostgresqlCommands {
         #[clap(long)]
         verify_checksums: bool,
 
+        /// Backup directory (source for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
         /// Storage provider type (s3)
         #[clap(long, default_value = "s3")]
         storage_provider: String,
 
         /// Storage bucket name
         #[clap(long)]
-        storage_bucket: String,
+        storage_bucket: Option<String>,
 
         /// Storage prefix for backups
         #[clap(long)]
@@ -993,13 +1009,21 @@ pub enum PostgresqlCommands {
         #[clap(long)]
         policy_file: std::path::PathBuf,
 
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
         /// Storage provider type (s3)
         #[clap(long, default_value = "s3")]
         storage_provider: String,
 
         /// Storage bucket name
         #[clap(long)]
-        storage_bucket: String,
+        storage_bucket: Option<String>,
 
         /// Storage prefix for backups
         #[clap(long)]
@@ -1024,13 +1048,21 @@ pub enum PostgresqlCommands {
 
     /// Show current retention policy for a storage bucket
     ShowRetentionPolicy {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
         /// Storage provider type (s3)
         #[clap(long, default_value = "s3")]
         storage_provider: String,
 
         /// Storage bucket name
         #[clap(long)]
-        storage_bucket: String,
+        storage_bucket: Option<String>,
 
         /// Storage prefix for backups
         #[clap(long)]
@@ -1055,13 +1087,21 @@ pub enum PostgresqlCommands {
 
     /// Evaluate purge policy (dry run - shows what would be deleted)
     PurgePlan {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
         /// Storage provider type (s3)
         #[clap(long, default_value = "s3")]
         storage_provider: String,
 
         /// Storage bucket name
         #[clap(long)]
-        storage_bucket: String,
+        storage_bucket: Option<String>,
 
         /// Storage prefix for backups
         #[clap(long)]
@@ -1090,13 +1130,21 @@ pub enum PostgresqlCommands {
 
     /// Execute purge according to retention policy (DELETES backups)
     Purge {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
         /// Storage provider type (s3)
         #[clap(long, default_value = "s3")]
         storage_provider: String,
 
         /// Storage bucket name
         #[clap(long)]
-        storage_bucket: String,
+        storage_bucket: Option<String>,
 
         /// Storage prefix for backups
         #[clap(long)]
