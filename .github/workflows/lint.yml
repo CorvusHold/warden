@@ -21,9 +21,17 @@ jobs:
         toolchain: stable
         override: true
         components: rustfmt, clippy
+    - name: Check Docker
+      run: docker info
     - name: Check formatting
       run: cargo fmt -- --check
     - name: Lint with clippy
       run: cargo clippy --workspace -- -D warnings
+    - name: Install PostgreSQL client tools
+      run: sudo apt get update && sudo apt get install -y postgresql-client
     - name: Run tests
+      env:
+        DOCKER_HOST: unix:///var/run/docker.sock
+        TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
+        TESTCONTAINERS_RYUK_DISABLED: true
       run: cargo test --workspace -- --test-threads=1

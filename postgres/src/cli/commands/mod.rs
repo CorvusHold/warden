@@ -1596,17 +1596,25 @@ pub async fn reconstruct_metadata(
         let path_after_prefix = if prefix.is_empty() {
             obj.key.as_str()
         } else {
-            obj.key.strip_prefix(&format!("{}/", prefix)).unwrap_or(&obj.key)
+            obj.key
+                .strip_prefix(&format!("{}/", prefix))
+                .unwrap_or(&obj.key)
         };
 
         if let Some(backup_id) = path_after_prefix.split('/').next() {
             if !backup_id.is_empty() {
-                backup_dirs.entry(backup_id.to_string()).or_default().push(obj.clone());
+                backup_dirs
+                    .entry(backup_id.to_string())
+                    .or_default()
+                    .push(obj.clone());
             }
         }
     }
 
-    info!("Identified {} potential backup directories", backup_dirs.len());
+    info!(
+        "Identified {} potential backup directories",
+        backup_dirs.len()
+    );
 
     // Check which ones already have metadata
     let mut backups_without_metadata = Vec::new();
@@ -1623,7 +1631,10 @@ pub async fn reconstruct_metadata(
         }
     }
 
-    info!("Found {} backups without metadata", backups_without_metadata.len());
+    info!(
+        "Found {} backups without metadata",
+        backups_without_metadata.len()
+    );
 
     if backups_without_metadata.is_empty() {
         println!("✅ All backups already have metadata!");
@@ -1634,13 +1645,17 @@ pub async fn reconstruct_metadata(
     let mut reconstructed_count = 0;
     for backup_id in &backups_without_metadata {
         let objects = &backup_dirs[backup_id];
-        
+
         println!("\n📦 Processing backup: {}", backup_id);
         println!("   Found {} files", objects.len());
 
         // Calculate total size
         let total_size: u64 = objects.iter().filter_map(|obj| obj.size).sum();
-        println!("   Total size: {} bytes ({:.2} GB)", total_size, total_size as f64 / 1024.0 / 1024.0 / 1024.0);
+        println!(
+            "   Total size: {} bytes ({:.2} GB)",
+            total_size,
+            total_size as f64 / 1024.0 / 1024.0 / 1024.0
+        );
 
         // Get timestamps from objects
         let timestamps: Vec<_> = objects.iter().filter_map(|obj| obj.last_modified).collect();
@@ -1668,14 +1683,24 @@ pub async fn reconstruct_metadata(
             .iter()
             .map(|obj| {
                 let name = if prefix.is_empty() {
-                    obj.key.strip_prefix(&format!("{}/", backup_id)).unwrap_or(&obj.key).to_string()
+                    obj.key
+                        .strip_prefix(&format!("{}/", backup_id))
+                        .unwrap_or(&obj.key)
+                        .to_string()
                 } else {
-                    obj.key.strip_prefix(&format!("{}/{}/", prefix, backup_id)).unwrap_or(&obj.key).to_string()
+                    obj.key
+                        .strip_prefix(&format!("{}/{}/", prefix, backup_id))
+                        .unwrap_or(&obj.key)
+                        .to_string()
                 };
                 BackupFile {
                     name,
                     size: obj.size.unwrap_or(0),
-                    checksum: if skip_checksums { None } else { obj.etag.clone() },
+                    checksum: if skip_checksums {
+                        None
+                    } else {
+                        obj.etag.clone()
+                    },
                 }
             })
             .collect();
@@ -1713,10 +1738,16 @@ pub async fn reconstruct_metadata(
 
     println!("\n{}", "=".repeat(60));
     if dry_run {
-        println!("🔍 Dry run complete: Found {} backups that need metadata", backups_without_metadata.len());
+        println!(
+            "🔍 Dry run complete: Found {} backups that need metadata",
+            backups_without_metadata.len()
+        );
         println!("   Run without --dry-run to create metadata files");
     } else {
-        println!("✅ Successfully reconstructed metadata for {} backups", reconstructed_count);
+        println!(
+            "✅ Successfully reconstructed metadata for {} backups",
+            reconstructed_count
+        );
     }
 
     Ok(())
