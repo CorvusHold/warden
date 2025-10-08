@@ -1618,7 +1618,7 @@ pub async fn reconstruct_metadata(
 
     // Check which ones already have metadata
     let mut backups_without_metadata = Vec::new();
-    for (backup_id, _) in &backup_dirs {
+    for backup_id in backup_dirs.keys() {
         let metadata_key = if prefix.is_empty() {
             format!("{}/backup_metadata.json", backup_id)
         } else {

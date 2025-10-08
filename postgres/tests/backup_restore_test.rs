@@ -38,12 +38,16 @@ where
         .with_env_var("POSTGRES_USER", "postgres")
         .with_env_var("POSTGRES_PASSWORD", "postgres")
         .with_env_var("POSTGRES_HOST_AUTH_METHOD", "trust")
-        .with_env_var("POSTGRES_INITDB_ARGS", "--auth-host=trust --auth-local=trust")
-        .with_copy_to("/docker-entrypoint-initdb.d/setup_replication.sh", script_path);
+        .with_env_var(
+            "POSTGRES_INITDB_ARGS",
+            "--auth-host=trust --auth-local=trust",
+        )
+        .with_copy_to(
+            "/docker-entrypoint-initdb.d/setup_replication.sh",
+            script_path,
+        );
 
-    let container = container_request
-        .start()
-        .await?;
+    let container = container_request.start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
 
     let config = PostgresConfig {
