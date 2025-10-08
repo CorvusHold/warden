@@ -39,7 +39,7 @@ jobs:
     - name: Check Docker
       run: docker info
     - name: Install PostgreSQL client tools
-      run: apt update && apt install -y postgresql-client
+      run: sudo apt update && sudo apt install -y postgresql-client
     - name: Run tests
       env:
         DOCKER_HOST: unix:///var/run/docker.sock
