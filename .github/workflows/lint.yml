@@ -61,5 +61,6 @@ jobs:
         AWS_ENDPOINT: http://localhost:9000
         AWS_CONSOLE_ENDPOINT: http://localhost:9001
         AWS_TEST_BUCKET: testbucket
+        CI: true
       run: cargo test --workspace -- --test-threads=1
         
