@@ -9,9 +9,6 @@ use storage::StorageProvider;
 async fn test_provider_matrix() {
     // Read configuration from environment to match CI settings
     let endpoint = env::var("AWS_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
-    let access_key = env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| "minioadmin".to_string());
-    let secret_key = env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string());
-    let region = env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
 
     let providers = vec![("minio", ProviderKind::Minio, endpoint.as_str())];
     let test_bucket = env::var("AWS_TEST_BUCKET").unwrap_or_else(|_| "test-bucket".to_string());

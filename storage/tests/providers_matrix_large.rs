@@ -29,14 +29,14 @@ async fn test_provider_matrix_large_file() {
         for (i, v) in data.iter_mut().enumerate().take(LARGE_FILE_SIZE) {
             *v = (i % 256) as u8;
         }
-        std::fs::create_dir_all(&testdata_dir).unwrap();
+        std::fs::create_dir_all(&test_file.parent().unwrap()).unwrap();
         std::fs::write(&test_file, &data).expect("write large test file");
     }
     // Print file size
     let actual_size = std::fs::metadata(&test_file).expect("file metadata").len();
     println!("Test file size: {actual_size} bytes (expected: {LARGE_FILE_SIZE})");
 
-    for (name, kind) in providers {
+    for (name, kind, endpoint) in providers {
         println!("\nTesting provider (large file): {name} ({endpoint})");
         let provider = S3Provider::new_with_kind(
             region.clone(),
