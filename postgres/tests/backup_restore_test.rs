@@ -338,7 +338,8 @@ async fn test_backup_catalog() -> Result<(), Box<dyn std::error::Error>> {
             maintenance_config: _,
         } = ctx;
 
-        let mut manager = PostgresManager::new(runtime_config.clone(), backup_dir.path().to_path_buf())?;
+        let mut manager =
+            PostgresManager::new(runtime_config.clone(), backup_dir.path().to_path_buf())?;
 
         // Add a mock backup to the catalog
         let backup_id = Uuid::new_v4();

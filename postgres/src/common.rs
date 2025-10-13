@@ -44,10 +44,7 @@ impl PostgresConfig {
     }
 
     pub fn maintenance_connection_string(&self) -> String {
-        let db_name = self
-            .maintenance_db
-            .as_deref()
-            .unwrap_or("template1");
+        let db_name = self.maintenance_db.as_deref().unwrap_or("template1");
 
         let mut conn_string = format!(
             "host={} port={} dbname={} user={}",
