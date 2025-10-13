@@ -112,6 +112,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires external network access - run with --ignored to test"]
     async fn test_valid_ping() {
         let service = Service {
             id: "test-ping-1".to_string(),

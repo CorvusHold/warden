@@ -642,6 +642,190 @@ async fn main() -> Result<()> {
                 )
                 .await;
             }
+            postgres::cli::PostgresqlCommands::InspectBackup {
+                backup_id,
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::inspect_backup(storage, backup_id).await?;
+            }
+            postgres::cli::PostgresqlCommands::DownloadBackup {
+                backup_id,
+                target_dir,
+                verify_checksums,
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::download_backup(
+                    storage,
+                    backup_id,
+                    target_dir,
+                    verify_checksums,
+                )
+                .await?;
+            }
+            postgres::cli::PostgresqlCommands::InitRetentionPolicy {
+                policy_file,
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::init_retention_policy(storage, policy_file).await?;
+            }
+            postgres::cli::PostgresqlCommands::ShowRetentionPolicy {
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::show_retention_policy(storage).await?;
+            }
+            postgres::cli::PostgresqlCommands::PurgePlan {
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+                format,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::purge_plan(storage, format).await?;
+            }
+            postgres::cli::PostgresqlCommands::Purge {
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+                apply,
+                yes,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::purge(storage, apply, yes).await?;
+            }
+            postgres::cli::PostgresqlCommands::ReconstructMetadata {
+                backup_dir: _,
+                remote_storage,
+                storage_provider,
+                storage_bucket,
+                storage_prefix,
+                storage_region,
+                storage_endpoint,
+                storage_access_key,
+                storage_secret_key,
+                server_version,
+                dry_run,
+                skip_checksums,
+            } => {
+                let storage = postgres::cli::commands::StorageOptions {
+                    remote_storage,
+                    provider_type: Some(storage_provider),
+                    bucket: storage_bucket,
+                    prefix: storage_prefix,
+                    region: storage_region,
+                    endpoint: storage_endpoint,
+                    access_key: storage_access_key,
+                    secret_key: storage_secret_key,
+                };
+                postgres::cli::commands::reconstruct_metadata(
+                    storage,
+                    server_version,
+                    dry_run,
+                    skip_checksums,
+                )
+                .await?;
+            }
         },
         Commands::Ssh {
             command: SshCommands::Forward { cmd },

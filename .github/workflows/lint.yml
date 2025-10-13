@@ -10,10 +10,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  lint-and-test:
+  lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v5
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -25,5 +25,42 @@ jobs:
       run: cargo fmt -- --check
     - name: Lint with clippy
       run: cargo clippy --workspace -- -D warnings
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      minio:
+        image: ghcr.io/corvushold/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+          - 9001:9001
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1" --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+    - uses: actions/checkout@v5
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: rustfmt, clippy
+    - name: Check Docker
+      run: docker info
+    - name: Install PostgreSQL client tools
+      run: sudo apt update && sudo apt install -y postgresql-client
     - name: Run tests
+      env:
+        DOCKER_HOST: unix:///var/run/docker.sock
+        TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
+        TESTCONTAINERS_RYUK_DISABLED: true
+        AWS_ACCESS_KEY_ID: minioadmin
+        AWS_SECRET_ACCESS_KEY: minioadmin
+        AWS_ENDPOINT: http://localhost:9000
+        AWS_CONSOLE_ENDPOINT: http://localhost:9001
+        AWS_TEST_BUCKET: testbucket
+        CI: true
       run: cargo test --workspace -- --test-threads=1
+        

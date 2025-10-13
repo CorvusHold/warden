@@ -519,4 +519,376 @@ impl PostgresBackupStorage {
             .generate_presigned_url(&self.bucket, &key, expires_in)
             .await
     }
+
+    /// Creates backup metadata from a backup directory
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_backup_metadata(
+        &self,
+        backup_id: &str,
+        backup_path: &std::path::Path,
+        backup_type: BackupType,
+        status: crate::BackupStatus,
+        start_time: chrono::DateTime<chrono::Utc>,
+        end_time: Option<chrono::DateTime<chrono::Utc>>,
+        base_backup_id: Option<String>,
+        wal_start: Option<String>,
+        wal_end: Option<String>,
+        server_version: String,
+    ) -> Result<crate::BackupMetadata, StorageError> {
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
+
+        let mut total_size = 0u64;
+        let mut files = Vec::new();
+        let mut hasher = Sha256::new();
+        let mut aggregate_has_bytes = false;
+
+        // Walk through the backup directory
+        let walker = walkdir::WalkDir::new(backup_path)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok());
+
+        for entry in walker {
+            if entry.file_type().is_file() {
+                let file_path = entry.path();
+                let rel_path = file_path
+                    .strip_prefix(backup_path)
+                    .map_err(|e| StorageError::Unexpected(e.to_string()))?;
+
+                let metadata = std::fs::metadata(file_path).map_err(StorageError::Io)?;
+                let file_size = metadata.len();
+                total_size += file_size;
+
+                // Calculate file checksum
+                let file_checksum = if file_size < 100 * 1024 * 1024 {
+                    // Only calculate checksum for files < 100MB
+                    let mut file = std::fs::File::open(file_path).map_err(StorageError::Io)?;
+                    let mut file_hasher = Sha256::new();
+                    let mut buffer = vec![0u8; 8192];
+                    loop {
+                        let n = file.read(&mut buffer).map_err(StorageError::Io)?;
+                        if n == 0 {
+                            break;
+                        }
+                        file_hasher.update(&buffer[..n]);
+                        hasher.update(&buffer[..n]);
+                        aggregate_has_bytes = true;
+                    }
+                    Some(format!("{:x}", file_hasher.finalize()))
+                } else {
+                    None
+                };
+
+                files.push(crate::BackupFile {
+                    name: rel_path.to_string_lossy().to_string(),
+                    size: file_size,
+                    checksum: file_checksum,
+                });
+            }
+        }
+
+        let checksum = if aggregate_has_bytes {
+            Some(format!("{:x}", hasher.finalize()))
+        } else {
+            None
+        };
+
+        Ok(crate::BackupMetadata {
+            id: backup_id.to_string(),
+            backup_type,
+            status,
+            start_time,
+            end_time,
+            base_backup_id,
+            wal_start,
+            wal_end,
+            size_bytes: total_size,
+            server_version,
+            checksum,
+            files,
+            tags: Vec::new(),
+            pinned: false,
+        })
+    }
+
+    /// Uploads backup metadata to storage
+    pub async fn upload_backup_metadata(
+        &self,
+        backup_id: &str,
+        metadata: &crate::BackupMetadata,
+    ) -> Result<(), StorageError> {
+        let key = if self.prefix.is_empty() {
+            format!("{}/backup_metadata.json", backup_id)
+        } else {
+            format!("{}/{}/backup_metadata.json", self.prefix, backup_id)
+        };
+
+        let json = serde_json::to_string_pretty(metadata)
+            .map_err(|e| StorageError::Unexpected(e.to_string()))?;
+
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
+        std::fs::write(temp_file.path(), json).map_err(StorageError::Io)?;
+
+        self.provider
+            .upload_file(
+                &self.bucket,
+                &key,
+                temp_file.path(),
+                Some("application/json"),
+                None,
+            )
+            .await?;
+
+        info!("Uploaded backup metadata for {}", backup_id);
+        Ok(())
+    }
+
+    /// Gets backup metadata from remote storage
+    pub async fn get_remote_backup_metadata(
+        &self,
+        backup_id: &str,
+    ) -> Result<crate::BackupMetadata, StorageError> {
+        let key = if self.prefix.is_empty() {
+            format!("{}/backup_metadata.json", backup_id)
+        } else {
+            format!("{}/{}/backup_metadata.json", self.prefix, backup_id)
+        };
+
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
+
+        self.provider
+            .download_file(&self.bucket, &key, temp_file.path())
+            .await?;
+
+        let json = std::fs::read_to_string(temp_file.path()).map_err(StorageError::Io)?;
+
+        let metadata: crate::BackupMetadata = serde_json::from_str(&json)
+            .map_err(|e| StorageError::Unexpected(format!("Failed to parse metadata: {}", e)))?;
+
+        Ok(metadata)
+    }
+
+    /// Lists all objects in the storage bucket (raw storage API)
+    pub async fn list_all_objects(&self) -> Result<Vec<crate::StorageObject>, StorageError> {
+        let prefix = if self.prefix.is_empty() {
+            None
+        } else {
+            Some(self.prefix.as_str())
+        };
+
+        self.provider.list_objects(&self.bucket, prefix).await
+    }
+
+    /// Lists all remote backups with detailed metadata
+    pub async fn list_remote_backups_detailed(
+        &self,
+    ) -> Result<Vec<crate::BackupMetadata>, StorageError> {
+        let prefix = if self.prefix.is_empty() {
+            None
+        } else {
+            Some(self.prefix.as_str())
+        };
+
+        let objects = self.provider.list_objects(&self.bucket, prefix).await?;
+
+        // Find all backup_metadata.json files
+        let metadata_keys: Vec<_> = objects
+            .iter()
+            .filter(|obj| obj.key.ends_with("/backup_metadata.json"))
+            .collect();
+
+        let mut backups = Vec::new();
+
+        for obj in metadata_keys {
+            // Extract backup ID from key
+            let parts: Vec<&str> = obj.key.split('/').collect();
+            let backup_id = if self.prefix.is_empty() {
+                parts.first().map(|s| s.to_string())
+            } else {
+                parts.get(1).map(|s| s.to_string())
+            };
+
+            if let Some(backup_id) = backup_id {
+                match self.get_remote_backup_metadata(&backup_id).await {
+                    Ok(metadata) => backups.push(metadata),
+                    Err(e) => {
+                        error!("Failed to load metadata for backup {}: {}", backup_id, e);
+                    }
+                }
+            }
+        }
+
+        // Sort by timestamp, newest first
+        backups.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+
+        Ok(backups)
+    }
+
+    /// Loads retention policy from bucket root
+    pub async fn load_retention_policy(
+        &self,
+    ) -> Result<Option<crate::RetentionPolicy>, StorageError> {
+        let key = if self.prefix.is_empty() {
+            "retention_policy.json".to_string()
+        } else {
+            format!("{}/retention_policy.json", self.prefix)
+        };
+
+        // Check if policy file exists
+        if !self.provider.object_exists(&self.bucket, &key).await? {
+            return Ok(None);
+        }
+
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
+
+        self.provider
+            .download_file(&self.bucket, &key, temp_file.path())
+            .await?;
+
+        let json = std::fs::read_to_string(temp_file.path()).map_err(StorageError::Io)?;
+
+        let policy: crate::RetentionPolicy = serde_json::from_str(&json).map_err(|e| {
+            StorageError::Unexpected(format!("Failed to parse retention policy: {}", e))
+        })?;
+
+        Ok(Some(policy))
+    }
+
+    /// Saves retention policy to bucket root
+    pub async fn save_retention_policy(
+        &self,
+        policy: &crate::RetentionPolicy,
+    ) -> Result<(), StorageError> {
+        let key = if self.prefix.is_empty() {
+            "retention_policy.json".to_string()
+        } else {
+            format!("{}/retention_policy.json", self.prefix)
+        };
+
+        let json = serde_json::to_string_pretty(policy)
+            .map_err(|e| StorageError::Unexpected(e.to_string()))?;
+
+        let temp_file = tempfile::NamedTempFile::new().map_err(StorageError::Io)?;
+        std::fs::write(temp_file.path(), json).map_err(StorageError::Io)?;
+
+        self.provider
+            .upload_file(
+                &self.bucket,
+                &key,
+                temp_file.path(),
+                Some("application/json"),
+                None,
+            )
+            .await?;
+
+        info!("Saved retention policy to bucket {}", self.bucket);
+        Ok(())
+    }
+
+    /// Evaluates which backups to purge according to the retention policy
+    pub async fn evaluate_purge(
+        &self,
+        policy: &crate::RetentionPolicy,
+    ) -> Result<crate::PurgeEvaluation, StorageError> {
+        info!("Evaluating purge policy for bucket {}", self.bucket);
+
+        // List all remote backups with metadata
+        let backups = self.list_remote_backups_detailed().await?;
+
+        // Evaluate using the purge module
+        let evaluation = crate::purge::evaluate_retention_policy(&backups, policy)?;
+
+        info!(
+            "Purge evaluation complete: {} to keep, {} to delete, {} bytes to free",
+            evaluation.to_keep.len(),
+            evaluation.to_delete.len(),
+            evaluation.estimated_space_freed
+        );
+
+        Ok(evaluation)
+    }
+
+    /// Executes a purge operation (DELETES backups from remote storage)
+    pub async fn execute_purge(
+        &self,
+        evaluation: &crate::PurgeEvaluation,
+        dry_run: bool,
+    ) -> Result<crate::PurgeReport, StorageError> {
+        let start_time = std::time::Instant::now();
+        let mut deleted = 0;
+        let mut failed = 0;
+        let mut errors = Vec::new();
+        let mut space_freed = 0u64;
+
+        if dry_run {
+            info!(
+                "DRY RUN: Would delete {} backups and free {} bytes",
+                evaluation.to_delete.len(),
+                evaluation.estimated_space_freed
+            );
+            return Ok(crate::PurgeReport {
+                timestamp: chrono::Utc::now(),
+                dry_run: true,
+                total_evaluated: evaluation.total_backups,
+                kept: evaluation.to_keep.len(),
+                deleted: 0,
+                failed: 0,
+                space_freed: 0,
+                duration_secs: start_time.elapsed().as_secs(),
+                errors: Vec::new(),
+            });
+        }
+
+        info!(
+            "Executing purge: deleting {} backups",
+            evaluation.to_delete.len()
+        );
+
+        // Delete each backup
+        for decision in &evaluation.to_delete {
+            info!(
+                "Deleting backup {}: {}",
+                decision.backup_id, decision.reason
+            );
+
+            match self.delete_backup(&decision.backup_id).await {
+                Ok(_) => {
+                    deleted += 1;
+                    space_freed += decision.size_bytes;
+                    info!("Successfully deleted backup {}", decision.backup_id);
+                }
+                Err(e) => {
+                    failed += 1;
+                    let error_msg =
+                        format!("Failed to delete backup {}: {}", decision.backup_id, e);
+                    error!("{}", error_msg);
+
+                    // Report to Sentry
+                    sentry::capture_message(&error_msg, sentry::Level::Error);
+
+                    errors.push(error_msg);
+                }
+            }
+        }
+
+        let duration_secs = start_time.elapsed().as_secs();
+
+        info!(
+            "Purge complete: deleted {}, failed {}, freed {} bytes in {}s",
+            deleted, failed, space_freed, duration_secs
+        );
+
+        Ok(crate::PurgeReport {
+            timestamp: chrono::Utc::now(),
+            dry_run: false,
+            total_evaluated: evaluation.total_backups,
+            kept: evaluation.to_keep.len(),
+            deleted,
+            failed,
+            space_freed,
+            duration_secs,
+            errors,
+        })
+    }
 }

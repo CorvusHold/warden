@@ -177,6 +177,7 @@ mod ping_tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires external network access - run with --ignored to test"]
     async fn test_ping() {
         let service = Service {
             id: "test-ping-1".to_string(),
@@ -236,6 +237,7 @@ mod integration_tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires external network access - run with --ignored to test"]
     async fn test_multiple_services() {
         let services = vec![
             Service {

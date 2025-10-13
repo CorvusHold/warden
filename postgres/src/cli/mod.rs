@@ -908,4 +908,321 @@ pub enum PostgresqlCommands {
         #[clap(long)]
         ssh_remote_port: Option<u16>,
     },
+
+    /// Inspect detailed backup metadata from remote storage
+    InspectBackup {
+        /// Backup ID
+        #[clap(long)]
+        backup_id: String,
+
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+    },
+
+    /// Download backup from remote storage
+    DownloadBackup {
+        /// Backup ID
+        #[clap(long)]
+        backup_id: String,
+
+        /// Target directory for downloaded backup
+        #[clap(long)]
+        target_dir: std::path::PathBuf,
+
+        /// Verify checksums after download
+        #[clap(long)]
+        verify_checksums: bool,
+
+        /// Backup directory (source for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+    },
+
+    /// Initialize or update retention policy for a storage bucket
+    InitRetentionPolicy {
+        /// Path to retention policy JSON file
+        #[clap(long)]
+        policy_file: std::path::PathBuf,
+
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+    },
+
+    /// Show current retention policy for a storage bucket
+    ShowRetentionPolicy {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+    },
+
+    /// Evaluate purge policy (dry run - shows what would be deleted)
+    PurgePlan {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+
+        /// Output format (table, json, yaml)
+        #[clap(long, default_value = "table")]
+        format: String,
+    },
+
+    /// Execute purge according to retention policy (DELETES backups)
+    Purge {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+
+        /// Actually execute purge (default is dry-run)
+        #[clap(long)]
+        apply: bool,
+
+        /// Skip confirmation prompt
+        #[clap(long)]
+        yes: bool,
+    },
+
+    /// Reconstruct metadata for existing backups without metadata files
+    ReconstructMetadata {
+        /// Backup directory (for local backups)
+        #[clap(long, default_value = "./backups")]
+        backup_dir: std::path::PathBuf,
+
+        /// Use remote storage
+        #[clap(long)]
+        remote_storage: bool,
+
+        /// Storage provider type (s3)
+        #[clap(long, default_value = "s3")]
+        storage_provider: String,
+
+        /// Storage bucket name
+        #[clap(long)]
+        storage_bucket: Option<String>,
+
+        /// Storage prefix for backups
+        #[clap(long)]
+        storage_prefix: Option<String>,
+
+        /// Storage region
+        #[clap(long)]
+        storage_region: Option<String>,
+
+        /// Storage endpoint URL
+        #[clap(long)]
+        storage_endpoint: Option<String>,
+
+        /// Storage access key
+        #[clap(long)]
+        storage_access_key: Option<String>,
+
+        /// Storage secret key
+        #[clap(long)]
+        storage_secret_key: Option<String>,
+
+        /// PostgreSQL server version (if known)
+        #[clap(long, default_value = "unknown")]
+        server_version: String,
+
+        /// Dry run - show what would be created without creating metadata
+        #[clap(long)]
+        dry_run: bool,
+
+        /// Skip computing checksums (faster but less accurate)
+        #[clap(long)]
+        skip_checksums: bool,
+    },
 }
