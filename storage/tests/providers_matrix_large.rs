@@ -11,16 +11,13 @@ const LARGE_FILE_SIZE: usize = 20 * 1024 * 1024;
 #[tokio::test]
 async fn test_provider_matrix_large_file() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let providers = vec![("minio", ProviderKind::Minio)];
-    let region = env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+    let test_bucket = env::var("AWS_TEST_BUCKET").unwrap_or_else(|_| "test-bucket".to_string());
+    let access_key = env::var("AWS_ACCESS_KEY_ID").ok();
+    let secret_key = env::var("AWS_SECRET_ACCESS_KEY").ok();
+    let region = env::var("AWS_REGION").ok();
     let endpoint = env::var("AWS_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
-    let access_key = env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| "minioadmin".to_string());
-    let secret_key = env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string());
-    let test_bucket = env::var("AWS_TEST_BUCKET").unwrap_or_else(|_| "testbucket".to_string());
-    let base_dir =
-        PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
-    let testdata_dir = base_dir.join("testdata");
-    let test_file = testdata_dir.join("large_test_file.bin");
+    let providers = vec![("minio", ProviderKind::Minio, endpoint.clone())];
+    let test_file = PathBuf::from("testdata/large_test_file.bin");
     let test_key = "matrix/large_test_file.bin";
 
     // Generate a large file if it doesn't exist or if it's not exactly 20MB
@@ -42,14 +39,15 @@ async fn test_provider_matrix_large_file() {
     for (name, kind) in providers {
         println!("\nTesting provider (large file): {name} ({endpoint})");
         let provider = S3Provider::new_with_kind(
-            Some(region.clone()),
+            region.clone(),
             Some(endpoint.clone()),
-            Some(access_key.clone()),
-            Some(secret_key.clone()),
+            access_key.clone(),
+            secret_key.clone(),
             kind.clone(),
         )
         .await
         .expect("provider init");
+        provider.create_bucket(&test_bucket).await.ok();
         provider
             .upload_file(&test_bucket, test_key, &test_file, None, None)
             .await

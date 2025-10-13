@@ -50,15 +50,7 @@ impl FullRestoreManager {
     }
 
     async fn create_client(&self) -> Result<Client> {
-        let password = self
-            .config
-            .password
-            .as_ref()
-            .ok_or(PostgresError::MissingPassword)?;
-        let connection_string = format!(
-            "host={} port={} user={} password={} dbname=postgres",
-            self.config.host, self.config.port, self.config.user, password
-        );
+        let connection_string = self.config.maintenance_connection_string();
         let (client, connection) = tokio_postgres::connect(&connection_string, NoTls).await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
