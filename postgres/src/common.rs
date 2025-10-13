@@ -13,6 +13,7 @@ pub struct PostgresConfig {
     pub user: String,
     pub password: Option<String>,
     pub ssl_mode: Option<String>,
+    pub maintenance_db: Option<String>,
     // SSH tunnel configuration
     pub ssh_host: Option<String>,
     pub ssh_user: Option<String>,
@@ -40,6 +41,34 @@ impl PostgresConfig {
         info!("Creating connection string for {}", conn_string);
 
         conn_string
+    }
+
+    pub fn maintenance_connection_string(&self) -> String {
+        let db_name = self
+            .maintenance_db
+            .as_deref()
+            .unwrap_or("template1");
+
+        let mut conn_string = format!(
+            "host={} port={} dbname={} user={}",
+            self.host, self.port, db_name, self.user
+        );
+
+        if let Some(password) = &self.password {
+            conn_string.push_str(&format!(" password={}", password));
+        }
+
+        if let Some(ssl_mode) = &self.ssl_mode {
+            conn_string.push_str(&format!(" sslmode={}", ssl_mode));
+        }
+        info!("Creating maintenance connection string for {}", conn_string);
+
+        conn_string
+    }
+
+    pub fn with_maintenance_db(mut self, maintenance_db: impl Into<String>) -> Self {
+        self.maintenance_db = Some(maintenance_db.into());
+        self
     }
 }
 
