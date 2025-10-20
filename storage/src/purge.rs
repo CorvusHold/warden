@@ -231,10 +231,11 @@ fn evaluate_interval_based(
             })
             .collect();
 
-        // Select backups spaced by spacing_days
+        // Select backups spaced by spacing_hours or spacing_days
         let selected = select_spaced_backups(
             &backups_in_interval,
             interval.keep_count,
+            interval.spacing_hours,
             interval.spacing_days,
         );
 
@@ -294,6 +295,7 @@ fn evaluate_interval_based(
 fn select_spaced_backups(
     backups: &[&BackupMetadata],
     keep_count: usize,
+    spacing_hours: Option<u32>,
     spacing_days: u32,
 ) -> Vec<String> {
     if backups.is_empty() {
@@ -302,7 +304,13 @@ fn select_spaced_backups(
 
     let mut selected = Vec::new();
     let mut last_selected: Option<DateTime<Utc>> = None;
-    let spacing = Duration::days(spacing_days as i64);
+
+    // Use hours if specified, otherwise use days
+    let spacing = if let Some(hours) = spacing_hours {
+        Duration::hours(hours as i64)
+    } else {
+        Duration::days(spacing_days as i64)
+    };
 
     for backup in backups {
         let timestamp = backup.end_time.unwrap_or(backup.start_time);
