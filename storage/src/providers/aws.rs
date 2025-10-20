@@ -445,7 +445,14 @@ impl StorageProvider for S3Provider {
     }
 
     async fn object_exists(&self, bucket: &str, key: &str) -> Result<bool, StorageError> {
-        match self.client.head_object().bucket(bucket).key(key).send().await {
+        match self
+            .client
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+        {
             Ok(_) => Ok(true),
             Err(e) => {
                 let error_string = e.to_string();
@@ -603,7 +610,9 @@ impl StorageProvider for S3Provider {
 
             // Check if there are more results
             if list_objects_result.is_truncated().unwrap_or(false) {
-                continuation_token = list_objects_result.next_continuation_token().map(|s| s.to_string());
+                continuation_token = list_objects_result
+                    .next_continuation_token()
+                    .map(|s| s.to_string());
                 if continuation_token.is_none() {
                     break;
                 }
@@ -612,7 +621,11 @@ impl StorageProvider for S3Provider {
             }
         }
 
-        info!("Listed {} total objects from bucket {}", all_objects.len(), bucket);
+        info!(
+            "Listed {} total objects from bucket {}",
+            all_objects.len(),
+            bucket
+        );
         Ok(all_objects)
     }
 
