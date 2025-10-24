@@ -48,11 +48,9 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        profile: minimal
         toolchain: stable
-        override: true
         components: rustfmt, clippy
     - name: Check formatting
       run: cargo fmt -- --check
@@ -74,11 +72,9 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        profile: minimal
         toolchain: stable
-        override: true
         components: rustfmt, clippy
     - name: Check Docker
       run: docker info

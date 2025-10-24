@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
 
 PG_HBA="${PGDATA}/pg_hba.conf"

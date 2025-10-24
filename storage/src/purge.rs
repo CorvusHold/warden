@@ -265,7 +265,7 @@ fn evaluate_interval_based(
     }
 
     // Preserve chains if needed
-    if preserve_chains {
+    if preserve_chains || policy.safety.preserve_chains {
         preserve_backup_chains(backups, &mut to_keep_ids);
     }
 
