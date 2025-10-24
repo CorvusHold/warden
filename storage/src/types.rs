@@ -234,7 +234,13 @@ pub struct RetentionInterval {
     /// How many backups to keep in this interval
     pub keep_count: usize,
     /// Spacing between kept backups in days (e.g., 7 for weekly)
+    /// If spacing_hours is specified, this is ignored
+    #[serde(default)]
     pub spacing_days: u32,
+    /// Spacing between kept backups in hours (e.g., 1 for hourly, 24 for daily)
+    /// Takes precedence over spacing_days if specified
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spacing_hours: Option<u32>,
 }
 
 /// Safety settings for retention policy

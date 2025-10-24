@@ -444,10 +444,26 @@ impl StorageProvider for S3Provider {
         Ok(())
     }
 
-    async fn object_exists(&self, _bucket: &str, _key: &str) -> Result<bool, StorageError> {
-        Err(StorageError::Unexpected(
-            "object_exists not implemented".to_string(),
-        ))
+    async fn object_exists(&self, bucket: &str, key: &str) -> Result<bool, StorageError> {
+        match self
+            .client
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                let error_string = e.to_string();
+                if error_string.contains("404") || error_string.contains("NotFound") {
+                    Ok(false)
+                } else {
+                    error!("Error checking if object exists {}/{}: {}", bucket, key, e);
+                    Err(StorageError::Aws(e.to_string()))
+                }
+            }
+        }
     }
 
     async fn generate_presigned_url(
@@ -564,25 +580,53 @@ impl StorageProvider for S3Provider {
         bucket: &str,
         prefix: Option<&str>,
     ) -> Result<Vec<StorageObject>, StorageError> {
-        let mut list_objects_request = self.client.list_objects_v2().bucket(bucket);
+        let mut all_objects = Vec::new();
+        let mut continuation_token: Option<String> = None;
 
-        if let Some(prefix) = prefix {
-            list_objects_request = list_objects_request.prefix(prefix);
+        loop {
+            let mut list_objects_request = self.client.list_objects_v2().bucket(bucket);
+
+            if let Some(prefix) = prefix {
+                list_objects_request = list_objects_request.prefix(prefix);
+            }
+
+            if let Some(token) = continuation_token {
+                list_objects_request = list_objects_request.continuation_token(token);
+            }
+
+            let list_objects_result: ListObjectsV2Output =
+                list_objects_request.send().await.map_err(|e| {
+                    error!("Failed to list objects in bucket {bucket}: {e}");
+                    StorageError::Aws(e.to_string())
+                })?;
+
+            let objects: Vec<StorageObject> = list_objects_result
+                .contents()
+                .iter()
+                .map(|obj| self.convert_s3_object(obj))
+                .collect();
+
+            all_objects.extend(objects);
+
+            // Check if there are more results
+            if list_objects_result.is_truncated().unwrap_or(false) {
+                continuation_token = list_objects_result
+                    .next_continuation_token()
+                    .map(|s| s.to_string());
+                if continuation_token.is_none() {
+                    break;
+                }
+            } else {
+                break;
+            }
         }
 
-        let list_objects_result: ListObjectsV2Output =
-            list_objects_request.send().await.map_err(|e| {
-                error!("Failed to list objects in bucket {bucket}: {e}");
-                StorageError::Aws(e.to_string())
-            })?;
-
-        let objects = list_objects_result
-            .contents()
-            .iter()
-            .map(|obj| self.convert_s3_object(obj))
-            .collect();
-
-        Ok(objects)
+        info!(
+            "Listed {} total objects from bucket {}",
+            all_objects.len(),
+            bucket
+        );
+        Ok(all_objects)
     }
 
     async fn upload_file(

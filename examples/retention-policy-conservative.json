@@ -6,7 +6,12 @@
     "intervals": [
       {
         "after_days": 0,
-        "keep_count": 90,
+        "keep_count": 200,
+        "spacing_hours": 1
+      },
+      {
+        "after_days": 7,
+        "keep_count": 83,
         "spacing_days": 1
       },
       {
