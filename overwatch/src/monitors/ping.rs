@@ -112,6 +112,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires external network access - run with --ignored to test"]
     async fn test_valid_ping() {
         if std::env::var("CI").is_ok() {
             // Skip this test in CI environments

@@ -9,9 +9,6 @@ use storage::StorageProvider;
 async fn test_provider_matrix() {
     // Read configuration from environment to match CI settings
     let endpoint = env::var("AWS_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
-    let access_key = env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| "minioadmin".to_string());
-    let secret_key = env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| "minioadmin".to_string());
-    let region = env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
 
     let providers = vec![("minio", ProviderKind::Minio, endpoint.as_str())];
     let test_bucket = env::var("AWS_TEST_BUCKET").unwrap_or_else(|_| "test-bucket".to_string());
@@ -19,18 +16,26 @@ async fn test_provider_matrix() {
     let test_file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("testdata/test_file.txt");
     let test_key = "matrix/test_file.txt";
 
+    // Get credentials from environment (same as aws_multipart.rs tests)
+    let access_key = env::var("AWS_ACCESS_KEY_ID").ok();
+    let secret_key = env::var("AWS_SECRET_ACCESS_KEY").ok();
+    let region = env::var("AWS_REGION").ok();
+
     for (name, kind, endpoint) in providers {
         println!("\nTesting provider: {name} ({endpoint})");
         let provider = S3Provider::new_with_kind(
-            Some(region.clone()),
+            region.clone(),
             Some(endpoint.to_string()),
-            Some(access_key.clone()),
-            Some(secret_key.clone()),
+            access_key.clone(),
+            secret_key.clone(),
             kind.clone(),
         )
         .await
         .expect("provider init");
+
+        // Ensure bucket exists before upload (like aws_multipart.rs tests)
         provider.create_bucket(&test_bucket).await.ok();
+
         provider
             .upload_file(&test_bucket, test_key, &test_file, None, None)
             .await

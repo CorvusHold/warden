@@ -7,6 +7,7 @@
 mod error;
 mod integration;
 pub mod providers;
+pub mod purge;
 mod types;
 
 pub use error::StorageError;

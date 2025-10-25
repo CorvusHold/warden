@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "enabled": true,
+  "policy_type": {
+    "type": "TimeBased",
+    "keep_within_days": 30,
+    "keep_minimum": 3
+  },
+  "safety": {
+    "dry_run_by_default": true,
+    "require_confirmation": true,
+    "min_successful_backups": 1,
+    "preserve_chains": true
+  },
+  "notifications": {
+    "sentry_enabled": true,
+    "report_errors": true,
+    "report_summary": true
+  }
+}

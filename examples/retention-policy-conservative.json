@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "enabled": true,
+  "policy_type": {
+    "type": "IntervalBased",
+    "intervals": [
+      {
+        "after_days": 0,
+        "keep_count": 200,
+        "spacing_hours": 1
+      },
+      {
+        "after_days": 7,
+        "keep_count": 83,
+        "spacing_days": 1
+      },
+      {
+        "after_days": 90,
+        "keep_count": 52,
+        "spacing_days": 7
+      },
+      {
+        "after_days": 455,
+        "keep_count": 36,
+        "spacing_days": 30
+      }
+    ],
+    "minimum_backups": 5,
+    "preserve_chains": true
+  },
+  "safety": {
+    "dry_run_by_default": true,
+    "require_confirmation": true,
+    "min_successful_backups": 3,
+    "preserve_chains": true
+  },
+  "notifications": {
+    "sentry_enabled": true,
+    "report_errors": true,
+    "report_summary": true
+  }
+}

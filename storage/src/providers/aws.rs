@@ -68,7 +68,10 @@ impl S3Provider {
             }
         }
         let resp = req.send().await.map_err(|e| {
-            error!("Failed to initiate multipart upload for {bucket}/{key}: {e}");
+            error!(
+                "Failed to initiate multipart upload for {}/{}: {}",
+                bucket, key, e
+            );
             StorageError::Aws(e.to_string())
         })?;
         resp.upload_id()
@@ -342,7 +345,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -387,7 +390,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -401,7 +404,7 @@ impl StorageProvider for S3Provider {
         });
         let etag = resp.e_tag().map(|s| s.to_string());
         let content_type = resp.content_type().map(|s| s.to_string());
-        let storage_class = resp.storage_class().map(|s| format!("{s:?}"));
+        let storage_class = resp.storage_class().map(|s| format!("{:?}", s));
         let metadata = if let Some(meta) = resp.metadata() {
             if !meta.is_empty() {
                 Some(meta.clone())
@@ -433,7 +436,7 @@ impl StorageProvider for S3Provider {
             .map_err(|e| {
                 let msg = e.to_string();
                 if msg.contains("NotFound") || msg.contains("404") {
-                    StorageError::NotFound(format!("Object {bucket}/{key} not found"))
+                    StorageError::NotFound(format!("Object {}/{} not found", bucket, key))
                 } else {
                     StorageError::Aws(msg)
                 }
@@ -441,10 +444,26 @@ impl StorageProvider for S3Provider {
         Ok(())
     }
 
-    async fn object_exists(&self, _bucket: &str, _key: &str) -> Result<bool, StorageError> {
-        Err(StorageError::Unexpected(
-            "object_exists not implemented".to_string(),
-        ))
+    async fn object_exists(&self, bucket: &str, key: &str) -> Result<bool, StorageError> {
+        match self
+            .client
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                let error_string = e.to_string();
+                if error_string.contains("404") || error_string.contains("NotFound") {
+                    Ok(false)
+                } else {
+                    error!("Error checking if object exists {}/{}: {}", bucket, key, e);
+                    Err(StorageError::Aws(e.to_string()))
+                }
+            }
+        }
     }
 
     async fn generate_presigned_url(
@@ -561,25 +580,53 @@ impl StorageProvider for S3Provider {
         bucket: &str,
         prefix: Option<&str>,
     ) -> Result<Vec<StorageObject>, StorageError> {
-        let mut list_objects_request = self.client.list_objects_v2().bucket(bucket);
+        let mut all_objects = Vec::new();
+        let mut continuation_token: Option<String> = None;
 
-        if let Some(prefix) = prefix {
-            list_objects_request = list_objects_request.prefix(prefix);
+        loop {
+            let mut list_objects_request = self.client.list_objects_v2().bucket(bucket);
+
+            if let Some(prefix) = prefix {
+                list_objects_request = list_objects_request.prefix(prefix);
+            }
+
+            if let Some(token) = continuation_token {
+                list_objects_request = list_objects_request.continuation_token(token);
+            }
+
+            let list_objects_result: ListObjectsV2Output =
+                list_objects_request.send().await.map_err(|e| {
+                    error!("Failed to list objects in bucket {bucket}: {e}");
+                    StorageError::Aws(e.to_string())
+                })?;
+
+            let objects: Vec<StorageObject> = list_objects_result
+                .contents()
+                .iter()
+                .map(|obj| self.convert_s3_object(obj))
+                .collect();
+
+            all_objects.extend(objects);
+
+            // Check if there are more results
+            if list_objects_result.is_truncated().unwrap_or(false) {
+                continuation_token = list_objects_result
+                    .next_continuation_token()
+                    .map(|s| s.to_string());
+                if continuation_token.is_none() {
+                    break;
+                }
+            } else {
+                break;
+            }
         }
 
-        let list_objects_result: ListObjectsV2Output =
-            list_objects_request.send().await.map_err(|e| {
-                error!("Failed to list objects in bucket {bucket}: {e}");
-                StorageError::Aws(e.to_string())
-            })?;
-
-        let objects = list_objects_result
-            .contents()
-            .iter()
-            .map(|obj| self.convert_s3_object(obj))
-            .collect();
-
-        Ok(objects)
+        info!(
+            "Listed {} total objects from bucket {}",
+            all_objects.len(),
+            bucket
+        );
+        Ok(all_objects)
     }
 
     async fn upload_file(
@@ -688,7 +735,7 @@ impl StorageProvider for S3Provider {
                     "Multipart upload failed: part {part_number} too small ({filled} bytes)"
                 )));
             }
-            info!("Uploading part {part_number} ({filled} bytes)");
+            info!("Uploading part {} ({} bytes)", part_number, filled);
             // Upload part
             let upload_part_resp = self
                 .client
@@ -701,8 +748,11 @@ impl StorageProvider for S3Provider {
                 .send()
                 .await
                 .map_err(|e| {
-                    error!("Failed to upload part {part_number} for {bucket}/{key}: {e:?}");
-                    debug!("S3 error debug: {e:?}");
+                    error!(
+                        "Failed to upload part {} for {}/{}: {:?}",
+                        part_number, bucket, key, e
+                    );
+                    debug!("S3 error debug: {:?}", e);
                     report_s3_error_to_sentry(
                         "upload_file:upload_part",
                         &e as &dyn std::error::Error,
@@ -736,8 +786,11 @@ impl StorageProvider for S3Provider {
             .send()
             .await
             .map_err(|e| {
-                error!("Failed to complete multipart upload for {bucket}/{key}: {e:?}");
-                debug!("S3 error debug: {e:?}");
+                error!(
+                    "Failed to complete multipart upload for {}/{}: {:?}",
+                    bucket, key, e
+                );
+                debug!("S3 error debug: {:?}", e);
                 report_s3_error_to_sentry(
                     "upload_file:complete_multipart_upload",
                     &e as &dyn std::error::Error,
@@ -771,7 +824,7 @@ impl StorageProvider for S3Provider {
             .await?;
         while let Some(chunk_result) = s.next().await {
             let chunk = chunk_result.map_err(|e| {
-                error!("Failed to read stream chunk: {e}");
+                error!("Failed to read stream chunk: {}", e);
                 StorageError::Io(e)
             })?;
             buffer.extend_from_slice(&chunk);
@@ -788,7 +841,10 @@ impl StorageProvider for S3Provider {
                     .send()
                     .await
                     .map_err(|e| {
-                        error!("Failed to upload part {part_number} for {bucket}/{key}: {e:?}");
+                        error!(
+                            "Failed to upload part {} for {}/{}: {:?}",
+                            part_number, bucket, key, e
+                        );
                         StorageError::Aws(e.to_string())
                     })?;
                 parts.push(
@@ -812,7 +868,10 @@ impl StorageProvider for S3Provider {
                 .send()
                 .await
                 .map_err(|e| {
-                    error!("Failed to upload last part {part_number} for {bucket}/{key}: {e:?}");
+                    error!(
+                        "Failed to upload last part {} for {}/{}: {:?}",
+                        part_number, bucket, key, e
+                    );
                     StorageError::Aws(e.to_string())
                 })?;
             parts.push(
@@ -834,7 +893,10 @@ impl StorageProvider for S3Provider {
             .send()
             .await
             .map_err(|e| {
-                error!("Failed to complete multipart upload for {bucket}/{key}: {e:?}");
+                error!(
+                    "Failed to complete multipart upload for {}/{}: {:?}",
+                    bucket, key, e
+                );
                 StorageError::Aws(e.to_string())
             })?;
         info!("Multipart upload completed: {}/{}", bucket, key);
@@ -856,8 +918,8 @@ fn report_s3_error_to_sentry(
         extra.insert("backup_id", backup_id);
     }
 
-    let error_message = format!("{operation}: {error}");
+    let error_message = format!("{}: {}", operation, error);
     let extra_json = serde_json::to_string(&extra).unwrap_or_default();
-    let sentry_message = format!("{error_message} | context: {extra_json}");
+    let sentry_message = format!("{} | context: {}", error_message, extra_json);
     sentry::capture_message(&sentry_message, sentry::Level::Error);
 }
