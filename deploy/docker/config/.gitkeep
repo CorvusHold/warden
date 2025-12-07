@@ -1,0 +1,6 @@
+# This directory is for local configuration files.
+# Copy config.yaml.example and cluster.yaml.example here before running docker-compose.
+#
+# Example:
+#   cp ../config.yaml.example config.yaml
+#   cp ../cluster.yaml.example cluster.yaml

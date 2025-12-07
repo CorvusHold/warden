@@ -11,11 +11,11 @@ use tokio_util::io::ReaderStream;
 /// Integration with PostgreSQL backup system
 pub struct PostgresBackupStorage {
     /// Storage provider
-    provider: Box<dyn StorageProvider>,
+    pub(crate) provider: Box<dyn StorageProvider>,
     /// Bucket name
-    bucket: String,
+    pub(crate) bucket: String,
     /// Base prefix for backups
-    prefix: String,
+    pub(crate) prefix: String,
 }
 
 impl PostgresBackupStorage {
@@ -604,6 +604,8 @@ impl PostgresBackupStorage {
             files,
             tags: Vec::new(),
             pinned: false,
+            encrypted: None, // Will be set by caller if encryption is enabled
+            encryption_algorithm: None,
         })
     }
 

@@ -175,6 +175,12 @@ pub struct BackupMetadata {
     pub tags: Vec<String>,
     /// Whether this backup is pinned (never purge)
     pub pinned: bool,
+    /// Whether the backup is encrypted
+    #[serde(default)]
+    pub encrypted: Option<bool>,
+    /// Encryption algorithm used (if encrypted)
+    #[serde(default)]
+    pub encryption_algorithm: Option<String>,
 }
 
 /// Information about a file within a backup

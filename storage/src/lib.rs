@@ -4,14 +4,17 @@
 //! S3-compatible storage backends, including AWS S3, Cloudflare R2, and Google Cloud Storage.
 //! It supports streaming uploads and downloads to optimize large backup operations.
 
+pub mod catalog;
 mod error;
 mod integration;
+pub mod key_builder;
 pub mod providers;
 pub mod purge;
 mod types;
 
 pub use error::StorageError;
 pub use integration::PostgresBackupStorage;
+pub use key_builder::{StorageKeyBuilder, StorageKeyContext};
 pub use providers::*;
 pub use types::*;
 

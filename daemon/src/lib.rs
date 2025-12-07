@@ -1,6 +1,8 @@
 pub mod amqp;
 pub mod cli;
 pub mod handlers;
+pub mod hold;
+pub mod scheduler;
 
 use amqp::AmqpClient;
 use anyhow::{anyhow, Context, Result};

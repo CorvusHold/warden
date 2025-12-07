@@ -24,7 +24,28 @@ pub async fn restore_full(
     auto_restart: bool,
     ssh: SshOptions,
     storage: StorageOptions,
+    yes: bool,
 ) -> Result<()> {
+    // Safety check: if target directory exists and is not empty, require --yes
+    if target_dir.exists() {
+        let is_empty = target_dir
+            .read_dir()
+            .map(|mut d| d.next().is_none())
+            .unwrap_or(false);
+        if !is_empty && !yes {
+            return Err(anyhow!(
+                "Target directory '{}' is not empty. Use --yes to confirm overwriting existing data.",
+                target_dir.display()
+            ));
+        }
+        if !is_empty {
+            info!(
+                "Warning: Target directory '{}' is not empty. Proceeding with --yes flag.",
+                target_dir.display()
+            );
+        }
+    }
+
     // If restoring from remote storage, download the backup first
     if storage.remote_storage {
         info!("Downloading full backup from remote storage...");

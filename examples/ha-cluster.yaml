@@ -1,0 +1,140 @@
+# Example HA Cluster Configuration for Warden
+# 
+# This file defines a PostgreSQL HA cluster topology for use with
+# Warden's HA orchestration commands:
+#   - warden postgresql ha-switchover
+#   - warden postgresql ha-failover
+#   - warden postgresql ha-clone-node
+#
+# Place this file at one of the following locations:
+#   - ./cluster.yaml (current directory)
+#   - ~/.warden/cluster.yaml (user config)
+#   - /etc/warden/cluster.yaml (system config)
+#
+# Or specify explicitly with --config <path>
+
+version: "1"
+
+# Cluster definitions
+clusters:
+  - id: "prod-billing"
+    name: "Production Billing Cluster"
+    environment: "production"
+    labels:
+      team: "billing"
+      tier: "critical"
+      region: "us-east-1"
+
+  - id: "staging-billing"
+    name: "Staging Billing Cluster"
+    environment: "staging"
+    labels:
+      team: "billing"
+      tier: "non-critical"
+
+# Node definitions
+nodes:
+  # Production cluster nodes
+  - id: "billing-primary"
+    cluster_id: "prod-billing"
+    host: "db-primary.billing.internal"
+    port: 5432
+    role: primary
+    labels:
+      az: "us-east-1a"
+      instance_type: "r6g.xlarge"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+      # Password should be provided via environment variable
+      # password_env: "BILLING_PRIMARY_PASSWORD"
+    ssh:
+      host: "bastion.billing.internal"
+      user: "warden"
+      port: 22
+      key_path: "/etc/warden/ssh/billing_key"
+
+  - id: "billing-replica-1"
+    cluster_id: "prod-billing"
+    host: "db-replica-1.billing.internal"
+    port: 5432
+    role: replica
+    labels:
+      az: "us-east-1b"
+      instance_type: "r6g.xlarge"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+    ssh:
+      host: "bastion.billing.internal"
+      user: "warden"
+      port: 22
+      key_path: "/etc/warden/ssh/billing_key"
+
+  - id: "billing-replica-2"
+    cluster_id: "prod-billing"
+    host: "db-replica-2.billing.internal"
+    port: 5432
+    role: replica
+    labels:
+      az: "us-east-1c"
+      instance_type: "r6g.xlarge"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+    ssh:
+      host: "bastion.billing.internal"
+      user: "warden"
+      port: 22
+      key_path: "/etc/warden/ssh/billing_key"
+
+  # Staging cluster nodes
+  - id: "staging-primary"
+    cluster_id: "staging-billing"
+    host: "staging-db.billing.internal"
+    port: 5432
+    role: primary
+    labels:
+      az: "us-east-1a"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+
+  - id: "staging-replica"
+    cluster_id: "staging-billing"
+    host: "staging-db-replica.billing.internal"
+    port: 5432
+    role: replica
+    labels:
+      az: "us-east-1b"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+
+# Protection groups - databases that are backed up together
+protection_groups:
+  - id: "billing-databases"
+    name: "Billing Application Databases"
+    cluster_id: "prod-billing"
+    databases:
+      - "billing_main"
+      - "billing_audit"
+      - "billing_reports"
+    # Prefer taking backups from replica to reduce primary load
+    preferred_source_role: replica
+    labels:
+      compliance: "pci"
+      backup_priority: "high"
+
+  - id: "staging-databases"
+    name: "Staging Databases"
+    cluster_id: "staging-billing"
+    databases:
+      - "billing_main"
+      - "billing_audit"
+    preferred_source_role: primary
+    labels:
+      backup_priority: "low"

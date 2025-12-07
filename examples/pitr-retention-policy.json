@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "enabled": true,
+  "rules": [
+    {
+      "type": "KeepPinned"
+    },
+    {
+      "type": "KeepLatest",
+      "count": 5
+    },
+    {
+      "type": "KeepWithinDays",
+      "days": 7,
+      "minimum": 3
+    },
+    {
+      "type": "KeepIntervals",
+      "hourly": null,
+      "daily": {
+        "count": 7,
+        "max_age_days": 7
+      },
+      "weekly": {
+        "count": 4,
+        "max_age_days": 30
+      },
+      "monthly": {
+        "count": 12,
+        "max_age_days": 365
+      },
+      "yearly": {
+        "count": 7,
+        "max_age_days": null
+      }
+    },
+    {
+      "type": "KeepTagged",
+      "tags": ["compliance", "audit", "important"]
+    }
+  ],
+  "wal_retention": {
+    "pitr_window_hours": 48,
+    "keep_for_retained_backups": true,
+    "max_wal_age_days": 30,
+    "max_wal_size_gb": 100
+  },
+  "safety": {
+    "dry_run_by_default": true,
+    "require_confirmation": true,
+    "min_successful_backups": 3,
+    "preserve_chains": true,
+    "keep_latest_successful": true,
+    "min_pitr_window_hours": 24
+  },
+  "scope": {
+    "databases": [],
+    "backup_types": [],
+    "exclude_tags": ["temporary", "test"]
+  }
+}

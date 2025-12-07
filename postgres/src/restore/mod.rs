@@ -1,4 +1,5 @@
 pub mod full;
+pub mod full_restore;
 pub mod incremental;
 pub mod point_in_time;
 pub mod snapshot;

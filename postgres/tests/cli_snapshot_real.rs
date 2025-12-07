@@ -160,6 +160,8 @@ async fn snapshot_backup_and_restore_real() {
             &port.to_string(),
             "--user",
             user,
+            "--password",
+            "postgres",
             "--database",
             db,
             "--backup-dir",

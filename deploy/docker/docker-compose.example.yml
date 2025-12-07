@@ -1,0 +1,166 @@
+# Warden Docker Compose Example
+#
+# This compose file provides a complete local development/testing environment
+# with Warden, PostgreSQL, and MinIO (S3-compatible storage).
+#
+# Usage:
+#   # Start all services
+#   docker compose -f docker-compose.example.yml up -d
+#
+#   # Run a backup
+#   docker compose -f docker-compose.example.yml exec warden \
+#     warden postgresql snapshot-backup \
+#       --host postgres --port 5432 --database testdb \
+#       --user warden_backup --backup-dir /var/lib/warden/backups \
+#       --remote-storage --storage-provider minio \
+#       --storage-bucket warden-backups --storage-endpoint http://minio:9000
+#
+#   # View logs
+#   docker compose -f docker-compose.example.yml logs -f warden
+#
+#   # Stop all services
+#   docker compose -f docker-compose.example.yml down
+
+services:
+  # ==========================================================================
+  # Warden - PostgreSQL Data Protection Agent
+  # ==========================================================================
+  warden:
+    image: warden:latest
+    # Or build from source:
+    # build:
+    #   context: ../..
+    #   dockerfile: Dockerfile
+    container_name: warden
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+    environment:
+      # Logging
+      WARDEN_LOG_LEVEL: info
+      RUST_BACKTRACE: "1"
+      
+      # PostgreSQL connection
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: warden_backup
+      POSTGRES_DB: testdb
+      PGPASSWORD: warden_backup_password
+      
+      # MinIO/S3 storage
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT: http://minio:9000
+      STORAGE_PROVIDER: minio
+      STORAGE_BUCKET: warden-backups
+    volumes:
+      # Configuration (read-only)
+      - ./config:/etc/warden:ro
+      # Backup storage
+      - warden-backups:/var/lib/warden/backups
+      # Metrics output (for node_exporter)
+      - warden-metrics:/var/lib/node_exporter
+    networks:
+      - warden-network
+    # Keep container running for interactive use
+    # Remove this to run daemon mode
+    command: ["sleep", "infinity"]
+    # For daemon mode, use:
+    # command: ["/usr/local/bin/warden", "run"]
+    healthcheck:
+      test: ["/usr/local/bin/warden", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # PostgreSQL - Database to protect
+  # ==========================================================================
+  postgres:
+    image: postgres:16
+    container_name: warden-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: testdb
+      # Create backup user on startup
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - warden-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # MinIO - S3-compatible object storage
+  # ==========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: warden-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    networks:
+      - warden-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # MinIO Setup - Create default bucket
+  # ==========================================================================
+  minio-setup:
+    image: minio/mc:latest
+    container_name: warden-minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/warden-backups --ignore-existing;
+      mc anonymous set download myminio/warden-backups;
+      echo 'Bucket warden-backups created successfully';
+      "
+    networks:
+      - warden-network
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  warden-network:
+    driver: bridge
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  postgres-data:
+    driver: local
+  minio-data:
+    driver: local
+  warden-backups:
+    driver: local
+  warden-metrics:
+    driver: local
