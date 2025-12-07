@@ -28,10 +28,16 @@ pub async fn restore_full(
 ) -> Result<()> {
     // Safety check: if target directory exists and is not empty, require --yes
     if target_dir.exists() {
-        let is_empty = target_dir
-            .read_dir()
-            .map(|mut d| d.next().is_none())
-            .unwrap_or(false);
+        let is_empty = match std::fs::read_dir(&target_dir) {
+            Ok(mut entries) => entries.next().is_none(),
+            Err(e) => {
+                return Err(anyhow!(
+                    "Failed to read target directory '{}': {}",
+                    target_dir.display(),
+                    e
+                ))
+            }
+        };
         if !is_empty && !yes {
             return Err(anyhow!(
                 "Target directory '{}' is not empty. Use --yes to confirm overwriting existing data.",

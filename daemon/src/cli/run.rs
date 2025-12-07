@@ -147,6 +147,7 @@ pub async fn execute() -> Result<()> {
         }))
     } else {
         info!("No schedules configured, scheduler not started");
+        drop(event_tx); // Allow event handler task to exit
         None
     };
 

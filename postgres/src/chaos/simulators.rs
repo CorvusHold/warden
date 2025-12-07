@@ -9,6 +9,8 @@ use std::process::Command;
 use std::time::Duration;
 
 use log::{debug, info};
+#[cfg(target_os = "linux")]
+use log::warn;
 use thiserror::Error;
 
 #[cfg(all(unix, feature = "chaos-testing"))]
@@ -519,6 +521,10 @@ impl DiskSimulator {
         let mount_point = &self.target_dir;
         std::fs::create_dir_all(mount_point)?;
 
+        let mount_point_str = mount_point.to_str().ok_or_else(|| {
+            SimulatorError::Simulation("Mount point path contains invalid UTF-8".into())
+        })?;
+        
         let output = Command::new("sudo")
             .args([
                 "mount",
@@ -527,7 +533,7 @@ impl DiskSimulator {
                 "-o",
                 &format!("size={}m", size_mb),
                 "tmpfs",
-                mount_point.to_str().unwrap(),
+                mount_point_str,
             ])
             .output()?;
 
@@ -545,15 +551,26 @@ impl DiskSimulator {
 
     /// Get actual available space on the filesystem.
     pub fn get_actual_available_space(&self) -> Result<u64, SimulatorError> {
-        #[cfg(unix)]
+        #[cfg(all(unix, feature = "chaos-testing"))]
         {
-            use std::os::unix::fs::MetadataExt;
-            let metadata = std::fs::metadata(&self.target_dir)?;
-            // This is a simplified check - in reality you'd use statvfs
-            Ok(metadata.size())
+            use std::ffi::CString;
+            use std::mem::MaybeUninit;
+
+            let path = CString::new(self.target_dir.to_string_lossy().as_bytes())
+                .map_err(|e| SimulatorError::Simulation(e.to_string()))?;
+
+            unsafe {
+                let mut stat: MaybeUninit<libc::statvfs> = MaybeUninit::uninit();
+                if libc::statvfs(path.as_ptr(), stat.as_mut_ptr()) == 0 {
+                    let stat = stat.assume_init();
+                    Ok(stat.f_bavail as u64 * stat.f_frsize as u64)
+                } else {
+                    Err(SimulatorError::Io(std::io::Error::last_os_error()))
+                }
+            }
         }
 
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, feature = "chaos-testing")))]
         {
             Ok(u64::MAX)
         }
@@ -597,9 +614,11 @@ pub struct TmpfsGuard {
 #[cfg(target_os = "linux")]
 impl Drop for TmpfsGuard {
     fn drop(&mut self) {
-        let _ = Command::new("sudo")
-            .args(["umount", self.mount_point.to_str().unwrap()])
-            .output();
+        if let Some(path) = self.mount_point.to_str() {
+            let _ = Command::new("sudo")
+                .args(["umount", path])
+                .output();
+        }
     }
 }
 

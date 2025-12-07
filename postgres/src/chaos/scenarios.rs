@@ -61,7 +61,9 @@ impl ScenarioResult {
     pub fn pass(mut self) -> Self {
         self.passed = true;
         self.end_time = Utc::now();
-        self.duration_ms = (self.end_time - self.start_time).num_milliseconds() as u64;
+        self.duration_ms = (self.end_time - self.start_time)
+            .num_milliseconds()
+            .max(0) as u64;
         self
     }
 
@@ -70,7 +72,9 @@ impl ScenarioResult {
         self.passed = false;
         self.error = Some(error.into());
         self.end_time = Utc::now();
-        self.duration_ms = (self.end_time - self.start_time).num_milliseconds() as u64;
+        self.duration_ms = (self.end_time - self.start_time)
+            .num_milliseconds()
+            .max(0) as u64;
         self
     }
 
@@ -581,14 +585,17 @@ pub async fn run_all_scenarios(backup_dir: PathBuf) -> Vec<ScenarioResult> {
     // Scenario 1: Storage outage during upload
     let scenario1 = StorageOutageDuringUpload::new(&backup_dir);
     results.push(scenario1.run().await);
+    let _ = scenario1.cleanup();
 
     // Scenario 2: Disk full during backup
     let scenario2 = DiskFullDuringBackup::new(&backup_dir);
     results.push(scenario2.run().await);
+    let _ = scenario2.cleanup();
 
     // Scenario 3: Permission denied during backup
     let scenario3 = PermissionDeniedDuringBackup::new(&backup_dir);
     results.push(scenario3.run().await);
+    let _ = scenario3.cleanup();
 
     // Note: PostgresCrashDuringBackup requires a running PostgreSQL instance
     // and should be run separately in integration tests

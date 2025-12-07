@@ -265,7 +265,7 @@ pub async fn retention_apply(
 
         match &decision.location {
             BackupLocation::Local(path) => {
-                match delete_local_backup(path) {
+                match delete_local_backup(path, &options.backup_dir) {
                     Ok(_) => {
                         deleted_backups += 1;
                         space_freed += decision.size_bytes;
@@ -297,20 +297,25 @@ pub async fn retention_apply(
                 }
             }
             BackupLocation::Both { local, remote } => {
-                // Delete both local and remote
-                if let Err(e) = delete_local_backup(local) {
+                // Delete both local and remote - track errors locally for this backup
+                let mut local_failed = false;
+                let mut remote_failed = false;
+                
+                if let Err(e) = delete_local_backup(local, &options.backup_dir) {
                     failed += 1;
+                    local_failed = true;
                     errors.push(format!("Failed to delete local backup {}: {}", local, e));
                 }
 
                 if let Some(ref storage) = storage_instance {
                     if let Err(e) = storage.delete_backup(&decision.backup_id).await {
                         failed += 1;
+                        remote_failed = true;
                         errors.push(format!("Failed to delete remote backup {}: {}", remote, e));
                     }
                 }
 
-                if errors.is_empty() {
+                if !local_failed && !remote_failed {
                     deleted_backups += 1;
                     space_freed += decision.size_bytes;
                 }
@@ -639,7 +644,8 @@ fn parse_local_metadata(metadata: &serde_json::Value, path: &PathBuf) -> Result<
     let id = metadata["backup_id"]
         .as_str()
         .or_else(|| metadata["id"].as_str())
-        .unwrap_or_else(|| path.file_name().unwrap().to_str().unwrap())
+        .or_else(|| path.file_name().and_then(|f| f.to_str()))
+        .unwrap_or("unknown")
         .to_string();
 
     let backup_type = match metadata["backup_type"].as_str() {
@@ -822,12 +828,46 @@ async fn create_storage_provider(storage: &StorageOptions) -> Result<PostgresBac
     .map_err(|e| anyhow!("Failed to create storage provider: {}", e))
 }
 
-/// Delete a local backup directory
-fn delete_local_backup(path: &str) -> Result<()> {
+/// Delete a local backup directory with path traversal protection.
+/// 
+/// This function validates that the path is under the expected backup root
+/// to prevent path traversal attacks or symlink tricks.
+fn delete_local_backup(path: &str, backup_root: &PathBuf) -> Result<()> {
     let path = PathBuf::from(path);
-    if path.exists() {
-        std::fs::remove_dir_all(&path)?;
+    
+    // Canonicalize both paths to resolve symlinks and relative components
+    let canonical_root = backup_root.canonicalize()
+        .map_err(|e| anyhow!("Failed to canonicalize backup root '{}': {}", backup_root.display(), e))?;
+    
+    // If path doesn't exist, nothing to delete
+    if !path.exists() {
+        return Ok(());
     }
+    
+    let canonical_path = path.canonicalize()
+        .map_err(|e| anyhow!("Failed to canonicalize path '{}': {}", path.display(), e))?;
+    
+    // Verify the path is under the backup root
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(anyhow!(
+            "Security: Path '{}' is not under backup root '{}'. Refusing to delete.",
+            canonical_path.display(),
+            canonical_root.display()
+        ));
+    }
+    
+    // Re-canonicalize immediately before deletion to mitigate TOCTOU race
+    let final_path = path.canonicalize()
+        .map_err(|e| anyhow!("Path changed during validation '{}': {}", path.display(), e))?;
+    
+    if !final_path.starts_with(&canonical_root) {
+        return Err(anyhow!(
+            "Security: Path '{}' escaped backup root during operation. Refusing to delete.",
+            final_path.display()
+        ));
+    }
+    
+    std::fs::remove_dir_all(&final_path)?;
     Ok(())
 }
 
@@ -884,12 +924,24 @@ mod tests {
 
     #[test]
     fn test_extract_timestamp_from_name() {
-        // This is a basic test - the actual parsing may need adjustment
-        let name = "snapshot_backup_2025-01-15T10-30-00Z";
-        // The function may not parse this correctly yet, but the test documents expected behavior
+        // Test that the function doesn't panic on various inputs
+        // and returns expected results for known formats
+        
+        // Test with standard format that should parse
+        let name = "snapshot_backup_2025-01-15";
         let result = extract_timestamp_from_name(name);
-        // Just verify it doesn't panic
-        assert!(result.is_some() || result.is_none());
+        // Should extract a timestamp from the date portion
+        assert!(result.is_some(), "Expected to parse date from '{}'", name);
+        
+        // Test with format that may not parse (documents current behavior)
+        let name_with_time = "snapshot_backup_2025-01-15T10-30-00Z";
+        let _result = extract_timestamp_from_name(name_with_time);
+        // Don't assert on result - just verify no panic
+        
+        // Test with no timestamp - should return None
+        let name_no_date = "snapshot_backup_latest";
+        let result = extract_timestamp_from_name(name_no_date);
+        assert!(result.is_none(), "Expected None for name without date");
     }
 
     #[test]

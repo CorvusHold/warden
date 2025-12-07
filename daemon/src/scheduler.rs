@@ -214,6 +214,20 @@ impl Scheduler {
                 "[DRY-RUN] Would execute backup schedule '{}' with target: {:?}",
                 schedule.id, schedule.target
             );
+            // Emit TaskCompleted event for dry-run to maintain event consistency
+            if let Some(tx) = &self.event_tx {
+                let _ = tx
+                    .send(SchedulerEvent::TaskCompleted(TaskResult {
+                        schedule_id: schedule.id.clone(),
+                        schedule_type: ScheduleType::Backup,
+                        started_at,
+                        completed_at: Utc::now(),
+                        success: true,
+                        message: Some("Dry-run completed".to_string()),
+                        backup_id: None,
+                    }))
+                    .await;
+            }
             return;
         }
 
@@ -461,6 +475,20 @@ impl Scheduler {
                 "[DRY-RUN] Would execute retention schedule '{}' (apply={})",
                 schedule.id, schedule.apply
             );
+            // Emit TaskCompleted event for dry-run to maintain event consistency
+            if let Some(tx) = &self.event_tx {
+                let _ = tx
+                    .send(SchedulerEvent::TaskCompleted(TaskResult {
+                        schedule_id: schedule.id.clone(),
+                        schedule_type: ScheduleType::Retention,
+                        started_at,
+                        completed_at: Utc::now(),
+                        success: true,
+                        message: Some("Dry-run completed".to_string()),
+                        backup_id: None,
+                    }))
+                    .await;
+            }
             return;
         }
 

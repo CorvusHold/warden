@@ -125,13 +125,31 @@ pub struct FaultInjector {
     inner: Arc<FaultInjectorInner>,
 }
 
+/// Fault configuration with per-fault trigger tracking.
+#[derive(Debug)]
+struct TrackedFaultConfig {
+    /// The fault configuration.
+    config: FaultConfig,
+    /// Per-fault trigger count.
+    trigger_count: AtomicU64,
+}
+
+impl TrackedFaultConfig {
+    fn new(config: FaultConfig) -> Self {
+        Self {
+            config,
+            trigger_count: AtomicU64::new(0),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct FaultInjectorInner {
-    /// Active faults by component.
-    faults: std::sync::RwLock<HashMap<String, Vec<FaultConfig>>>,
+    /// Active faults by component (with per-fault trigger tracking).
+    faults: std::sync::RwLock<HashMap<String, Vec<TrackedFaultConfig>>>,
     /// Global enable/disable flag.
     enabled: AtomicBool,
-    /// Counter for total faults triggered.
+    /// Counter for total faults triggered (global).
     trigger_count: AtomicU64,
     /// Counter for faults by type.
     type_counts: std::sync::RwLock<HashMap<FaultType, u64>>,
@@ -162,7 +180,7 @@ impl FaultInjector {
             faults
                 .entry(component.into())
                 .or_default()
-                .push(config);
+                .push(TrackedFaultConfig::new(config));
         }
     }
 
@@ -194,7 +212,8 @@ impl FaultInjector {
         let faults = self.inner.faults.read().ok()?;
         let component_faults = faults.get(component)?;
 
-        for config in component_faults {
+        for tracked in component_faults {
+            let config = &tracked.config;
             if config.fault_type == fault_type && config.enabled {
                 // Check probability
                 if config.probability < 1.0 {
@@ -204,15 +223,17 @@ impl FaultInjector {
                     }
                 }
 
-                // Check trigger count
+                // Check per-fault trigger count (not global)
                 if let Some(max_triggers) = config.trigger_count {
-                    let current = self.inner.trigger_count.load(Ordering::SeqCst);
+                    let current = tracked.trigger_count.load(Ordering::SeqCst);
                     if current >= max_triggers {
                         continue;
                     }
                 }
 
-                // Increment counters
+                // Increment per-fault counter
+                tracked.trigger_count.fetch_add(1, Ordering::SeqCst);
+                // Increment global counter
                 self.inner.trigger_count.fetch_add(1, Ordering::SeqCst);
                 if let Ok(mut counts) = self.inner.type_counts.write() {
                     *counts.entry(fault_type).or_insert(0) += 1;

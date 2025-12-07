@@ -3,6 +3,7 @@
 //! This module defines the configuration schema for optional HOLD control plane integration.
 //! When disabled (the default), Warden operates in fully standalone mode with no HOLD overhead.
 
+use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
 
 /// HOLD integration configuration
@@ -151,7 +152,7 @@ impl Default for HoldRetryConfig {
 }
 
 /// TLS configuration for secure HOLD connections
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HoldTlsConfig {
     /// Enable TLS (default: true for amqps:// endpoints)
     #[serde(default = "default_tls_enabled")]
@@ -173,6 +174,18 @@ pub struct HoldTlsConfig {
 
 fn default_tls_enabled() -> bool {
     true
+}
+
+impl Default for HoldTlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_tls_enabled(),
+            skip_verify: false,
+            ca_cert_path: None,
+            client_cert_path: None,
+            client_key_path: None,
+        }
+    }
 }
 
 impl HoldConfig {
@@ -198,6 +211,8 @@ impl HoldConfig {
     }
 
     /// Get the AMQP connection URI with credentials
+    /// 
+    /// Credentials are URL-encoded to handle special characters like @, :, /, %
     pub fn get_connection_uri(&self) -> Option<String> {
         let endpoint = self.endpoint.as_ref()?;
 
@@ -211,12 +226,16 @@ impl HoldConfig {
                 return Some(endpoint.clone());
             }
 
+            // URL-encode credentials to handle special characters
+            let encoded_user = percent_encode(username.as_bytes(), NON_ALPHANUMERIC);
+            let encoded_pass = percent_encode(password.as_bytes(), NON_ALPHANUMERIC);
+
             // Inject credentials into the URI
             if let Some(rest) = endpoint.strip_prefix("amqp://") {
-                return Some(format!("amqp://{}:{}@{}", username, password, rest));
+                return Some(format!("amqp://{}:{}@{}", encoded_user, encoded_pass, rest));
             }
             if let Some(rest) = endpoint.strip_prefix("amqps://") {
-                return Some(format!("amqps://{}:{}@{}", username, password, rest));
+                return Some(format!("amqps://{}:{}@{}", encoded_user, encoded_pass, rest));
             }
         }
 

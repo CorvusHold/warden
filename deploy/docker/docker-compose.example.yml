@@ -139,7 +139,8 @@ services:
       /bin/sh -c "
       mc alias set myminio http://minio:9000 minioadmin minioadmin;
       mc mb myminio/warden-backups --ignore-existing;
-      mc anonymous set download myminio/warden-backups;
+      # WARNING: Do not enable anonymous access in production
+      # mc anonymous set download myminio/warden-backups;
       echo 'Bucket warden-backups created successfully';
       "
     networks:

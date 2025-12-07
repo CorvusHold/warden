@@ -1,6 +1,9 @@
 # Warden PostgreSQL Data Protection Agent - systemd service unit
 #
 # Installation:
+#   sudo useradd -r -s /bin/false -d /var/lib/warden warden
+#   sudo mkdir -p /var/lib/warden /var/log/warden
+#   sudo chown -R warden:warden /var/lib/warden /var/log/warden
 #   sudo cp warden.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable warden
@@ -20,6 +23,7 @@
 [Unit]
 Description=Warden PostgreSQL Data Protection Agent
 Documentation=https://github.com/corvushold/warden
+# Remove postgresql.service from After= if PostgreSQL runs remotely
 After=network-online.target postgresql.service
 Wants=network-online.target
 
@@ -45,7 +49,8 @@ EnvironmentFile=-/etc/warden/warden.env
 Environment=WARDEN_CONFIG=/etc/warden/config.yaml
 Environment=WARDEN_CLUSTER_CONFIG=/etc/warden/cluster.yaml
 Environment=WARDEN_LOG_LEVEL=info
-Environment=RUST_BACKTRACE=1
+# RUST_BACKTRACE disabled by default for security; enable via warden.env for debugging
+# Environment=RUST_BACKTRACE=1
 
 # Restart policy
 Restart=on-failure
@@ -72,7 +77,6 @@ RestrictNamespaces=yes
 
 # Allow write access to specific directories
 ReadWritePaths=/var/lib/warden
-ReadWritePaths=/var/lib/warden/backups
 ReadWritePaths=/var/log/warden
 
 # Allow read access to config

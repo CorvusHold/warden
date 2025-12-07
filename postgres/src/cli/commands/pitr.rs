@@ -194,14 +194,10 @@ pub async fn pitr_restore(
 
     planner = planner.with_wal_prefix(storage_opts.wal_prefix.clone());
 
-    let storage = if storage_opts.remote_storage {
-        Some(create_storage(&storage_opts).await?)
-    } else {
-        None
-    };
-
-    if storage.is_some() {
-        planner = planner.with_storage(create_storage(&storage_opts).await?);
+    // Create storage for planner if remote storage is enabled
+    if storage_opts.remote_storage {
+        let storage = create_storage(&storage_opts).await?;
+        planner = planner.with_storage(storage);
     }
 
     // Compute the plan
@@ -256,7 +252,9 @@ pub async fn pitr_restore(
         .with_backup_dir(backup_dir)
         .with_auto_start(auto_start);
 
-    if let Some(storage) = storage {
+    // Create storage for executor if remote storage is enabled
+    if storage_opts.remote_storage {
+        let storage = create_storage(&storage_opts).await?;
         executor = executor.with_storage(storage);
     }
 

@@ -1,7 +1,7 @@
 //! Notification providers for different channel types.
 
 use async_trait::async_trait;
-use log::{debug, error, warn};
+use log::{debug, error};
 use serde::Serialize;
 use std::time::Duration;
 use thiserror::Error;
@@ -528,8 +528,8 @@ impl EmailProvider {
 impl NotificationProvider for EmailProvider {
     async fn send(&self, event: &Event) -> NotificationResult<()> {
         // Note: Full SMTP implementation would require the `lettre` crate.
-        // For now, we provide a basic implementation that logs the email
-        // and can be extended with actual SMTP support.
+        // This implementation returns an error to indicate email is not configured,
+        // preventing silent failures where notifications appear to succeed but don't send.
 
         let subject = self.format_subject(event);
         let _body = self.format_body(event);
@@ -541,21 +541,13 @@ impl NotificationProvider for EmailProvider {
             self.config.to
         );
 
-        // In a full implementation, we would use lettre here:
-        // use lettre::{Message, SmtpTransport, Transport};
-        //
-        // For now, we'll use a simple HTTP-based approach if an email API is available,
-        // or log a warning that SMTP is not fully implemented.
-
-        warn!(
-            "Email notification prepared but SMTP sending not fully implemented. \
-             Subject: '{}', To: {:?}. Add 'lettre' crate for full SMTP support.",
-            subject, self.config.to
-        );
-
-        // Return success since the notification was "prepared"
-        // In production, this should actually send the email
-        Ok(())
+        // Return an error since SMTP is not implemented.
+        // This prevents callers from treating the notification as successfully sent.
+        // To enable email notifications, add the 'lettre' crate and implement SMTP support.
+        Err(NotificationError::NotAvailable(
+            "Email notifications require SMTP configuration. \
+             Add 'lettre' crate and configure SMTP settings to enable email sending.".to_string()
+        ))
     }
 
     fn name(&self) -> &str {
