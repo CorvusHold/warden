@@ -1,0 +1,36 @@
+-- =============================================================================
+-- Warden Backup User Setup
+-- =============================================================================
+-- This script creates a dedicated PostgreSQL user for Warden backup operations.
+-- Copy this file to 01-create-backup-user.sql and customize as needed.
+--
+-- SECURITY: Replace 'warden_backup_password' with a strong password!
+-- =============================================================================
+
+-- Create backup user with replication privileges (required for pg_basebackup)
+CREATE USER warden_backup WITH PASSWORD 'warden_backup_password' REPLICATION;
+
+-- Grant connection privilege to the target database
+GRANT CONNECT ON DATABASE testdb TO warden_backup;
+
+-- Grant read access to all tables (for logical backups via pg_dump)
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO warden_backup;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO warden_backup;
+
+-- Ensure future tables are also accessible
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO warden_backup;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO warden_backup;
+
+-- For physical backups (pg_basebackup), the user needs additional privileges.
+-- Option 1: SUPERUSER (simplest, but grants full access)
+-- ALTER USER warden_backup WITH SUPERUSER;
+
+-- Option 2: PostgreSQL 15+ - Use predefined roles (more secure)
+-- GRANT pg_read_all_data TO warden_backup;
+-- GRANT pg_checkpoint TO warden_backup;
+
+-- Log successful creation
+DO $$
+BEGIN
+    RAISE NOTICE 'Warden backup user created successfully';
+END $$;

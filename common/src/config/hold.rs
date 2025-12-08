@@ -3,7 +3,16 @@
 //! This module defines the configuration schema for optional HOLD control plane integration.
 //! When disabled (the default), Warden operates in fully standalone mode with no HOLD overhead.
 
-use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
+use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
+
+/// Encode set for URL userinfo (username/password in URIs)
+/// Based on RFC 3986: encode everything except unreserved chars and sub-delims
+/// that are safe in userinfo. This is more precise than NON_ALPHANUMERIC.
+const USERINFO: &AsciiSet = &CONTROLS
+    .add(b' ').add(b'"').add(b'<').add(b'>').add(b'`')
+    .add(b'#').add(b'?').add(b'{').add(b'}')
+    .add(b'/').add(b':').add(b';').add(b'=').add(b'@')
+    .add(b'[').add(b'\\').add(b']').add(b'^').add(b'|');
 use serde::{Deserialize, Serialize};
 
 /// HOLD integration configuration
@@ -234,8 +243,8 @@ impl HoldConfig {
             }
 
             // URL-encode credentials to handle special characters
-            let encoded_user = percent_encode(username.as_bytes(), NON_ALPHANUMERIC);
-            let encoded_pass = percent_encode(password.as_bytes(), NON_ALPHANUMERIC);
+            let encoded_user = percent_encode(username.as_bytes(), USERINFO);
+            let encoded_pass = percent_encode(password.as_bytes(), USERINFO);
 
             // Inject credentials into the URI
             if let Some(rest) = endpoint.strip_prefix("amqp://") {
@@ -328,5 +337,25 @@ mod tests {
         assert_eq!(config.backoff_secs, 5);
         assert_eq!(config.max_backoff_secs, 300);
         assert_eq!(config.backoff_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_get_connection_uri_with_special_chars() {
+        let config = HoldConfig {
+            endpoint: Some("amqp://localhost:5672".to_string()),
+            credentials: Some(HoldCredentials {
+                username: Some("user@domain".to_string()),
+                password: Some("p@ss:word/123".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let uri = config.get_connection_uri().unwrap();
+        // Verify special characters are encoded
+        assert!(uri.contains("%40")); // @ encoded
+        assert!(uri.contains("%3A")); // : encoded
+        assert!(uri.contains("%2F")); // / encoded
+        assert!(!uri.contains("p@ss:word")); // Raw password should not appear
     }
 }

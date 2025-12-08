@@ -227,7 +227,7 @@ impl Drop for ConnectionBlockGuard {
     fn drop(&mut self) {
         #[cfg(target_os = "linux")]
         {
-            let _ = Command::new("sudo")
+            let result = Command::new("sudo")
                 .args([
                     "iptables",
                     "-D",
@@ -240,6 +240,20 @@ impl Drop for ConnectionBlockGuard {
                     "DROP",
                 ])
                 .output();
+            
+            match result {
+                Ok(output) if !output.status.success() => {
+                    warn!(
+                        "[chaos] Failed to remove iptables rule for port {}: {}",
+                        self.port,
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                }
+                Err(e) => {
+                    warn!("[chaos] Failed to execute iptables cleanup for port {}: {}", self.port, e);
+                }
+                _ => {}
+            }
         }
     }
 }

@@ -5,6 +5,17 @@ use chrono::Utc;
 use log::{error, info, warn};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::LazyLock;
+
+/// Regex pattern for full timestamp format: YYYY-MM-DDTHH-MM-SS
+static FULL_TIMESTAMP_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})").unwrap()
+});
+
+/// Regex pattern for date-only format: YYYY-MM-DD
+static DATE_ONLY_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})").unwrap()
+});
 
 use storage::{
     BackupMetadata as StorageBackupMetadata, BackupStatus as StorageBackupStatus,
@@ -392,8 +403,14 @@ pub async fn retention_apply(
 /// Formats the retention plan result for display
 pub fn format_retention_plan(result: &RetentionPlanResult, format: &str) -> String {
     match format {
-        "json" => serde_json::to_string_pretty(&result.evaluation).unwrap_or_default(),
-        "yaml" => serde_yaml::to_string(&result.evaluation).unwrap_or_default(),
+        "json" => serde_json::to_string_pretty(&result.evaluation).unwrap_or_else(|e| {
+            warn!("[retention] Failed to serialize to JSON: {}", e);
+            String::new()
+        }),
+        "yaml" => serde_yaml::to_string(&result.evaluation).unwrap_or_else(|e| {
+            warn!("[retention] Failed to serialize to YAML: {}", e);
+            String::new()
+        }),
         _ => format_retention_plan_table(result),
     }
 }
@@ -644,9 +661,18 @@ fn collect_local_backups(backup_dir: &PathBuf) -> Result<Vec<BackupItem>> {
         let metadata_path = path.join("backup_metadata.json");
         if metadata_path.exists() {
             if let Ok(content) = std::fs::read_to_string(&metadata_path) {
-                if let Ok(metadata) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let backup = parse_local_metadata(&metadata, &path)?;
-                    backups.push(backup);
+                match serde_json::from_str::<serde_json::Value>(&content) {
+                    Ok(metadata) => {
+                        let backup = parse_local_metadata(&metadata, &path)?;
+                        backups.push(backup);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "[retention] Failed to parse metadata at '{}': {}",
+                            metadata_path.display(),
+                            e
+                        );
+                    }
                 }
             }
         } else {
@@ -809,11 +835,8 @@ fn infer_backup_from_directory(path: &PathBuf) -> Option<BackupItem> {
 /// - Date only: YYYY-MM-DD (e.g., 2025-01-15) - assumes midnight UTC
 fn extract_timestamp_from_name(name: &str) -> Option<chrono::DateTime<Utc>> {
     // First try to match full timestamp pattern like 2025-01-15T10-30-00
-    let full_re = regex::Regex::new(
-        r"(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})"
-    ).ok()?;
-    
-    if let Some(caps) = full_re.captures(name) {
+    // Uses cached regex patterns for performance
+    if let Some(caps) = FULL_TIMESTAMP_RE.captures(name) {
         let rfc3339 = format!(
             "{}-{}-{}T{}:{}:{}Z",
             &caps[1], &caps[2], &caps[3], &caps[4], &caps[5], &caps[6]
@@ -824,8 +847,7 @@ fn extract_timestamp_from_name(name: &str) -> Option<chrono::DateTime<Utc>> {
     }
     
     // Fall back to date-only pattern like 2025-01-15 (assumes midnight UTC)
-    let date_re = regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})").ok()?;
-    if let Some(caps) = date_re.captures(name) {
+    if let Some(caps) = DATE_ONLY_RE.captures(name) {
         let rfc3339 = format!("{}-{}-{}T00:00:00Z", &caps[1], &caps[2], &caps[3]);
         if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&rfc3339) {
             return Some(dt.with_timezone(&Utc));

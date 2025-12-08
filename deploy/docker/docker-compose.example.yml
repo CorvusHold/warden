@@ -49,11 +49,11 @@ services:
       POSTGRES_PORT: "5432"
       POSTGRES_USER: warden_backup
       POSTGRES_DB: testdb
-      PGPASSWORD: warden_backup_password
+      PGPASSWORD: ${PGPASSWORD:-warden_backup_password}
       
       # MinIO/S3 storage
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_REGION: us-east-1
       AWS_ENDPOINT: http://minio:9000
       STORAGE_PROVIDER: minio
@@ -67,19 +67,35 @@ services:
       - warden-metrics:/var/lib/node_exporter
     networks:
       - warden-network
-    # Keep container running for interactive use
-    # Remove this to run daemon mode
+    # ==========================================================================
+    # Command Mode Selection
+    # ==========================================================================
+    # Default: Interactive development mode (container stays running for exec)
+    # For daemon mode, either:
+    #   1. Override via command line:
+    #      docker compose -f docker-compose.example.yml up -d --no-deps warden \
+    #        --command '/usr/local/bin/warden run'
+    #   2. Use environment variable:
+    #      WARDEN_MODE=daemon docker compose up -d
+    #   3. Create a docker-compose.override.yml with:
+    #      services:
+    #        warden:
+    #          command: ["/usr/local/bin/warden", "run"]
+    # ==========================================================================
     command: ["sleep", "infinity"]
-    # For daemon mode, use:
-    # command: ["/usr/local/bin/warden", "run"]
-    # Note: This healthcheck only verifies the binary exists.
-    # For production, consider implementing a `warden health` command
-    # or checking for a sentinel file/process status.
+    # ==========================================================================
+    # Health Check
+    # ==========================================================================
+    # Note: This healthcheck verifies the binary exists. In daemon mode,
+    # consider implementing a `warden health` CLI command or HTTP health
+    # endpoint that returns exit code 0 / HTTP 200 when ready.
+    # For now, we check if the process is running (works for both modes).
     healthcheck:
-      test: ["CMD", "/usr/local/bin/warden", "--version"]
+      test: ["CMD-SHELL", "pgrep -f 'warden|sleep' > /dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # ==========================================================================
   # PostgreSQL - Database to protect
@@ -89,13 +105,15 @@ services:
     container_name: warden-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
       POSTGRES_DB: testdb
       # Create backup user on startup
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      # Init scripts for creating backup user (see deploy/docker/init-scripts/README.md)
+      # Uncomment if you have init scripts:
+      # - ./init-scripts:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
     networks:

@@ -102,8 +102,8 @@ pub async fn execute() -> Result<()> {
     // Create scheduler event channel
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<SchedulerEvent>(100);
 
-    // Spawn scheduler event handler
-    tokio::spawn(async move {
+    // Spawn scheduler event handler (track handle for clean shutdown)
+    let event_handler = tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
                 SchedulerEvent::TaskStarted { schedule_id, schedule_type, started_at } => {
@@ -168,10 +168,17 @@ pub async fn execute() -> Result<()> {
         error!("Daemon error: {e}");
     }
 
-    // Abort scheduler if running
+    // Abort scheduler if running and wait for clean shutdown
     if let Some(handle) = scheduler_handle {
         handle.abort();
+        // Wait for task to fully stop (abort error is expected)
+        let _ = handle.await;
         info!("Scheduler stopped");
+        
+        // Wait for event handler to finish processing remaining events
+        // The channel will close when scheduler is dropped, causing event_handler to exit
+        let _ = event_handler.await;
+        info!("Event handler stopped");
     }
 
     // Perform cleanup

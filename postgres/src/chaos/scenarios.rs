@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use log::{error, info};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 
 use super::simulators::{DiskSimulator, PostgresSimulator, SimulatorError, StorageSimulator};
@@ -594,17 +594,23 @@ pub async fn run_all_scenarios(backup_dir: PathBuf) -> Vec<ScenarioResult> {
     // Scenario 1: Storage outage during upload
     let scenario1 = StorageOutageDuringUpload::new(&backup_dir);
     results.push(scenario1.run().await);
-    let _ = scenario1.cleanup();
+    if let Err(e) = scenario1.cleanup() {
+        warn!("[chaos] Cleanup failed for {}: {}", scenario1.name(), e);
+    }
 
     // Scenario 2: Disk full during backup
     let scenario2 = DiskFullDuringBackup::new(&backup_dir);
     results.push(scenario2.run().await);
-    let _ = scenario2.cleanup();
+    if let Err(e) = scenario2.cleanup() {
+        warn!("[chaos] Cleanup failed for {}: {}", scenario2.name(), e);
+    }
 
     // Scenario 3: Permission denied during backup
     let scenario3 = PermissionDeniedDuringBackup::new(&backup_dir);
     results.push(scenario3.run().await);
-    let _ = scenario3.cleanup();
+    if let Err(e) = scenario3.cleanup() {
+        warn!("[chaos] Cleanup failed for {}: {}", scenario3.name(), e);
+    }
 
     // Note: PostgresCrashDuringBackup requires a running PostgreSQL instance
     // and should be run separately in integration tests

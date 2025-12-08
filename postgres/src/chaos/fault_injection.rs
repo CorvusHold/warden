@@ -178,11 +178,21 @@ impl FaultInjector {
 
     /// Register a fault for a component.
     pub fn register_fault(&self, component: impl Into<String>, config: FaultConfig) {
-        if let Ok(mut faults) = self.inner.faults.write() {
-            faults
-                .entry(component.into())
-                .or_default()
-                .push(TrackedFaultConfig::new(config));
+        match self.inner.faults.write() {
+            Ok(mut faults) => {
+                faults
+                    .entry(component.into())
+                    .or_default()
+                    .push(TrackedFaultConfig::new(config));
+            }
+            Err(poisoned) => {
+                log::warn!("[chaos] Faults RwLock was poisoned during register_fault, recovering");
+                let mut faults = poisoned.into_inner();
+                faults
+                    .entry(component.into())
+                    .or_default()
+                    .push(TrackedFaultConfig::new(config));
+            }
         }
     }
 
@@ -225,10 +235,8 @@ impl FaultInjector {
                         continue;
                     }
                 }
-                #[cfg(not(feature = "chaos-testing"))]
-                if config.probability < 1.0 {
-                    // Without chaos-testing feature, skip probability check (always trigger)
-                }
+                // Note: Without chaos-testing feature, probability check is skipped
+                // and faults always trigger when enabled (deterministic behavior)
 
                 // Check per-fault trigger count (not global)
                 if let Some(max_triggers) = config.trigger_count {
@@ -267,11 +275,23 @@ impl FaultInjector {
             .unwrap_or_default()
     }
 
-    /// Reset all counters.
+    /// Reset all counters (global and per-fault).
     pub fn reset_counters(&self) {
+        // Reset global counter
         self.inner.trigger_count.store(0, Ordering::SeqCst);
+        
+        // Reset type counts
         if let Ok(mut counts) = self.inner.type_counts.write() {
             counts.clear();
+        }
+        
+        // Reset per-fault trigger counters
+        if let Ok(faults) = self.inner.faults.read() {
+            for tracked_faults in faults.values() {
+                for tracked in tracked_faults {
+                    tracked.trigger_count.store(0, Ordering::SeqCst);
+                }
+            }
         }
     }
 }
@@ -387,5 +407,43 @@ mod tests {
 
         let counts = injector.trigger_counts_by_type();
         assert_eq!(counts.get(&FaultType::ConnectionRefused), Some(&2));
+    }
+
+    #[test]
+    fn test_fault_injector_trigger_limit() {
+        let injector = FaultInjector::new();
+
+        injector.register_fault(
+            "postgres",
+            FaultConfig::new(FaultType::ConnectionRefused).with_trigger_count(2),
+        );
+
+        // Should trigger twice
+        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_some());
+        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_some());
+        // Should not trigger after limit reached
+        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_none());
+    }
+
+    #[test]
+    fn test_fault_injector_reset_counters() {
+        let injector = FaultInjector::new();
+
+        injector.register_fault(
+            "postgres",
+            FaultConfig::new(FaultType::ConnectionRefused).with_trigger_count(2),
+        );
+
+        // Trigger twice (reaching limit)
+        injector.should_trigger("postgres", FaultType::ConnectionRefused);
+        injector.should_trigger("postgres", FaultType::ConnectionRefused);
+        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_none());
+
+        // Reset counters
+        injector.reset_counters();
+
+        // Should be able to trigger again after reset
+        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_some());
+        assert_eq!(injector.total_triggers(), 1);
     }
 }
