@@ -190,8 +190,15 @@ impl Default for HoldTlsConfig {
 
 impl HoldConfig {
     /// Check if HOLD integration is enabled and properly configured
+    /// 
+    /// Returns false if endpoint is empty or whitespace-only, even if enabled is true.
     pub fn is_configured(&self) -> bool {
-        self.enabled && self.endpoint.is_some()
+        let has_valid_endpoint = self
+            .endpoint
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        self.enabled && has_valid_endpoint
     }
 
     /// Get the resolved agent ID

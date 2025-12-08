@@ -4,7 +4,7 @@ use crate::manager::PostgresManager;
 use crate::tunnel_keeper::TunnelKeeper;
 use crate::PostgresError;
 use anyhow::{anyhow, Result};
-use log::{error, info};
+use log::{error, info, warn};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -45,8 +45,8 @@ pub async fn restore_full(
             ));
         }
         if !is_empty {
-            info!(
-                "Warning: Target directory '{}' is not empty. Proceeding with --yes flag.",
+            warn!(
+                "Target directory '{}' is not empty. Proceeding with --yes flag.",
                 target_dir.display()
             );
         }

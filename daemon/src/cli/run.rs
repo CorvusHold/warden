@@ -85,8 +85,18 @@ pub async fn execute() -> Result<()> {
     // Check if schedules are configured and start the scheduler
     let config_for_scheduler = daemon.config();
     let has_schedules = {
-        let cfg = config_for_scheduler.lock().unwrap();
-        cfg.schedules.as_ref().map(|s| !s.backups.is_empty() || !s.retention.is_empty()).unwrap_or(false)
+        match config_for_scheduler.lock() {
+            Ok(cfg) => {
+                cfg.schedules.as_ref().map(|s| !s.backups.is_empty() || !s.retention.is_empty()).unwrap_or(false)
+            }
+            Err(poisoned) => {
+                // Mutex was poisoned (another thread panicked while holding it)
+                // Recover the data and continue - schedules are non-critical for startup
+                error!("Config mutex was poisoned, recovering: {}", poisoned);
+                let cfg = poisoned.into_inner();
+                cfg.schedules.as_ref().map(|s| !s.backups.is_empty() || !s.retention.is_empty()).unwrap_or(false)
+            }
+        }
     };
 
     // Create scheduler event channel

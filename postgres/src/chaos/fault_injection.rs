@@ -3,6 +3,8 @@
 //! Provides a configurable way to inject faults into various system components
 //! during testing.
 
+#[cfg(feature = "chaos-testing")]
+use rand;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -216,11 +218,16 @@ impl FaultInjector {
             let config = &tracked.config;
             if config.fault_type == fault_type && config.enabled {
                 // Check probability
+                #[cfg(feature = "chaos-testing")]
                 if config.probability < 1.0 {
                     let random: f64 = rand::random();
                     if random > config.probability {
                         continue;
                     }
+                }
+                #[cfg(not(feature = "chaos-testing"))]
+                if config.probability < 1.0 {
+                    // Without chaos-testing feature, skip probability check (always trigger)
                 }
 
                 // Check per-fault trigger count (not global)

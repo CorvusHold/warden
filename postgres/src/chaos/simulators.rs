@@ -11,6 +11,8 @@ use std::time::Duration;
 use log::{debug, info};
 #[cfg(target_os = "linux")]
 use log::warn;
+#[cfg(feature = "chaos-testing")]
+use rand;
 use thiserror::Error;
 
 #[cfg(all(unix, feature = "chaos-testing"))]
@@ -162,10 +164,12 @@ impl PostgresSimulator {
                 .output()?;
 
             if !output.status.success() {
-                warn!(
-                    "[chaos] iptables command failed (may need sudo): {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Err(SimulatorError::CommandFailed(format!(
+                    "iptables command failed (status: {:?}): {}",
+                    output.status.code(),
+                    stderr
+                )));
             }
         }
 
@@ -299,9 +303,15 @@ impl StorageSimulator {
         if self.unavailable {
             return true;
         }
+        #[cfg(feature = "chaos-testing")]
         if self.failure_rate > 0.0 {
             let random: f64 = rand::random();
             return random < self.failure_rate;
+        }
+        #[cfg(not(feature = "chaos-testing"))]
+        if self.failure_rate > 0.0 {
+            // Without chaos-testing feature, always fail if failure_rate > 0
+            return true;
         }
         false
     }
@@ -412,10 +422,12 @@ impl NetworkSimulator {
         let output = Command::new("sudo").args(&args).output()?;
 
         if !output.status.success() {
-            warn!(
-                "[chaos] tc command failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SimulatorError::CommandFailed(format!(
+                "tc command failed (status: {:?}): {}",
+                output.status.code(),
+                stderr
+            )));
         }
 
         Ok(NetworkConditionGuard {

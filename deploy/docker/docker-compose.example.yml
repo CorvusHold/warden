@@ -72,8 +72,11 @@ services:
     command: ["sleep", "infinity"]
     # For daemon mode, use:
     # command: ["/usr/local/bin/warden", "run"]
+    # Note: This healthcheck only verifies the binary exists.
+    # For production, consider implementing a `warden health` command
+    # or checking for a sentinel file/process status.
     healthcheck:
-      test: ["/usr/local/bin/warden", "--version"]
+      test: ["CMD", "/usr/local/bin/warden", "--version"]
       interval: 30s
       timeout: 10s
       retries: 3

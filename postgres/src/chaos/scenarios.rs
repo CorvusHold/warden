@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use log::{error, info, warn};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 
 use super::simulators::{DiskSimulator, PostgresSimulator, SimulatorError, StorageSimulator};
@@ -225,6 +225,13 @@ impl ChaosScenario for PostgresCrashDuringBackup {
 
         info!("[chaos-scenario] Running: {}", self.name());
 
+        // Validate that postgres simulator has data_dir configured
+        if self.postgres.data_dir.is_none() {
+            result.add_step(ScenarioStep::new(0, "Validate PostgreSQL simulator configuration")
+                .failure("Postgres simulator not configured with data_dir", 0));
+            return result.fail("Postgres simulator not configured with data_dir - cannot simulate crash");
+        }
+
         // Step 1: Verify PostgreSQL is running
         let step1_start = std::time::Instant::now();
         if !self.postgres.is_accepting_connections() {
@@ -251,10 +258,11 @@ impl ChaosScenario for PostgresCrashDuringBackup {
                     .success(step3_start.elapsed().as_millis() as u64));
             }
             Err(e) => {
-                // Crash simulation might fail if we don't have permissions
-                warn!("[chaos-scenario] Could not simulate crash: {}", e);
+                // Crash simulation failed - treat as scenario failure
+                error!("[chaos-scenario] Could not simulate crash: {}", e);
                 result.add_step(ScenarioStep::new(3, "Simulate PostgreSQL crash")
                     .failure(format!("Could not simulate crash: {}", e), step3_start.elapsed().as_millis() as u64));
+                return result.fail(format!("Could not simulate crash: {}", e));
             }
         }
 
@@ -434,9 +442,10 @@ pub struct DiskFullDuringBackup {
 impl DiskFullDuringBackup {
     /// Create a new scenario.
     pub fn new(target_dir: impl Into<PathBuf>) -> Self {
+        let available_space = 1024u64; // 1KB - very small
         Self {
-            disk: DiskSimulator::new(target_dir),
-            available_space: 1024, // 1KB - very small
+            disk: DiskSimulator::new(target_dir).with_available_space(available_space),
+            available_space,
         }
     }
 

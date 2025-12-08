@@ -324,10 +324,14 @@ pub async fn retention_apply(
     }
 
     // Delete WAL segments
+    let wal_dir = options.wal_archive_dir.as_ref()
+        .cloned()
+        .unwrap_or_else(|| options.backup_dir.join("wal_archive"));
+    
     for decision in &evaluation.wal_to_delete {
         match &decision.location {
             BackupLocation::Local(path) => {
-                match std::fs::remove_file(path) {
+                match delete_local_file(path, &wal_dir) {
                     Ok(_) => {
                         deleted_wal += 1;
                         space_freed += decision.size_bytes;
@@ -498,13 +502,30 @@ async fn load_policy(
     // Try remote storage policy
     if storage.remote_storage {
         let storage_instance = create_storage_provider(storage).await?;
-        if let Ok(Some(remote_policy)) = storage_instance.load_retention_policy().await {
-            // Convert storage policy to PITR policy
-            let policy = convert_storage_policy(&remote_policy);
-            return Ok((
-                policy,
-                format!("remote:{}", storage.bucket.as_deref().unwrap_or("unknown")),
-            ));
+        match storage_instance.load_retention_policy().await {
+            Ok(Some(remote_policy)) => {
+                // Convert storage policy to PITR policy
+                let policy = convert_storage_policy(&remote_policy);
+                return Ok((
+                    policy,
+                    format!("remote:{}", storage.bucket.as_deref().unwrap_or("unknown")),
+                ));
+            }
+            Ok(None) => {
+                info!(
+                    "[retention] No retention policy found in remote storage (bucket: {}, provider: {})",
+                    storage.bucket.as_deref().unwrap_or("unknown"),
+                    storage.provider_type.as_deref().unwrap_or("s3")
+                );
+            }
+            Err(e) => {
+                error!(
+                    "[retention] Failed to load retention policy from remote storage (bucket: {}, provider: {}): {}",
+                    storage.bucket.as_deref().unwrap_or("unknown"),
+                    storage.provider_type.as_deref().unwrap_or("s3"),
+                    e
+                );
+            }
         }
     }
 
@@ -661,11 +682,41 @@ fn parse_local_metadata(metadata: &serde_json::Value, path: &PathBuf) -> Result<
         _ => BackupItemStatus::Completed,
     };
 
-    let start_time = metadata["start_time"]
+    let start_time = match metadata["start_time"]
         .as_str()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or_else(Utc::now);
+    {
+        Some(ts) => ts,
+        None => {
+            // Fallback 1: Try filesystem modification time
+            let fallback_time = path.metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|mtime| {
+                    let duration = mtime.duration_since(std::time::UNIX_EPOCH).ok()?;
+                    chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
+                });
+            
+            match fallback_time {
+                Some(ts) => {
+                    warn!(
+                        "[retention] Could not parse start_time from metadata for '{}', using filesystem mtime",
+                        path.display()
+                    );
+                    ts
+                }
+                None => {
+                    // Fallback 2: Use UNIX_EPOCH as conservative fallback to avoid treating old backups as new
+                    warn!(
+                        "[retention] Could not parse start_time from metadata for '{}' and filesystem mtime unavailable. Using UNIX_EPOCH as conservative fallback.",
+                        path.display()
+                    );
+                    chrono::DateTime::from_timestamp(0, 0).unwrap_or_else(Utc::now)
+                }
+            }
+        }
+    };
 
     let end_time = metadata["end_time"]
         .as_str()
@@ -710,8 +761,27 @@ fn infer_backup_from_directory(path: &PathBuf) -> Option<BackupItem> {
         return None;
     };
 
-    // Try to parse timestamp from directory name
-    let timestamp = extract_timestamp_from_name(name).unwrap_or_else(Utc::now);
+    // Try to parse timestamp from directory name, with fallback to filesystem mtime
+    let timestamp = match extract_timestamp_from_name(name) {
+        Some(ts) => ts,
+        None => {
+            // Try filesystem modification time as fallback
+            match path.metadata().and_then(|m| m.modified()) {
+                Ok(mtime) => {
+                    let duration = mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                    chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
+                        .unwrap_or_else(Utc::now)
+                }
+                Err(e) => {
+                    warn!(
+                        "[retention] Could not extract timestamp from directory '{}' and failed to get mtime: {}. Using current time.",
+                        name, e
+                    );
+                    Utc::now()
+                }
+            }
+        }
+    };
 
     let size_bytes = calculate_dir_size(path).unwrap_or(0);
 
@@ -733,19 +803,36 @@ fn infer_backup_from_directory(path: &PathBuf) -> Option<BackupItem> {
 }
 
 /// Extract timestamp from backup directory name
+/// 
+/// Supports two formats:
+/// - Full timestamp: YYYY-MM-DDTHH-MM-SS (e.g., 2025-01-15T10-30-00)
+/// - Date only: YYYY-MM-DD (e.g., 2025-01-15) - assumes midnight UTC
 fn extract_timestamp_from_name(name: &str) -> Option<chrono::DateTime<Utc>> {
-    // Try to find a timestamp pattern like 2025-01-15T10-30-00Z
-    let re = regex::Regex::new(r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})").ok()?;
-    if let Some(caps) = re.captures(name) {
-        let ts_str = caps.get(1)?.as_str().replace('-', ":");
-        // Convert back to proper format
-        let ts_str = ts_str.replacen(':', "-", 2);
-        chrono::DateTime::parse_from_rfc3339(&format!("{}Z", ts_str))
-            .ok()
-            .map(|dt| dt.with_timezone(&Utc))
-    } else {
-        None
+    // First try to match full timestamp pattern like 2025-01-15T10-30-00
+    let full_re = regex::Regex::new(
+        r"(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})"
+    ).ok()?;
+    
+    if let Some(caps) = full_re.captures(name) {
+        let rfc3339 = format!(
+            "{}-{}-{}T{}:{}:{}Z",
+            &caps[1], &caps[2], &caps[3], &caps[4], &caps[5], &caps[6]
+        );
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&rfc3339) {
+            return Some(dt.with_timezone(&Utc));
+        }
     }
+    
+    // Fall back to date-only pattern like 2025-01-15 (assumes midnight UTC)
+    let date_re = regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})").ok()?;
+    if let Some(caps) = date_re.captures(name) {
+        let rfc3339 = format!("{}-{}-{}T00:00:00Z", &caps[1], &caps[2], &caps[3]);
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&rfc3339) {
+            return Some(dt.with_timezone(&Utc));
+        }
+    }
+    
+    None
 }
 
 /// Calculate directory size recursively
@@ -871,13 +958,60 @@ fn delete_local_backup(path: &str, backup_root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+/// Delete a local file with path traversal protection.
+/// 
+/// This function validates that the path is under the expected root directory
+/// to prevent path traversal attacks or symlink tricks.
+fn delete_local_file(path: &str, root_dir: &PathBuf) -> Result<()> {
+    let path = PathBuf::from(path);
+    
+    // Canonicalize both paths to resolve symlinks and relative components
+    let canonical_root = root_dir.canonicalize()
+        .map_err(|e| anyhow!("Failed to canonicalize root dir '{}': {}", root_dir.display(), e))?;
+    
+    // If path doesn't exist, nothing to delete
+    if !path.exists() {
+        return Ok(());
+    }
+    
+    let canonical_path = path.canonicalize()
+        .map_err(|e| anyhow!("Failed to canonicalize path '{}': {}", path.display(), e))?;
+    
+    // Verify the path is under the root directory
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(anyhow!(
+            "Security: Path '{}' is not under root dir '{}'. Refusing to delete.",
+            canonical_path.display(),
+            canonical_root.display()
+        ));
+    }
+    
+    // Re-canonicalize immediately before deletion to mitigate TOCTOU race
+    let final_path = path.canonicalize()
+        .map_err(|e| anyhow!("Path changed during validation '{}': {}", path.display(), e))?;
+    
+    if !final_path.starts_with(&canonical_root) {
+        return Err(anyhow!(
+            "Security: Path '{}' escaped root dir during operation. Refusing to delete.",
+            final_path.display()
+        ));
+    }
+    
+    std::fs::remove_file(&final_path)?;
+    Ok(())
+}
+
 /// Generate a retention policy file from a preset
 pub fn retention_init(output: &PathBuf, preset: &str, format: &str) -> Result<()> {
     let policy = match preset.to_lowercase().as_str() {
         "aggressive" => PitrRetentionPolicy::aggressive(),
         "conservative" => PitrRetentionPolicy::conservative(),
         "gfs" => PitrRetentionPolicy::gfs_standard(),
-        "standard" | _ => PitrRetentionPolicy::default(),
+        "standard" => PitrRetentionPolicy::default(),
+        other => {
+            warn!("[retention-init] Unknown preset '{}', using 'standard'", other);
+            PitrRetentionPolicy::default()
+        }
     };
 
     // Validate the policy
@@ -927,16 +1061,25 @@ mod tests {
         // Test that the function doesn't panic on various inputs
         // and returns expected results for known formats
         
-        // Test with standard format that should parse
+        // Test with date-only format (should parse to midnight UTC)
         let name = "snapshot_backup_2025-01-15";
         let result = extract_timestamp_from_name(name);
-        // Should extract a timestamp from the date portion
         assert!(result.is_some(), "Expected to parse date from '{}'", name);
+        let ts = result.unwrap();
+        assert_eq!(ts.format("%Y-%m-%d").to_string(), "2025-01-15");
+        assert_eq!(ts.format("%H:%M:%S").to_string(), "00:00:00"); // midnight
         
-        // Test with format that may not parse (documents current behavior)
-        let name_with_time = "snapshot_backup_2025-01-15T10-30-00Z";
-        let _result = extract_timestamp_from_name(name_with_time);
-        // Don't assert on result - just verify no panic
+        // Test with full timestamp format (YYYY-MM-DDTHH-MM-SS)
+        let name_with_time = "snapshot_backup_2025-01-15T10-30-45";
+        let result = extract_timestamp_from_name(name_with_time);
+        assert!(result.is_some(), "Expected to parse full timestamp from '{}'", name_with_time);
+        let ts = result.unwrap();
+        assert_eq!(ts.format("%Y-%m-%dT%H:%M:%S").to_string(), "2025-01-15T10:30:45");
+        
+        // Test with trailing Z (should still work)
+        let name_with_z = "snapshot_backup_2025-01-15T10-30-00Z";
+        let result = extract_timestamp_from_name(name_with_z);
+        assert!(result.is_some(), "Expected to parse timestamp with Z from '{}'", name_with_z);
         
         // Test with no timestamp - should return None
         let name_no_date = "snapshot_backup_latest";
