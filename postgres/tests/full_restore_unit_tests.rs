@@ -3,12 +3,12 @@
 //! These tests verify the restore planning logic without requiring
 //! an actual PostgreSQL instance or S3 storage.
 
+use postgres::common::PostgresConfig;
 use postgres::restore::full_restore::{
     BackupInfo, BackupSource, FullRestoreManager, PreflightError, PreflightResult,
     PreflightWarning, RestoreAction, RestoreMode, RestorePlan, RestoreStep, TargetState,
     ToolsAvailability,
 };
-use postgres::common::PostgresConfig;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -84,7 +84,10 @@ fn test_preflight_result_add_error_fails() {
 #[test]
 fn test_preflight_result_add_warning_still_passes() {
     let mut result = PreflightResult::new();
-    result.add_warning(PreflightWarning::new("TEST_WARNING", "Test warning message"));
+    result.add_warning(PreflightWarning::new(
+        "TEST_WARNING",
+        "Test warning message",
+    ));
 
     assert!(result.passed); // Warnings don't fail preflight
     assert!(result.errors.is_empty());
@@ -94,8 +97,7 @@ fn test_preflight_result_add_warning_still_passes() {
 
 #[test]
 fn test_preflight_error_with_details() {
-    let error = PreflightError::new("CODE", "Message")
-        .with_details("Additional details");
+    let error = PreflightError::new("CODE", "Message").with_details("Additional details");
 
     assert_eq!(error.code, "CODE");
     assert_eq!(error.message, "Message");
@@ -104,8 +106,7 @@ fn test_preflight_error_with_details() {
 
 #[test]
 fn test_preflight_warning_with_recommendation() {
-    let warning = PreflightWarning::new("CODE", "Message")
-        .with_recommendation("Do this instead");
+    let warning = PreflightWarning::new("CODE", "Message").with_recommendation("Do this instead");
 
     assert_eq!(warning.code, "CODE");
     assert_eq!(warning.message, "Message");
@@ -370,10 +371,9 @@ fn test_full_restore_manager_with_mode() {
     let config = test_config();
     let backup_dir = PathBuf::from("/tmp/backups");
 
-    let manager = FullRestoreManager::new(config, backup_dir)
-        .with_mode(RestoreMode::NewDatabase {
-            target_name: "new_db".to_string(),
-        });
+    let manager = FullRestoreManager::new(config, backup_dir).with_mode(RestoreMode::NewDatabase {
+        target_name: "new_db".to_string(),
+    });
 
     // Verify chaining works
     let _ = manager.with_force(false);
@@ -393,7 +393,10 @@ async fn test_preflight_backup_not_found() {
 
     // Should fail because backup doesn't exist
     assert!(!preflight.passed);
-    assert!(preflight.errors.iter().any(|e| e.code == "BACKUP_NOT_FOUND"));
+    assert!(preflight
+        .errors
+        .iter()
+        .any(|e| e.code == "BACKUP_NOT_FOUND"));
 }
 
 #[tokio::test]
@@ -467,7 +470,10 @@ async fn test_preflight_target_non_empty_without_force() {
     let preflight = result.unwrap();
     assert_eq!(preflight.target_state, TargetState::NonEmpty);
     // Should have an error because force is not set
-    assert!(preflight.errors.iter().any(|e| e.code == "TARGET_NOT_EMPTY"));
+    assert!(preflight
+        .errors
+        .iter()
+        .any(|e| e.code == "TARGET_NOT_EMPTY"));
 }
 
 #[tokio::test]
@@ -487,7 +493,10 @@ async fn test_preflight_target_non_empty_with_force() {
     assert!(result.is_ok());
     let preflight = result.unwrap();
     // With force, should not have TARGET_NOT_EMPTY error
-    assert!(!preflight.errors.iter().any(|e| e.code == "TARGET_NOT_EMPTY"));
+    assert!(!preflight
+        .errors
+        .iter()
+        .any(|e| e.code == "TARGET_NOT_EMPTY"));
 }
 
 #[tokio::test]
@@ -515,7 +524,10 @@ async fn test_preflight_postgres_cluster_without_force() {
     }
 
     // Should have an error because force is not set
-    assert!(preflight.errors.iter().any(|e| e.code == "TARGET_HAS_CLUSTER"));
+    assert!(preflight
+        .errors
+        .iter()
+        .any(|e| e.code == "TARGET_HAS_CLUSTER"));
 }
 
 #[test]
@@ -532,7 +544,10 @@ fn test_create_plan_requires_passed_preflight() {
     let result = manager.create_plan("backup-id", &preflight);
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("preflight validation failed"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("preflight validation failed"));
 }
 
 #[test]
@@ -548,7 +563,10 @@ fn test_create_plan_requires_backup_info() {
     let result = manager.create_plan("backup-id", &preflight);
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("No backup information"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("No backup information"));
 }
 
 #[tokio::test]
@@ -569,14 +587,14 @@ async fn test_create_plan_replace_mode() {
     let plan = manager.create_plan("test-backup", &preflight).unwrap();
 
     // Replace mode should include terminate connections and drop database steps
-    assert!(plan.steps.iter().any(|s| matches!(
-        &s.action,
-        RestoreAction::TerminateConnections { .. }
-    )));
-    assert!(plan.steps.iter().any(|s| matches!(
-        &s.action,
-        RestoreAction::DropDatabase { .. }
-    )));
+    assert!(plan
+        .steps
+        .iter()
+        .any(|s| matches!(&s.action, RestoreAction::TerminateConnections { .. })));
+    assert!(plan
+        .steps
+        .iter()
+        .any(|s| matches!(&s.action, RestoreAction::DropDatabase { .. })));
     assert!(plan.requires_confirmation);
 }
 
@@ -585,10 +603,11 @@ async fn test_create_plan_new_database_mode() {
     let config = test_config();
     let (temp_dir, _backup_path) = setup_test_backup("test-backup");
 
-    let manager = FullRestoreManager::new(config, temp_dir.path().to_path_buf())
-        .with_mode(RestoreMode::NewDatabase {
+    let manager = FullRestoreManager::new(config, temp_dir.path().to_path_buf()).with_mode(
+        RestoreMode::NewDatabase {
             target_name: "new_testdb".to_string(),
-        });
+        },
+    );
 
     let preflight = manager.preflight("test-backup", None).await.unwrap();
 
@@ -600,14 +619,14 @@ async fn test_create_plan_new_database_mode() {
     let plan = manager.create_plan("test-backup", &preflight).unwrap();
 
     // NewDatabase mode should NOT include terminate connections or drop database
-    assert!(!plan.steps.iter().any(|s| matches!(
-        &s.action,
-        RestoreAction::TerminateConnections { .. }
-    )));
-    assert!(!plan.steps.iter().any(|s| matches!(
-        &s.action,
-        RestoreAction::DropDatabase { .. }
-    )));
+    assert!(!plan
+        .steps
+        .iter()
+        .any(|s| matches!(&s.action, RestoreAction::TerminateConnections { .. })));
+    assert!(!plan
+        .steps
+        .iter()
+        .any(|s| matches!(&s.action, RestoreAction::DropDatabase { .. })));
 
     // Should create the new database
     assert!(plan.steps.iter().any(|s| matches!(

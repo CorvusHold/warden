@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use log::{debug, info};
 #[cfg(target_os = "linux")]
 use log::warn;
+use log::{debug, info};
 #[cfg(feature = "chaos-testing")]
 use rand;
 use thiserror::Error;
@@ -96,8 +96,9 @@ impl PostgresSimulator {
                 // Send SIGKILL to the postmaster
                 #[cfg(all(unix, feature = "chaos-testing"))]
                 {
-                    kill(Pid::from_raw(pid), Signal::SIGKILL)
-                        .map_err(|e| SimulatorError::Simulation(format!("Failed to kill: {}", e)))?;
+                    kill(Pid::from_raw(pid), Signal::SIGKILL).map_err(|e| {
+                        SimulatorError::Simulation(format!("Failed to kill: {}", e))
+                    })?;
                 }
 
                 #[cfg(not(all(unix, feature = "chaos-testing")))]
@@ -107,9 +108,10 @@ impl PostgresSimulator {
                         .args(["-9", &pid.to_string()])
                         .output()?;
                     if !output.status.success() {
-                        return Err(SimulatorError::Simulation(
-                            format!("Failed to kill process {}", pid),
-                        ));
+                        return Err(SimulatorError::Simulation(format!(
+                            "Failed to kill process {}",
+                            pid
+                        )));
                     }
                 }
 
@@ -141,10 +143,7 @@ impl PostgresSimulator {
     /// Simulate a connection failure by blocking the port (requires root/sudo).
     /// Returns a guard that unblocks the port when dropped.
     pub fn simulate_connection_block(&self) -> Result<ConnectionBlockGuard, SimulatorError> {
-        info!(
-            "[chaos] Simulating connection block on port {}",
-            self.port
-        );
+        info!("[chaos] Simulating connection block on port {}", self.port);
 
         // Use iptables on Linux to block connections
         #[cfg(target_os = "linux")]
@@ -240,7 +239,7 @@ impl Drop for ConnectionBlockGuard {
                     "DROP",
                 ])
                 .output();
-            
+
             match result {
                 Ok(output) if !output.status.success() => {
                     warn!(
@@ -250,7 +249,10 @@ impl Drop for ConnectionBlockGuard {
                     );
                 }
                 Err(e) => {
-                    warn!("[chaos] Failed to execute iptables cleanup for port {}: {}", self.port, e);
+                    warn!(
+                        "[chaos] Failed to execute iptables cleanup for port {}: {}",
+                        self.port, e
+                    );
                 }
                 _ => {}
             }
@@ -343,7 +345,10 @@ impl StorageSimulator {
     {
         // Add latency if configured
         if let Some(latency) = self.latency {
-            debug!("[chaos] Adding {}ms latency to storage operation", latency.as_millis());
+            debug!(
+                "[chaos] Adding {}ms latency to storage operation",
+                latency.as_millis()
+            );
             tokio::time::sleep(latency).await;
         }
 
@@ -405,7 +410,10 @@ impl NetworkSimulator {
     /// Apply network conditions using tc (traffic control) on Linux.
     /// Requires root/sudo privileges.
     #[cfg(target_os = "linux")]
-    pub fn apply_conditions(&self, interface: &str) -> Result<NetworkConditionGuard, SimulatorError> {
+    pub fn apply_conditions(
+        &self,
+        interface: &str,
+    ) -> Result<NetworkConditionGuard, SimulatorError> {
         info!(
             "[chaos] Applying network conditions: latency={:?}, packet_loss={}%",
             self.latency,
@@ -550,7 +558,7 @@ impl DiskSimulator {
         let mount_point_str = mount_point.to_str().ok_or_else(|| {
             SimulatorError::Simulation("Mount point path contains invalid UTF-8".into())
         })?;
-        
+
         let output = Command::new("sudo")
             .args([
                 "mount",
@@ -605,7 +613,7 @@ impl DiskSimulator {
     /// Create a file that fills up the disk to a certain percentage.
     pub fn fill_disk_to_percentage(&self, percentage: f64) -> Result<PathBuf, SimulatorError> {
         let fill_file = self.target_dir.join(".chaos_fill_file");
-        
+
         // Get available space
         let available = self.get_actual_available_space()?;
         let bytes_to_write = (available as f64 * percentage / 100.0) as u64;
@@ -641,9 +649,7 @@ pub struct TmpfsGuard {
 impl Drop for TmpfsGuard {
     fn drop(&mut self) {
         if let Some(path) = self.mount_point.to_str() {
-            let _ = Command::new("sudo")
-                .args(["umount", path])
-                .output();
+            let _ = Command::new("sudo").args(["umount", path]).output();
         }
     }
 }
@@ -670,8 +676,7 @@ mod tests {
 
     #[test]
     fn test_disk_simulator_should_fail_write() {
-        let sim = DiskSimulator::new("/tmp/test")
-            .with_available_space(1000);
+        let sim = DiskSimulator::new("/tmp/test").with_available_space(1000);
 
         // Should succeed for small write
         assert!(sim.should_fail_write(500).is_none());
@@ -682,8 +687,7 @@ mod tests {
 
     #[test]
     fn test_disk_simulator_permission_denied() {
-        let sim = DiskSimulator::new("/tmp/test")
-            .with_permission_denied(true);
+        let sim = DiskSimulator::new("/tmp/test").with_permission_denied(true);
 
         let err = sim.should_fail_write(100).unwrap();
         assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);

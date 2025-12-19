@@ -329,23 +329,30 @@ mod tests {
             builder.metadata_key("backup-123"),
             "backup-123/backup_metadata.json"
         );
-        assert_eq!(builder.wal_key("000000010000000000000001"), "wal/000000010000000000000001");
+        assert_eq!(
+            builder.wal_key("000000010000000000000001"),
+            "wal/000000010000000000000001"
+        );
         assert_eq!(builder.retention_policy_key(), "retention_policy.json");
     }
 
     #[test]
     fn test_legacy_with_prefix() {
-        let builder = StorageKeyBuilder::new(
-            StorageKeyContext::new().with_prefix("postgres"),
-        );
+        let builder = StorageKeyBuilder::new(StorageKeyContext::new().with_prefix("postgres"));
 
         assert_eq!(builder.backup_key("backup-123"), "postgres/backup-123");
         assert_eq!(
             builder.metadata_key("backup-123"),
             "postgres/backup-123/backup_metadata.json"
         );
-        assert_eq!(builder.wal_key("000000010000000000000001"), "postgres/wal/000000010000000000000001");
-        assert_eq!(builder.retention_policy_key(), "postgres/retention_policy.json");
+        assert_eq!(
+            builder.wal_key("000000010000000000000001"),
+            "postgres/wal/000000010000000000000001"
+        );
+        assert_eq!(
+            builder.retention_policy_key(),
+            "postgres/retention_policy.json"
+        );
     }
 
     #[test]
@@ -450,9 +457,15 @@ mod tests {
                 .with_database("mydb"),
         );
 
-        assert_eq!(builder.backup_key("backup-123"), "acme-corp/mydb/backup-123");
+        assert_eq!(
+            builder.backup_key("backup-123"),
+            "acme-corp/mydb/backup-123"
+        );
         assert_eq!(builder.wal_key("seg1"), "acme-corp/wal/seg1");
-        assert_eq!(builder.retention_policy_key(), "acme-corp/retention_policy.json");
+        assert_eq!(
+            builder.retention_policy_key(),
+            "acme-corp/retention_policy.json"
+        );
     }
 
     #[test]
@@ -468,10 +481,7 @@ mod tests {
             builder.backup_key("backup-123"),
             "acme-corp/prod-billing/billing_main/backup-123"
         );
-        assert_eq!(
-            builder.wal_key("seg1"),
-            "acme-corp/prod-billing/wal/seg1"
-        );
+        assert_eq!(builder.wal_key("seg1"), "acme-corp/prod-billing/wal/seg1");
     }
 
     #[test]
@@ -528,7 +538,10 @@ mod tests {
                 .with_protection_group("billing-core"),
         );
 
-        assert_eq!(builder.wal_prefix(), "acme-corp/prod-billing/billing-core/wal/");
+        assert_eq!(
+            builder.wal_prefix(),
+            "acme-corp/prod-billing/billing-core/wal/"
+        );
     }
 
     #[test]
@@ -541,6 +554,9 @@ mod tests {
             None,
         );
 
-        assert_eq!(builder.backup_key("backup-1"), "tenant/cluster/pg/db/backup-1");
+        assert_eq!(
+            builder.backup_key("backup-1"),
+            "tenant/cluster/pg/db/backup-1"
+        );
     }
 }

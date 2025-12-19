@@ -205,10 +205,7 @@ impl HoldEventPublisher {
             pitr_window_hours: None,
         };
 
-        let envelope = HoldEventEnvelope::new(
-            self.agent_id.clone(),
-            HoldEvent::Heartbeat(payload),
-        );
+        let envelope = HoldEventEnvelope::new(self.agent_id.clone(), HoldEvent::Heartbeat(payload));
 
         self.publish_event(envelope).await;
     }
@@ -235,10 +232,8 @@ impl HoldEventPublisher {
             },
         };
 
-        let mut envelope = HoldEventEnvelope::new(
-            self.agent_id.clone(),
-            HoldEvent::Status(payload),
-        );
+        let mut envelope =
+            HoldEventEnvelope::new(self.agent_id.clone(), HoldEvent::Status(payload));
 
         if let Some(id) = correlation_id {
             envelope = envelope.with_correlation(id);
@@ -249,19 +244,15 @@ impl HoldEventPublisher {
 
     /// Publish a backup completed event
     pub async fn publish_backup_completed(&self, payload: BackupCompletedPayload) {
-        let envelope = HoldEventEnvelope::new(
-            self.agent_id.clone(),
-            HoldEvent::BackupCompleted(payload),
-        );
+        let envelope =
+            HoldEventEnvelope::new(self.agent_id.clone(), HoldEvent::BackupCompleted(payload));
         self.publish_event(envelope).await;
     }
 
     /// Publish a backup failed event
     pub async fn publish_backup_failed(&self, payload: BackupFailedPayload) {
-        let envelope = HoldEventEnvelope::new(
-            self.agent_id.clone(),
-            HoldEvent::BackupFailed(payload),
-        );
+        let envelope =
+            HoldEventEnvelope::new(self.agent_id.clone(), HoldEvent::BackupFailed(payload));
         self.publish_event(envelope).await;
     }
 
@@ -270,19 +261,17 @@ impl HoldEventPublisher {
         let routing_key = envelope.routing_key();
 
         match serde_json::to_vec(&envelope) {
-            Ok(payload) => {
-                match self.client.publish(&routing_key, &payload).await {
-                    Ok(Some(_)) => {
-                        debug!("Published event to HOLD: {}", routing_key);
-                    }
-                    Ok(None) => {
-                        debug!("HOLD not connected, event not published: {}", routing_key);
-                    }
-                    Err(e) => {
-                        warn!("Failed to publish event to HOLD: {}", e);
-                    }
+            Ok(payload) => match self.client.publish(&routing_key, &payload).await {
+                Ok(Some(_)) => {
+                    debug!("Published event to HOLD: {}", routing_key);
                 }
-            }
+                Ok(None) => {
+                    debug!("HOLD not connected, event not published: {}", routing_key);
+                }
+                Err(e) => {
+                    warn!("Failed to publish event to HOLD: {}", e);
+                }
+            },
             Err(e) => {
                 warn!("Failed to serialize event for HOLD: {}", e);
             }

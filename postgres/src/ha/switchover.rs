@@ -113,8 +113,12 @@ impl SwitchoverOrchestrator {
         }
 
         // Build the plan
-        let mut plan = HaPlan::new("switchover", &self.options.cluster_id, &self.options.to_node_id)
-            .with_source(&self.options.from_node_id);
+        let mut plan = HaPlan::new(
+            "switchover",
+            &self.options.cluster_id,
+            &self.options.to_node_id,
+        )
+        .with_source(&self.options.from_node_id);
 
         if self.options.dry_run {
             plan = plan.as_dry_run();
@@ -272,8 +276,10 @@ impl SwitchoverOrchestrator {
             }
         }
 
-        Ok(HaResult::success(plan.clone(), "Switchover completed successfully")
-            .with_new_primary(&self.options.to_node_id))
+        Ok(
+            HaResult::success(plan.clone(), "Switchover completed successfully")
+                .with_new_primary(&self.options.to_node_id),
+        )
     }
 
     async fn step_check_source_health(&self, node: &Node) -> Result<(), HaError> {
@@ -391,7 +397,11 @@ impl SwitchoverOrchestrator {
                     .unwrap_or_default();
                 let conn_str = format!(
                     "host={} port={} user={}{} dbname={}",
-                    node.host, node.port, self.options.pg_user, password_part, self.options.database
+                    node.host,
+                    node.port,
+                    self.options.pg_user,
+                    password_part,
+                    self.options.database
                 );
 
                 let result = std::process::Command::new("psql")

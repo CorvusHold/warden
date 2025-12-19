@@ -38,8 +38,10 @@ impl PostgresBackupStorage {
         // Create the appropriate storage provider
         let provider: Arc<dyn StorageProvider> = match provider_type {
             StorageProviderType::S3 => Arc::from(
-                StorageProviderFactory::create_s3_provider(region, endpoint, access_key, secret_key)
-                    .await?,
+                StorageProviderFactory::create_s3_provider(
+                    region, endpoint, access_key, secret_key,
+                )
+                .await?,
             ),
         };
 

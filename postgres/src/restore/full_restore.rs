@@ -22,8 +22,7 @@ use std::time::Duration;
 use crate::common::PostgresConfig;
 
 /// Restore mode: replace existing database or restore to a new database name
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RestoreMode {
     /// Replace the existing database (drop and recreate)
     #[default]
@@ -31,7 +30,6 @@ pub enum RestoreMode {
     /// Restore to a new database with a different name
     NewDatabase { target_name: String },
 }
-
 
 /// Result of preflight validation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,7 +216,10 @@ pub struct RestoreStep {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestoreAction {
     /// Download backup from S3
-    DownloadBackup { backup_id: String, target_path: PathBuf },
+    DownloadBackup {
+        backup_id: String,
+        target_path: PathBuf,
+    },
     /// Validate backup integrity
     ValidateBackup { backup_path: PathBuf },
     /// Terminate existing connections to the database
@@ -226,9 +227,15 @@ pub enum RestoreAction {
     /// Drop existing database
     DropDatabase { database: String },
     /// Create new database
-    CreateDatabase { database: String, owner: Option<String> },
+    CreateDatabase {
+        database: String,
+        owner: Option<String>,
+    },
     /// Restore database content from dump
-    RestoreContent { dump_path: PathBuf, database: String },
+    RestoreContent {
+        dump_path: PathBuf,
+        database: String,
+    },
     /// Apply post-restore configuration
     ApplyConfiguration { config: HashMap<String, String> },
     /// Verify database health
@@ -299,7 +306,10 @@ impl FullRestoreManager {
     ) -> Result<PreflightResult> {
         let mut result = PreflightResult::new();
 
-        info!("[preflight] Starting preflight validation for backup {}", backup_id);
+        info!(
+            "[preflight] Starting preflight validation for backup {}",
+            backup_id
+        );
 
         // Check backup existence
         self.check_backup_exists(backup_id, &mut result).await?;
@@ -352,28 +362,37 @@ impl FullRestoreManager {
                 let backup_info = if metadata_path.exists() {
                     match std::fs::read_to_string(&metadata_path) {
                         Ok(content) => {
-                            if let Ok(metadata) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if let Ok(metadata) =
+                                serde_json::from_str::<serde_json::Value>(&content)
+                            {
                                 Some(BackupInfo {
                                     id: backup_id.to_string(),
-                                    backup_type: metadata.get("backup_type")
+                                    backup_type: metadata
+                                        .get("backup_type")
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("unknown")
                                         .to_string(),
-                                    database: metadata.get("database")
+                                    database: metadata
+                                        .get("database")
                                         .and_then(|v| v.as_str())
                                         .map(|s| s.to_string()),
-                                    size_bytes: metadata.get("size_bytes")
+                                    size_bytes: metadata
+                                        .get("size_bytes")
                                         .and_then(|v| v.as_u64())
                                         .unwrap_or(0),
-                                    created_at: metadata.get("start_time")
+                                    created_at: metadata
+                                        .get("start_time")
                                         .and_then(|v| v.as_str())
                                         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                                         .map(|dt| dt.with_timezone(&Utc))
                                         .unwrap_or_else(Utc::now),
-                                    server_version: metadata.get("server_version")
+                                    server_version: metadata
+                                        .get("server_version")
                                         .and_then(|v| v.as_str())
                                         .map(|s| s.to_string()),
-                                    source: BackupSource::Local { path: local_path.clone() },
+                                    source: BackupSource::Local {
+                                        path: local_path.clone(),
+                                    },
                                 })
                             } else {
                                 None
@@ -391,7 +410,9 @@ impl FullRestoreManager {
                         size_bytes: size,
                         created_at: Utc::now(),
                         server_version: None,
-                        source: BackupSource::Local { path: local_path.clone() },
+                        source: BackupSource::Local {
+                            path: local_path.clone(),
+                        },
                     })
                 };
 
@@ -402,13 +423,16 @@ impl FullRestoreManager {
         }
 
         // Backup not found locally
-        result.add_error(PreflightError::new(
-            "BACKUP_NOT_FOUND",
-            format!("Backup '{}' not found in local backup directory", backup_id),
-        ).with_details(format!(
-            "Searched in: {:?}. Use --remote-storage to download from S3.",
-            self.backup_dir
-        )));
+        result.add_error(
+            PreflightError::new(
+                "BACKUP_NOT_FOUND",
+                format!("Backup '{}' not found in local backup directory", backup_id),
+            )
+            .with_details(format!(
+                "Searched in: {:?}. Use --remote-storage to download from S3.",
+                self.backup_dir
+            )),
+        );
 
         Ok(())
     }
@@ -456,12 +480,15 @@ impl FullRestoreManager {
                     "Use --yes to overwrite the existing cluster, or choose a different target directory."
                 ));
             } else {
-                result.add_warning(PreflightWarning::new(
-                    "OVERWRITING_CLUSTER",
-                    "Existing PostgreSQL cluster will be overwritten",
-                ).with_recommendation(
-                    "Ensure the existing cluster is stopped and backed up before proceeding."
-                ));
+                result.add_warning(
+                    PreflightWarning::new(
+                        "OVERWRITING_CLUSTER",
+                        "Existing PostgreSQL cluster will be overwritten",
+                    )
+                    .with_recommendation(
+                        "Ensure the existing cluster is stopped and backed up before proceeding.",
+                    ),
+                );
             }
         } else {
             result.target_state = TargetState::NonEmpty;
@@ -483,23 +510,19 @@ impl FullRestoreManager {
         // Check pg_restore
         result.tools.pg_restore = check_tool("pg_restore");
         if result.tools.pg_restore.is_none() {
-            result.add_warning(PreflightWarning::new(
-                "MISSING_PG_RESTORE",
-                "pg_restore not found in PATH",
-            ).with_recommendation(
-                "Install PostgreSQL client tools or add them to PATH."
-            ));
+            result.add_warning(
+                PreflightWarning::new("MISSING_PG_RESTORE", "pg_restore not found in PATH")
+                    .with_recommendation("Install PostgreSQL client tools or add them to PATH."),
+            );
         }
 
         // Check psql
         result.tools.psql = check_tool("psql");
         if result.tools.psql.is_none() {
-            result.add_warning(PreflightWarning::new(
-                "MISSING_PSQL",
-                "psql not found in PATH",
-            ).with_recommendation(
-                "Install PostgreSQL client tools or add them to PATH."
-            ));
+            result.add_warning(
+                PreflightWarning::new("MISSING_PSQL", "psql not found in PATH")
+                    .with_recommendation("Install PostgreSQL client tools or add them to PATH."),
+            );
         }
 
         // Check pg_isready
@@ -516,12 +539,10 @@ impl FullRestoreManager {
 
         // At least one restore tool must be available
         if result.tools.pg_restore.is_none() && result.tools.psql.is_none() {
-            result.add_error(PreflightError::new(
-                "NO_RESTORE_TOOLS",
-                "Neither pg_restore nor psql found",
-            ).with_details(
-                "At least one PostgreSQL restore tool must be available."
-            ));
+            result.add_error(
+                PreflightError::new("NO_RESTORE_TOOLS", "Neither pg_restore nor psql found")
+                    .with_details("At least one PostgreSQL restore tool must be available."),
+            );
         }
 
         Ok(())
@@ -533,9 +554,12 @@ impl FullRestoreManager {
         if result.tools.pg_isready.is_some() {
             let status = Command::new("pg_isready")
                 .args([
-                    "-h", &self.config.host,
-                    "-p", &self.config.port.to_string(),
-                    "-U", &self.config.user,
+                    "-h",
+                    &self.config.host,
+                    "-p",
+                    &self.config.port.to_string(),
+                    "-U",
+                    &self.config.user,
                 ])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -546,13 +570,16 @@ impl FullRestoreManager {
                     info!("[preflight] Database is accepting connections");
                 }
                 Ok(_) => {
-                    result.add_warning(PreflightWarning::new(
-                        "DB_NOT_READY",
-                        format!("PostgreSQL at {}:{} is not accepting connections", 
-                            self.config.host, self.config.port),
-                    ).with_recommendation(
-                        "Ensure PostgreSQL is running and accessible."
-                    ));
+                    result.add_warning(
+                        PreflightWarning::new(
+                            "DB_NOT_READY",
+                            format!(
+                                "PostgreSQL at {}:{} is not accepting connections",
+                                self.config.host, self.config.port
+                            ),
+                        )
+                        .with_recommendation("Ensure PostgreSQL is running and accessible."),
+                    );
                 }
                 Err(e) => {
                     result.add_warning(PreflightWarning::new(
@@ -567,16 +594,14 @@ impl FullRestoreManager {
     }
 
     /// Create a restore plan
-    pub fn create_plan(
-        &self,
-        backup_id: &str,
-        preflight: &PreflightResult,
-    ) -> Result<RestorePlan> {
+    pub fn create_plan(&self, backup_id: &str, preflight: &PreflightResult) -> Result<RestorePlan> {
         if !preflight.passed {
             return Err(anyhow!("Cannot create plan: preflight validation failed"));
         }
 
-        let backup_info = preflight.backup_info.as_ref()
+        let backup_info = preflight
+            .backup_info
+            .as_ref()
             .ok_or_else(|| anyhow!("No backup information available"))?;
 
         let mut steps = Vec::new();
@@ -587,7 +612,9 @@ impl FullRestoreManager {
             order += 1;
             steps.push(RestoreStep {
                 order,
-                action: RestoreAction::ValidateBackup { backup_path: path.clone() },
+                action: RestoreAction::ValidateBackup {
+                    backup_path: path.clone(),
+                },
                 description: "Validate backup integrity".to_string(),
                 reversible: false,
             });
@@ -601,7 +628,10 @@ impl FullRestoreManager {
                 action: RestoreAction::TerminateConnections {
                     database: self.config.database.clone(),
                 },
-                description: format!("Terminate connections to database '{}'", self.config.database),
+                description: format!(
+                    "Terminate connections to database '{}'",
+                    self.config.database
+                ),
                 reversible: false,
             });
 
@@ -695,7 +725,10 @@ impl FullRestoreManager {
         let mut steps_completed = Vec::new();
         let mut last_error: Option<String> = None;
 
-        info!("[restore] Executing restore plan {} for backup {}", plan.id, plan.backup_id);
+        info!(
+            "[restore] Executing restore plan {} for backup {}",
+            plan.id, plan.backup_id
+        );
 
         for step in &plan.steps {
             let step_start = std::time::Instant::now();
@@ -712,14 +745,17 @@ impl FullRestoreManager {
                     self.execute_drop_database(database).await
                 }
                 RestoreAction::CreateDatabase { database, owner } => {
-                    self.execute_create_database(database, owner.as_deref()).await
+                    self.execute_create_database(database, owner.as_deref())
+                        .await
                 }
-                RestoreAction::RestoreContent { dump_path, database } => {
-                    self.execute_restore_content(dump_path, database).await
-                }
-                RestoreAction::HealthCheck { database, timeout_secs } => {
-                    self.execute_health_check(database, *timeout_secs).await
-                }
+                RestoreAction::RestoreContent {
+                    dump_path,
+                    database,
+                } => self.execute_restore_content(dump_path, database).await,
+                RestoreAction::HealthCheck {
+                    database,
+                    timeout_secs,
+                } => self.execute_health_check(database, *timeout_secs).await,
                 RestoreAction::DownloadBackup { .. } => {
                     // Handled separately before plan execution
                     Ok("Skipped".to_string())
@@ -742,7 +778,10 @@ impl FullRestoreManager {
 
             match step_result {
                 Ok(message) => {
-                    info!("[restore] Step {} completed in {}ms", step.order, duration_ms);
+                    info!(
+                        "[restore] Step {} completed in {}ms",
+                        step.order, duration_ms
+                    );
                     steps_completed.push(StepResult {
                         order: step.order,
                         action: format!("{:?}", step.action),
@@ -832,9 +871,12 @@ impl FullRestoreManager {
     async fn execute_drop_database(&self, database: &str) -> Result<String> {
         let output = Command::new("dropdb")
             .args([
-                "-h", &self.config.host,
-                "-p", &self.config.port.to_string(),
-                "-U", &self.config.user,
+                "-h",
+                &self.config.host,
+                "-p",
+                &self.config.port.to_string(),
+                "-U",
+                &self.config.user,
                 "--if-exists",
                 database,
             ])
@@ -855,9 +897,12 @@ impl FullRestoreManager {
     async fn execute_create_database(&self, database: &str, owner: Option<&str>) -> Result<String> {
         let port_str = self.config.port.to_string();
         let mut args = vec![
-            "-h", &self.config.host,
-            "-p", &port_str,
-            "-U", &self.config.user,
+            "-h",
+            &self.config.host,
+            "-p",
+            &port_str,
+            "-U",
+            &self.config.user,
         ];
 
         if let Some(owner) = owner {
@@ -882,7 +927,7 @@ impl FullRestoreManager {
 
     async fn execute_restore_content(&self, dump_path: &Path, database: &str) -> Result<String> {
         let dump_str = dump_path.to_string_lossy();
-        
+
         // Determine restore method based on file extension
         let is_custom_format = dump_str.ends_with(".dump") || dump_str.ends_with(".backup");
 
@@ -890,10 +935,14 @@ impl FullRestoreManager {
             // Use pg_restore for custom format
             let output = Command::new("pg_restore")
                 .args([
-                    "-h", &self.config.host,
-                    "-p", &self.config.port.to_string(),
-                    "-U", &self.config.user,
-                    "-d", database,
+                    "-h",
+                    &self.config.host,
+                    "-p",
+                    &self.config.port.to_string(),
+                    "-U",
+                    &self.config.user,
+                    "-d",
+                    database,
                     "-v",
                     "--no-owner",
                     "--no-privileges",
@@ -914,11 +963,16 @@ impl FullRestoreManager {
             // Use psql for plain SQL
             let output = Command::new("psql")
                 .args([
-                    "-h", &self.config.host,
-                    "-p", &self.config.port.to_string(),
-                    "-U", &self.config.user,
-                    "-d", database,
-                    "-f", &dump_str,
+                    "-h",
+                    &self.config.host,
+                    "-p",
+                    &self.config.port.to_string(),
+                    "-U",
+                    &self.config.user,
+                    "-d",
+                    database,
+                    "-f",
+                    &dump_str,
                 ])
                 .env("PGPASSWORD", self.config.password.as_deref().unwrap_or(""))
                 .output()?;
@@ -940,10 +994,14 @@ impl FullRestoreManager {
             // Try pg_isready first
             let ready = Command::new("pg_isready")
                 .args([
-                    "-h", &self.config.host,
-                    "-p", &self.config.port.to_string(),
-                    "-d", database,
-                    "-U", &self.config.user,
+                    "-h",
+                    &self.config.host,
+                    "-p",
+                    &self.config.port.to_string(),
+                    "-d",
+                    database,
+                    "-U",
+                    &self.config.user,
                 ])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -955,11 +1013,16 @@ impl FullRestoreManager {
                 // Try a simple query
                 let query_ok = Command::new("psql")
                     .args([
-                        "-h", &self.config.host,
-                        "-p", &self.config.port.to_string(),
-                        "-U", &self.config.user,
-                        "-d", database,
-                        "-c", "SELECT 1;",
+                        "-h",
+                        &self.config.host,
+                        "-p",
+                        &self.config.port.to_string(),
+                        "-U",
+                        &self.config.user,
+                        "-d",
+                        database,
+                        "-c",
+                        "SELECT 1;",
                     ])
                     .env("PGPASSWORD", self.config.password.as_deref().unwrap_or(""))
                     .stdout(Stdio::null())
@@ -980,28 +1043,20 @@ impl FullRestoreManager {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        Err(anyhow!(
-            "Health check timed out after {}s",
-            timeout_secs
-        ))
+        Err(anyhow!("Health check timed out after {}s", timeout_secs))
     }
 }
 
 // Helper functions
 
 fn check_tool(name: &str) -> Option<ToolInfo> {
-    let output = Command::new("which")
-        .arg(name)
-        .output()
-        .ok()?;
+    let output = Command::new("which").arg(name).output().ok()?;
 
     if !output.status.success() {
         return None;
     }
 
-    let path = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     if path.is_empty() {
         return None;
@@ -1014,7 +1069,12 @@ fn check_tool(name: &str) -> Option<ToolInfo> {
         .ok()
         .and_then(|o| {
             if o.status.success() {
-                Some(String::from_utf8_lossy(&o.stdout).lines().next()?.to_string())
+                Some(
+                    String::from_utf8_lossy(&o.stdout)
+                        .lines()
+                        .next()?
+                        .to_string(),
+                )
             } else {
                 None
             }
@@ -1044,9 +1104,7 @@ fn find_dump_file(backup_path: &Path) -> Result<PathBuf> {
     for entry in std::fs::read_dir(backup_path)? {
         let entry = entry?;
         let path = entry.path();
-        let name = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         if name.ends_with(".dump") || name.ends_with(".backup") || name.ends_with(".sql") {
             return Ok(path);
@@ -1098,8 +1156,7 @@ mod tests {
 
     #[test]
     fn test_preflight_error_with_details() {
-        let error = PreflightError::new("CODE", "Message")
-            .with_details("Details");
+        let error = PreflightError::new("CODE", "Message").with_details("Details");
         assert_eq!(error.code, "CODE");
         assert_eq!(error.message, "Message");
         assert_eq!(error.details, Some("Details".to_string()));
@@ -1107,8 +1164,8 @@ mod tests {
 
     #[test]
     fn test_preflight_warning_with_recommendation() {
-        let warning = PreflightWarning::new("CODE", "Message")
-            .with_recommendation("Recommendation");
+        let warning =
+            PreflightWarning::new("CODE", "Message").with_recommendation("Recommendation");
         assert_eq!(warning.code, "CODE");
         assert_eq!(warning.message, "Message");
         assert_eq!(warning.recommendation, Some("Recommendation".to_string()));

@@ -56,13 +56,9 @@ impl std::fmt::Display for BackupType {
 #[serde(untagged)]
 pub enum BackupTarget {
     /// Target a specific cluster by ID
-    Cluster {
-        cluster_id: String,
-    },
+    Cluster { cluster_id: String },
     /// Target a specific node by ID
-    Node {
-        node_id: String,
-    },
+    Node { node_id: String },
     /// Target a specific database on a host
     Database {
         host: String,

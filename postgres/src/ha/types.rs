@@ -269,9 +269,9 @@ impl HaPlan {
 
     /// Check if all steps are completed or skipped.
     pub fn is_complete(&self) -> bool {
-        self.steps.iter().all(|s| {
-            matches!(s.status, HaStepStatus::Completed | HaStepStatus::Skipped)
-        })
+        self.steps
+            .iter()
+            .all(|s| matches!(s.status, HaStepStatus::Completed | HaStepStatus::Skipped))
     }
 
     /// Check if any step failed.
@@ -281,16 +281,16 @@ impl HaPlan {
 
     /// Get the current step (first pending or in-progress).
     pub fn current_step(&self) -> Option<&HaPlanStep> {
-        self.steps.iter().find(|s| {
-            matches!(s.status, HaStepStatus::Pending | HaStepStatus::InProgress)
-        })
+        self.steps
+            .iter()
+            .find(|s| matches!(s.status, HaStepStatus::Pending | HaStepStatus::InProgress))
     }
 
     /// Get mutable reference to current step.
     pub fn current_step_mut(&mut self) -> Option<&mut HaPlanStep> {
-        self.steps.iter_mut().find(|s| {
-            matches!(s.status, HaStepStatus::Pending | HaStepStatus::InProgress)
-        })
+        self.steps
+            .iter_mut()
+            .find(|s| matches!(s.status, HaStepStatus::Pending | HaStepStatus::InProgress))
     }
 }
 
@@ -383,7 +383,7 @@ fn format_plan_table(plan: &HaPlan) -> String {
         plan.target_node_id
     ));
     output.push_str(&format!("Cluster: {}\n", plan.cluster_id));
-    
+
     if plan.dry_run {
         output.push_str("Mode: DRY-RUN (no changes will be made)\n");
     }
@@ -459,7 +459,11 @@ fn format_result_table(result: &HaResult) -> String {
         "\n{} {} {}\n",
         status_icon,
         result.operation.to_uppercase(),
-        if result.success { "COMPLETED" } else { "FAILED" }
+        if result.success {
+            "COMPLETED"
+        } else {
+            "FAILED"
+        }
     ));
     output.push_str(&format!("Cluster: {}\n", result.cluster_id));
 

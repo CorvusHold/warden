@@ -11,6 +11,8 @@ use common::schedule::{
 };
 use log::info;
 use serde::Serialize;
+use std::convert::Infallible;
+use std::str::FromStr;
 
 /// Output format for schedule commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,12 +21,14 @@ pub enum OutputFormat {
     Json,
 }
 
-impl OutputFormat {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for OutputFormat {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "json" => OutputFormat::Json,
             _ => OutputFormat::Table,
-        }
+        })
     }
 }
 
@@ -110,7 +114,7 @@ pub async fn schedule_list(
         .schedules
         .ok_or_else(|| anyhow!("No schedules configured in warden configuration"))?;
 
-    let output_format = OutputFormat::from_str(&format);
+    let output_format: OutputFormat = format.parse().unwrap();
 
     // Filter schedules
     let type_filter = schedule_type.as_ref().map(|t| t.to_lowercase());
@@ -120,8 +124,7 @@ pub async fn schedule_list(
         .iter()
         .filter(|s| !enabled_only || s.enabled)
         .filter(|_| {
-            type_filter.is_none()
-                || type_filter.as_ref().map(|t| t == "backup").unwrap_or(false)
+            type_filter.is_none() || type_filter.as_ref().map(|t| t == "backup").unwrap_or(false)
         })
         .map(BackupScheduleInfo::from)
         .collect();
@@ -132,7 +135,10 @@ pub async fn schedule_list(
         .filter(|s| !enabled_only || s.enabled)
         .filter(|_| {
             type_filter.is_none()
-                || type_filter.as_ref().map(|t| t == "retention").unwrap_or(false)
+                || type_filter
+                    .as_ref()
+                    .map(|t| t == "retention")
+                    .unwrap_or(false)
         })
         .map(RetentionScheduleInfo::from)
         .collect();
@@ -171,10 +177,7 @@ fn print_schedule_list_table(result: &ScheduleListResult) {
 
         for schedule in &result.backups {
             let enabled_str = if schedule.enabled { "✓" } else { "✗" };
-            let storage = schedule
-                .storage_profile
-                .as_deref()
-                .unwrap_or("-");
+            let storage = schedule.storage_profile.as_deref().unwrap_or("-");
             let target = if schedule.target.len() > 28 {
                 format!("{}...", &schedule.target[..25])
             } else {
@@ -202,10 +205,7 @@ fn print_schedule_list_table(result: &ScheduleListResult) {
         for schedule in &result.retention {
             let enabled_str = if schedule.enabled { "✓" } else { "✗" };
             let apply_str = if schedule.apply { "yes" } else { "dry-run" };
-            let storage = schedule
-                .storage_profile
-                .as_deref()
-                .unwrap_or("-");
+            let storage = schedule.storage_profile.as_deref().unwrap_or("-");
 
             println!(
                 "{:<20} {:<30} {:<10} {:<10} {:<8}",
@@ -225,7 +225,7 @@ pub async fn schedule_next_runs(count: usize, format: String, enabled_only: bool
         .schedules
         .ok_or_else(|| anyhow!("No schedules configured in warden configuration"))?;
 
-    let output_format = OutputFormat::from_str(&format);
+    let output_format: OutputFormat = format.parse().unwrap();
 
     // Get next runs for all schedules
     let now = Utc::now();
@@ -386,12 +386,8 @@ pub async fn schedule_run(id: String, dry_run: bool) -> Result<()> {
     let retention_schedule = schedule_config.retention.iter().find(|s| s.id == id);
 
     match (backup_schedule, retention_schedule) {
-        (Some(schedule), None) => {
-            run_backup_schedule(schedule, &schedule_config, dry_run).await
-        }
-        (None, Some(schedule)) => {
-            run_retention_schedule(schedule, &schedule_config, dry_run).await
-        }
+        (Some(schedule), None) => run_backup_schedule(schedule, &schedule_config, dry_run).await,
+        (None, Some(schedule)) => run_retention_schedule(schedule, &schedule_config, dry_run).await,
         (None, None) => Err(anyhow!("Schedule '{}' not found", id)),
         (Some(_), Some(_)) => Err(anyhow!(
             "Ambiguous schedule ID '{}' - found in both backup and retention",
@@ -450,7 +446,12 @@ async fn run_backup_schedule(
         .backup_dir
         .as_ref()
         .map(std::path::PathBuf::from)
-        .or_else(|| config.default_backup_dir.as_ref().map(std::path::PathBuf::from))
+        .or_else(|| {
+            config
+                .default_backup_dir
+                .as_ref()
+                .map(std::path::PathBuf::from)
+        })
         .unwrap_or_else(|| std::path::PathBuf::from("./backups"));
 
     // Execute based on target
@@ -488,18 +489,14 @@ async fn run_backup_schedule(
 
             Ok(())
         }
-        BackupTarget::Cluster { cluster_id } => {
-            Err(anyhow!(
-                "Cluster-based backup scheduling not yet implemented for cluster '{}'",
-                cluster_id
-            ))
-        }
-        BackupTarget::Node { node_id } => {
-            Err(anyhow!(
-                "Node-based backup scheduling not yet implemented for node '{}'",
-                node_id
-            ))
-        }
+        BackupTarget::Cluster { cluster_id } => Err(anyhow!(
+            "Cluster-based backup scheduling not yet implemented for cluster '{}'",
+            cluster_id
+        )),
+        BackupTarget::Node { node_id } => Err(anyhow!(
+            "Node-based backup scheduling not yet implemented for node '{}'",
+            node_id
+        )),
     }
 }
 
@@ -573,19 +570,22 @@ mod tests {
 
     #[test]
     fn test_output_format_from_str() {
-        assert_eq!(OutputFormat::from_str("json"), OutputFormat::Json);
-        assert_eq!(OutputFormat::from_str("JSON"), OutputFormat::Json);
-        assert_eq!(OutputFormat::from_str("table"), OutputFormat::Table);
-        assert_eq!(OutputFormat::from_str("unknown"), OutputFormat::Table);
+        assert_eq!(OutputFormat::from_str("json").unwrap(), OutputFormat::Json);
+        assert_eq!(OutputFormat::from_str("JSON").unwrap(), OutputFormat::Json);
+        assert_eq!(
+            OutputFormat::from_str("table").unwrap(),
+            OutputFormat::Table
+        );
+        assert_eq!(
+            OutputFormat::from_str("unknown").unwrap(),
+            OutputFormat::Table
+        );
     }
 
     #[test]
     fn test_format_duration() {
         assert_eq!(format_duration(chrono::Duration::minutes(30)), "30m");
         assert_eq!(format_duration(chrono::Duration::hours(2)), "2h 0m");
-        assert_eq!(
-            format_duration(chrono::Duration::hours(25)),
-            "1d 1h"
-        );
+        assert_eq!(format_duration(chrono::Duration::hours(25)), "1d 1h");
     }
 }

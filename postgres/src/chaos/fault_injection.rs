@@ -279,12 +279,12 @@ impl FaultInjector {
     pub fn reset_counters(&self) {
         // Reset global counter
         self.inner.trigger_count.store(0, Ordering::SeqCst);
-        
+
         // Reset type counts
         if let Ok(mut counts) = self.inner.type_counts.write() {
             counts.clear();
         }
-        
+
         // Reset per-fault trigger counters
         if let Ok(faults) = self.inner.faults.read() {
             for tracked_faults in faults.values() {
@@ -364,10 +364,7 @@ mod tests {
     fn test_fault_injector_registration() {
         let injector = FaultInjector::new();
 
-        injector.register_fault(
-            "postgres",
-            FaultConfig::new(FaultType::ConnectionRefused),
-        );
+        injector.register_fault("postgres", FaultConfig::new(FaultType::ConnectionRefused));
 
         let result = injector.should_trigger("postgres", FaultType::ConnectionRefused);
         assert!(result.is_some());
@@ -380,10 +377,7 @@ mod tests {
     fn test_fault_injector_disabled() {
         let injector = FaultInjector::new();
 
-        injector.register_fault(
-            "postgres",
-            FaultConfig::new(FaultType::ConnectionRefused),
-        );
+        injector.register_fault("postgres", FaultConfig::new(FaultType::ConnectionRefused));
 
         injector.set_enabled(false);
 
@@ -395,10 +389,7 @@ mod tests {
     fn test_fault_injector_counters() {
         let injector = FaultInjector::new();
 
-        injector.register_fault(
-            "postgres",
-            FaultConfig::new(FaultType::ConnectionRefused),
-        );
+        injector.register_fault("postgres", FaultConfig::new(FaultType::ConnectionRefused));
 
         injector.should_trigger("postgres", FaultType::ConnectionRefused);
         injector.should_trigger("postgres", FaultType::ConnectionRefused);
@@ -419,10 +410,16 @@ mod tests {
         );
 
         // Should trigger twice
-        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_some());
-        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_some());
+        assert!(injector
+            .should_trigger("postgres", FaultType::ConnectionRefused)
+            .is_some());
+        assert!(injector
+            .should_trigger("postgres", FaultType::ConnectionRefused)
+            .is_some());
         // Should not trigger after limit reached
-        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_none());
+        assert!(injector
+            .should_trigger("postgres", FaultType::ConnectionRefused)
+            .is_none());
     }
 
     #[test]
@@ -437,13 +434,17 @@ mod tests {
         // Trigger twice (reaching limit)
         injector.should_trigger("postgres", FaultType::ConnectionRefused);
         injector.should_trigger("postgres", FaultType::ConnectionRefused);
-        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_none());
+        assert!(injector
+            .should_trigger("postgres", FaultType::ConnectionRefused)
+            .is_none());
 
         // Reset counters
         injector.reset_counters();
 
         // Should be able to trigger again after reset
-        assert!(injector.should_trigger("postgres", FaultType::ConnectionRefused).is_some());
+        assert!(injector
+            .should_trigger("postgres", FaultType::ConnectionRefused)
+            .is_some());
         assert_eq!(injector.total_triggers(), 1);
     }
 }

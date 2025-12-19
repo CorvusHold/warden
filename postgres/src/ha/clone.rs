@@ -163,8 +163,12 @@ impl CloneNodeOrchestrator {
         // Step: Download backup if remote
         if self.options.remote_storage {
             plan.add_step(
-                HaPlanStep::new(step_num, "download_backup", "Download backup from remote storage")
-                    .with_duration(300), // Can take a while for large backups
+                HaPlanStep::new(
+                    step_num,
+                    "download_backup",
+                    "Download backup from remote storage",
+                )
+                .with_duration(300), // Can take a while for large backups
             );
             step_num += 1;
         }
@@ -174,10 +178,7 @@ impl CloneNodeOrchestrator {
             HaPlanStep::new(
                 step_num,
                 "restore_backup",
-                format!(
-                    "Restore backup to {}",
-                    self.options.target_dir.display()
-                ),
+                format!("Restore backup to {}", self.options.target_dir.display()),
             )
             .destructive()
             .with_duration(300),
@@ -387,9 +388,7 @@ impl CloneNodeOrchestrator {
                 .collect();
 
             if !entries.is_empty() && !self.options.yes {
-                return Err(HaError::TargetDirNotEmpty(
-                    target_dir.display().to_string(),
-                ));
+                return Err(HaError::TargetDirNotEmpty(target_dir.display().to_string()));
             }
 
             if !entries.is_empty() {
@@ -401,7 +400,10 @@ impl CloneNodeOrchestrator {
         } else {
             // Create directory
             std::fs::create_dir_all(target_dir)?;
-            info!("[ha-clone] Created target directory {}", target_dir.display());
+            info!(
+                "[ha-clone] Created target directory {}",
+                target_dir.display()
+            );
         }
 
         Ok(())
@@ -477,10 +479,7 @@ impl CloneNodeOrchestrator {
             .target_time
             .ok_or_else(|| HaError::PitrNotFeasible("No target time specified".to_string()))?;
 
-        info!(
-            "[ha-clone] Executing PITR to target time: {}",
-            target_time
-        );
+        info!("[ha-clone] Executing PITR to target time: {}", target_time);
 
         // TODO: Integrate with PITR executor
         // This would configure recovery_target_time in postgresql.auto.conf
@@ -581,7 +580,9 @@ impl CloneNodeOrchestrator {
                         info!("[ha-clone] Replica is in recovery mode");
                         Ok(())
                     } else {
-                        warn!("[ha-clone] Replica is not in recovery mode - may have been promoted");
+                        warn!(
+                            "[ha-clone] Replica is not in recovery mode - may have been promoted"
+                        );
                         Ok(())
                     }
                 } else {

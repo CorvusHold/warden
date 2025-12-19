@@ -86,15 +86,20 @@ pub async fn execute() -> Result<()> {
     let config_for_scheduler = daemon.config();
     let has_schedules = {
         match config_for_scheduler.lock() {
-            Ok(cfg) => {
-                cfg.schedules.as_ref().map(|s| !s.backups.is_empty() || !s.retention.is_empty()).unwrap_or(false)
-            }
+            Ok(cfg) => cfg
+                .schedules
+                .as_ref()
+                .map(|s| !s.backups.is_empty() || !s.retention.is_empty())
+                .unwrap_or(false),
             Err(poisoned) => {
                 // Mutex was poisoned (another thread panicked while holding it)
                 // Recover the data and continue - schedules are non-critical for startup
                 error!("Config mutex was poisoned, recovering: {}", poisoned);
                 let cfg = poisoned.into_inner();
-                cfg.schedules.as_ref().map(|s| !s.backups.is_empty() || !s.retention.is_empty()).unwrap_or(false)
+                cfg.schedules
+                    .as_ref()
+                    .map(|s| !s.backups.is_empty() || !s.retention.is_empty())
+                    .unwrap_or(false)
             }
         }
     };
@@ -106,8 +111,15 @@ pub async fn execute() -> Result<()> {
     let event_handler = tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
-                SchedulerEvent::TaskStarted { schedule_id, schedule_type, started_at } => {
-                    info!("[Scheduler] Task started: {} ({}) at {}", schedule_id, schedule_type, started_at);
+                SchedulerEvent::TaskStarted {
+                    schedule_id,
+                    schedule_type,
+                    started_at,
+                } => {
+                    info!(
+                        "[Scheduler] Task started: {} ({}) at {}",
+                        schedule_id, schedule_type, started_at
+                    );
                 }
                 SchedulerEvent::TaskCompleted(result) => {
                     if result.success {
@@ -129,10 +141,15 @@ pub async fn execute() -> Result<()> {
                         );
                     }
                 }
-                SchedulerEvent::Error { schedule_id, message } => {
+                SchedulerEvent::Error {
+                    schedule_id,
+                    message,
+                } => {
                     error!(
                         "[Scheduler] Error{}: {}",
-                        schedule_id.map(|id| format!(" ({})", id)).unwrap_or_default(),
+                        schedule_id
+                            .map(|id| format!(" ({})", id))
+                            .unwrap_or_default(),
                         message
                     );
                 }
@@ -145,13 +162,12 @@ pub async fn execute() -> Result<()> {
         info!("Schedules configured, starting scheduler...");
         let scheduler_config = config_for_scheduler.clone();
         let scheduler_options = SchedulerOptions::default();
-        
+
         Some(tokio::spawn(async move {
-            if let Err(e) = crate::scheduler::run_scheduler(
-                scheduler_config,
-                scheduler_options,
-                Some(event_tx),
-            ).await {
+            if let Err(e) =
+                crate::scheduler::run_scheduler(scheduler_config, scheduler_options, Some(event_tx))
+                    .await
+            {
                 error!("[Scheduler] Scheduler error: {}", e);
             }
         }))

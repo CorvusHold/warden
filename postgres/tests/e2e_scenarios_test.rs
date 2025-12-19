@@ -89,11 +89,16 @@ impl PostgresTestContainer {
                 "run",
                 "-d",
                 "--rm",
-                "-p", &format!("{}:5432", port),
-                "-e", &format!("POSTGRES_USER={}", user),
-                "-e", &format!("POSTGRES_PASSWORD={}", password),
-                "-e", &format!("POSTGRES_DB={}", database),
-                "-e", "POSTGRES_HOST_AUTH_METHOD=trust",
+                "-p",
+                &format!("{}:5432", port),
+                "-e",
+                &format!("POSTGRES_USER={}", user),
+                "-e",
+                &format!("POSTGRES_PASSWORD={}", password),
+                "-e",
+                &format!("POSTGRES_DB={}", database),
+                "-e",
+                "POSTGRES_HOST_AUTH_METHOD=trust",
                 &image,
             ])
             .output()
@@ -140,11 +145,14 @@ impl PostgresTestContainer {
                 "exec",
                 &self.container_id,
                 "psql",
-                "-U", &self.user,
-                "-d", &self.database,
+                "-U",
+                &self.user,
+                "-d",
+                &self.database,
                 "-t", // Tuple only (no headers)
                 "-A", // Unaligned output
-                "-c", sql,
+                "-c",
+                sql,
             ])
             .output()
             .map_err(|e| format!("Failed to execute SQL: {}", e))?;
@@ -178,7 +186,11 @@ impl Drop for PostgresTestContainer {
 }
 
 /// Create test data in PostgreSQL
-fn create_test_data(container: &PostgresTestContainer, table_name: &str, rows: &[(&str, i32)]) -> Result<(), String> {
+fn create_test_data(
+    container: &PostgresTestContainer,
+    table_name: &str,
+    rows: &[(&str, i32)],
+) -> Result<(), String> {
     container.exec_sql(&format!(
         "CREATE TABLE IF NOT EXISTS {} (id SERIAL PRIMARY KEY, name TEXT NOT NULL, value INT NOT NULL);",
         table_name
@@ -194,10 +206,16 @@ fn create_test_data(container: &PostgresTestContainer, table_name: &str, rows: &
 }
 
 /// Verify test data in PostgreSQL
-fn verify_test_data(container: &PostgresTestContainer, table_name: &str, expected_count: i64) -> Result<(), String> {
+fn verify_test_data(
+    container: &PostgresTestContainer,
+    table_name: &str,
+    expected_count: i64,
+) -> Result<(), String> {
     let count_str = container.exec_sql(&format!("SELECT COUNT(*) FROM {};", table_name))?;
-    let count: i64 = count_str.parse().map_err(|e| format!("Parse error: {}", e))?;
-    
+    let count: i64 = count_str
+        .parse()
+        .map_err(|e| format!("Parse error: {}", e))?;
+
     if count != expected_count {
         return Err(format!("Expected {} rows, got {}", expected_count, count));
     }
@@ -226,6 +244,7 @@ async fn create_snapshot_backup(
             endpoint: Some(cfg.endpoint.clone()),
             access_key: Some(cfg.access_key.clone()),
             secret_key: Some(cfg.secret_key.clone()),
+            multi_tenant: Default::default(),
         },
         None => StorageOptions::default(),
     };
@@ -261,7 +280,7 @@ async fn scenario_a_backup_inspect_restore_verify() {
     }
 
     let minio_config = get_minio_config();
-    
+
     // Setup
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let backup_dir = temp_dir.path().join("backups");
@@ -271,15 +290,12 @@ async fn scenario_a_backup_inspect_restore_verify() {
     let source_port = 25432;
     let source = PostgresTestContainer::start(source_port, "testdb", "postgres", "postgres")
         .expect("Failed to start source container");
-    source.wait_ready(std::time::Duration::from_secs(30))
+    source
+        .wait_ready(std::time::Duration::from_secs(30))
         .expect("Source not ready");
 
     // Create test data
-    let test_data = vec![
-        ("item_alpha", 100),
-        ("item_beta", 200),
-        ("item_gamma", 300),
-    ];
+    let test_data = vec![("item_alpha", 100), ("item_beta", 200), ("item_gamma", 300)];
     create_test_data(&source, "products", &test_data).expect("Failed to create test data");
 
     // Verify source data
@@ -306,21 +322,25 @@ async fn scenario_a_backup_inspect_restore_verify() {
     let backup_metadata_path = find_backup_metadata(&backup_dir, &backup_id);
     assert!(backup_metadata_path.is_some(), "Backup metadata not found");
 
-    let metadata_content = std::fs::read_to_string(backup_metadata_path.unwrap())
-        .expect("Failed to read metadata");
-    let metadata: serde_json::Value = serde_json::from_str(&metadata_content)
-        .expect("Failed to parse metadata");
-    
+    let metadata_content =
+        std::fs::read_to_string(backup_metadata_path.unwrap()).expect("Failed to read metadata");
+    let metadata: serde_json::Value =
+        serde_json::from_str(&metadata_content).expect("Failed to parse metadata");
+
     assert_eq!(metadata["backup_type"], "snapshot");
     assert!(metadata["size_bytes"].as_u64().unwrap() > 0);
-    println!("Backup metadata verified: size={} bytes", metadata["size_bytes"]);
+    println!(
+        "Backup metadata verified: size={} bytes",
+        metadata["size_bytes"]
+    );
 
     // Step 3: Start target PostgreSQL and restore
     println!("Step 3: Starting target container and restoring...");
     let target_port = 25433;
     let target = PostgresTestContainer::start(target_port, "testdb", "postgres", "postgres")
         .expect("Failed to start target container");
-    target.wait_ready(std::time::Duration::from_secs(30))
+    target
+        .wait_ready(std::time::Duration::from_secs(30))
         .expect("Target not ready");
 
     // Find and restore the dump file
@@ -332,7 +352,8 @@ async fn scenario_a_backup_inspect_restore_verify() {
     verify_test_data(&target, "products", 3).expect("Target data verification failed");
 
     // Verify actual values
-    let sum = target.exec_sql("SELECT SUM(value) FROM products;")
+    let sum = target
+        .exec_sql("SELECT SUM(value) FROM products;")
         .expect("Failed to query sum");
     assert_eq!(sum, "600", "Sum mismatch: expected 600, got {}", sum);
 
@@ -362,7 +383,7 @@ async fn scenario_b_pitr_plan_and_restore() {
     // Create mock backup catalog for PITR testing
     let backup_time = Utc::now() - Duration::hours(2);
     let backup_id = "e2e-test-backup-001";
-    
+
     // Create backup directory structure
     let backup_path = backup_dir.join(format!("snapshot_backup_{}", backup_id));
     std::fs::create_dir_all(&backup_path).expect("Failed to create backup path");
@@ -387,7 +408,8 @@ async fn scenario_b_pitr_plan_and_restore() {
     std::fs::write(
         backup_dir.join("backup_catalog.json"),
         serde_json::to_string_pretty(&catalog).unwrap(),
-    ).expect("Failed to write catalog");
+    )
+    .expect("Failed to write catalog");
 
     // Create mock WAL segments
     std::fs::write(wal_dir.join("000000010000000000000001"), vec![0u8; 1024])
@@ -397,14 +419,17 @@ async fn scenario_b_pitr_plan_and_restore() {
 
     // Step 1: Create PITR plan
     println!("Step 1: Creating PITR plan...");
-    let planner = PitrPlanner::new(backup_dir.clone())
-        .with_wal_archive_dir(wal_dir.clone());
+    let planner = PitrPlanner::new(backup_dir.clone()).with_wal_archive_dir(wal_dir.clone());
 
     let target_time = Utc::now() - Duration::hours(1);
     let target = RecoveryTarget::Time(target_time);
 
     let plan_result = planner.plan_recovery(target).await;
-    assert!(plan_result.is_ok(), "PITR plan failed: {:?}", plan_result.err());
+    assert!(
+        plan_result.is_ok(),
+        "PITR plan failed: {:?}",
+        plan_result.err()
+    );
 
     let plan = plan_result.unwrap();
     println!("PITR plan created:");
@@ -431,7 +456,9 @@ async fn scenario_b_pitr_plan_and_restore() {
 #[tokio::test]
 #[ignore = "Requires Docker - run with: cargo test --test e2e_scenarios_test -- --ignored"]
 async fn scenario_c_retention_plan_and_apply() {
-    use postgres::cli::commands::{retention_plan, retention_init, RetentionOptions, StorageOptions};
+    use postgres::cli::commands::{
+        retention_init, retention_plan, RetentionOptions, StorageOptions,
+    };
     use postgres::retention::PitrRetentionPolicy;
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -440,11 +467,11 @@ async fn scenario_c_retention_plan_and_apply() {
 
     // Create multiple test backups with different ages
     let backup_ages = vec![
-        ("backup_001", 1),   // 1 day old - should keep
-        ("backup_002", 3),   // 3 days old - should keep
-        ("backup_003", 10),  // 10 days old - might delete
-        ("backup_004", 20),  // 20 days old - might delete
-        ("backup_005", 40),  // 40 days old - should delete
+        ("backup_001", 1),  // 1 day old - should keep
+        ("backup_002", 3),  // 3 days old - should keep
+        ("backup_003", 10), // 10 days old - might delete
+        ("backup_004", 20), // 20 days old - might delete
+        ("backup_005", 40), // 40 days old - should delete
     ];
 
     for (backup_id, days_ago) in &backup_ages {
@@ -454,15 +481,14 @@ async fn scenario_c_retention_plan_and_apply() {
     // Step 1: Generate retention policy
     println!("Step 1: Generating retention policy...");
     let policy_file = temp_dir.path().join("retention_policy.json");
-    retention_init(&policy_file, "standard", "json")
-        .expect("Failed to create retention policy");
+    retention_init(&policy_file, "standard", "json").expect("Failed to create retention policy");
 
     assert!(policy_file.exists(), "Policy file should exist");
 
     // Verify policy content
     let policy_content = std::fs::read_to_string(&policy_file).unwrap();
-    let policy: PitrRetentionPolicy = serde_json::from_str(&policy_content)
-        .expect("Failed to parse policy");
+    let policy: PitrRetentionPolicy =
+        serde_json::from_str(&policy_content).expect("Failed to parse policy");
     assert!(policy.enabled, "Policy should be enabled");
 
     // Step 2: Run retention plan (dry-run)
@@ -478,15 +504,25 @@ async fn scenario_c_retention_plan_and_apply() {
     };
 
     let plan_result = retention_plan(storage_opts.clone(), retention_opts.clone()).await;
-    assert!(plan_result.is_ok(), "Retention plan failed: {:?}", plan_result.err());
+    assert!(
+        plan_result.is_ok(),
+        "Retention plan failed: {:?}",
+        plan_result.err()
+    );
 
     let result = plan_result.unwrap();
     println!("Retention plan results:");
     println!("  - Total backups: {}", result.evaluation.total_backups);
     println!("  - To keep: {}", result.evaluation.backups_to_keep.len());
-    println!("  - To delete: {}", result.evaluation.backups_to_delete.len());
+    println!(
+        "  - To delete: {}",
+        result.evaluation.backups_to_delete.len()
+    );
 
-    assert_eq!(result.evaluation.total_backups, 5, "Should evaluate all 5 backups");
+    assert_eq!(
+        result.evaluation.total_backups, 5,
+        "Should evaluate all 5 backups"
+    );
 
     // Step 3: Verify backups still exist (dry-run doesn't delete)
     println!("Step 3: Verifying dry-run didn't delete anything...");
@@ -512,7 +548,8 @@ async fn test_error_invalid_target_time() {
     std::fs::write(
         backup_dir.join("backup_catalog.json"),
         serde_json::to_string(&catalog).unwrap(),
-    ).expect("Failed to write catalog");
+    )
+    .expect("Failed to write catalog");
 
     let planner = PitrPlanner::new(backup_dir);
     let target = RecoveryTarget::Time(Utc::now());
@@ -522,7 +559,7 @@ async fn test_error_invalid_target_time() {
 
     let err_msg = result.unwrap_err().to_string().to_lowercase();
     assert!(
-        err_msg.contains("no backup") 
+        err_msg.contains("no backup")
             || err_msg.contains("not found")
             || err_msg.contains("no base backup")
             || err_msg.contains("pitr"),
@@ -544,6 +581,7 @@ fn test_error_missing_storage_bucket() {
         endpoint: None,
         access_key: None,
         secret_key: None,
+        multi_tenant: Default::default(),
     };
 
     // This should fail when trying to create a storage provider
@@ -561,9 +599,13 @@ fn test_retention_policy_presets() {
     for preset in &["standard", "aggressive", "conservative", "gfs"] {
         let output_path = temp_dir.path().join(format!("{}_policy.json", preset));
         let result = retention_init(&output_path, preset, "json");
-        
+
         assert!(result.is_ok(), "Preset '{}' should succeed", preset);
-        assert!(output_path.exists(), "Policy file for '{}' should exist", preset);
+        assert!(
+            output_path.exists(),
+            "Policy file for '{}' should exist",
+            preset
+        );
 
         // Verify it's valid JSON
         let content = std::fs::read_to_string(&output_path).unwrap();
@@ -603,7 +645,10 @@ fn find_dump_file(backup_dir: &PathBuf) -> Option<PathBuf> {
     None
 }
 
-fn restore_dump_to_container(container: &PostgresTestContainer, dump_file: &PathBuf) -> Result<(), String> {
+fn restore_dump_to_container(
+    container: &PostgresTestContainer,
+    dump_file: &PathBuf,
+) -> Result<(), String> {
     // Copy dump to container
     let output = Command::new("docker")
         .args([
@@ -615,7 +660,10 @@ fn restore_dump_to_container(container: &PostgresTestContainer, dump_file: &Path
         .map_err(|e| format!("Failed to copy dump: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!("Copy failed: {}", String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "Copy failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
 
     // Restore using pg_restore
@@ -624,8 +672,10 @@ fn restore_dump_to_container(container: &PostgresTestContainer, dump_file: &Path
             "exec",
             &container.container_id,
             "pg_restore",
-            "-U", &container.user,
-            "-d", &container.database,
+            "-U",
+            &container.user,
+            "-d",
+            &container.database,
             "-c", // Clean before restore
             "/tmp/backup.dump",
         ])
@@ -663,7 +713,8 @@ fn create_mock_backup(backup_dir: &PathBuf, backup_id: &str, days_ago: i64) {
     std::fs::write(
         backup_path.join("backup_metadata.json"),
         serde_json::to_string_pretty(&metadata).unwrap(),
-    ).expect("Failed to write metadata");
+    )
+    .expect("Failed to write metadata");
 
     // Create dummy dump file
     std::fs::write(backup_path.join("testdb.dump"), "dummy backup data")

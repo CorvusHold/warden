@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 // Import storage module
 use storage::{
-    BackupMetadata, BackupStatus as StorageBackupStatus, BackupType as StorageBackupType,
-    Metadata, PostgresBackupStorage, StorageProviderType,
+    BackupMetadata, BackupStatus as StorageBackupStatus, BackupType as StorageBackupType, Metadata,
+    PostgresBackupStorage, StorageProviderType,
 };
 
 use crate::common::PostgresConfig;
@@ -35,6 +35,13 @@ pub use cluster::{
 };
 pub use full_restore::full_restore as execute_full_restore;
 pub use full_restore::FullRestoreOptions;
+pub use ha::{execute_ha_clone_node, execute_ha_failover, execute_ha_switchover};
+pub use migration::{
+    discover, format_discovery_result, format_generated_config, format_import_result,
+    generate_config, import_backup, DatabaseInfo, DiscoveryResult, GenerateConfigOptions,
+    GeneratedConfig, ImportBackupOptions, ImportBackupType, ImportResult, ReplicationInfo,
+    SshOptions as MigrationSshOptions, StorageOptions as MigrationStorageOptions,
+};
 pub use pitr::{pitr_list, pitr_plan, pitr_restore, PitrPlanResult, PitrStorageOptions};
 pub use restore_full_incremental::{restore_full, restore_incremental};
 pub use retention::{
@@ -42,16 +49,9 @@ pub use retention::{
     RetentionPlanResult,
 };
 pub use schedule::{schedule_list, schedule_next_runs, schedule_run, schedule_validate};
-pub use ha::{execute_ha_clone_node, execute_ha_failover, execute_ha_switchover};
 pub use status::{
     execute_backup_status, execute_metrics, execute_pitr_status, execute_status,
     StatusStorageOptions,
-};
-pub use migration::{
-    discover, format_discovery_result, format_generated_config, format_import_result,
-    generate_config, import_backup, DatabaseInfo, DiscoveryResult, GenerateConfigOptions,
-    GeneratedConfig, ImportBackupOptions, ImportBackupType, ImportResult, ReplicationInfo,
-    SshOptions as MigrationSshOptions, StorageOptions as MigrationStorageOptions,
 };
 
 /// Result of a successful snapshot backup operation
@@ -281,12 +281,7 @@ fn find_backup_directory(backup_dir: &PathBuf, prefix: &str) -> Result<PathBuf> 
 
     let mut matching_dirs: Vec<_> = entries
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path().is_dir()
-                && e.file_name()
-                    .to_string_lossy()
-                    .starts_with(prefix)
-        })
+        .filter(|e| e.path().is_dir() && e.file_name().to_string_lossy().starts_with(prefix))
         .collect();
 
     // Sort by name (which includes timestamp) to get the most recent
@@ -2060,12 +2055,7 @@ mod tests {
     #[test]
     fn test_generate_backup_s3_key_with_prefix() {
         let timestamp = Utc.with_ymd_and_hms(2025, 12, 6, 14, 30, 0).unwrap();
-        let key = generate_backup_s3_key(
-            Some("postgres/prod"),
-            "mydb",
-            "abc123-uuid",
-            &timestamp,
-        );
+        let key = generate_backup_s3_key(Some("postgres/prod"), "mydb", "abc123-uuid", &timestamp);
         assert_eq!(key, "postgres/prod/mydb/2025-12-06/abc123-uuid");
     }
 
@@ -2079,12 +2069,7 @@ mod tests {
     #[test]
     fn test_generate_backup_s3_key_with_trailing_slash_prefix() {
         let timestamp = Utc.with_ymd_and_hms(2025, 6, 1, 12, 0, 0).unwrap();
-        let key = generate_backup_s3_key(
-            Some("backups/"),
-            "database",
-            "id-789",
-            &timestamp,
-        );
+        let key = generate_backup_s3_key(Some("backups/"), "database", "id-789", &timestamp);
         assert_eq!(key, "backups/database/2025-06-01/id-789");
     }
 
@@ -2143,11 +2128,19 @@ mod tests {
 
         // Should find the most recent snapshot backup
         let result = find_backup_directory(&backup_dir, "snapshot_backup_").unwrap();
-        assert!(result.file_name().unwrap().to_string_lossy().contains("2025-12-06T11-00-00"));
+        assert!(result
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("2025-12-06T11-00-00"));
 
         // Should find full backup
         let result = find_backup_directory(&backup_dir, "full_backup_").unwrap();
-        assert!(result.file_name().unwrap().to_string_lossy().contains("full_backup_"));
+        assert!(result
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("full_backup_"));
 
         // Should fail for non-existent prefix
         let result = find_backup_directory(&backup_dir, "nonexistent_");
@@ -2215,7 +2208,10 @@ mod tests {
 
         let result = find_dump_file(&backup_path, "mydb");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No dump file found"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No dump file found"));
     }
 
     #[test]

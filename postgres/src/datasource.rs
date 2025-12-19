@@ -12,9 +12,9 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 
 use common::datasource::{
-    BackupConfig, BackupFilter, BackupMetadata, BackupResult, BackupStatus, BackupType,
-    DataSource, DataSourceCapabilities, DataSourceError, DataSourceStatus, DiscoverConfig,
-    DiscoverResult, PitrConfig, RestoreConfig, RestoreResult, RestoreStatus, StatusConfig,
+    BackupConfig, BackupFilter, BackupMetadata, BackupResult, BackupStatus, BackupType, DataSource,
+    DataSourceCapabilities, DataSourceError, DataSourceStatus, DiscoverConfig, DiscoverResult,
+    PitrConfig, RestoreConfig, RestoreResult, RestoreStatus, StatusConfig,
 };
 
 use crate::common::PostgresConfig;
@@ -83,8 +83,14 @@ impl PostgresDataSource {
         PostgresConfig {
             host: connection.host.clone(),
             port: connection.port,
-            database: connection.database.clone().unwrap_or_else(|| "postgres".to_string()),
-            user: connection.user.clone().unwrap_or_else(|| "postgres".to_string()),
+            database: connection
+                .database
+                .clone()
+                .unwrap_or_else(|| "postgres".to_string()),
+            user: connection
+                .user
+                .clone()
+                .unwrap_or_else(|| "postgres".to_string()),
             password: connection.password.clone(),
             ssl_mode: connection.ssl_mode.clone(),
             maintenance_db: connection.options.get("maintenance_db").cloned(),
@@ -92,7 +98,11 @@ impl PostgresDataSource {
             ssh_user: ssh_tunnel.map(|t| t.ssh_user.clone()),
             ssh_port: ssh_tunnel.map(|t| t.ssh_port),
             ssh_password: ssh_tunnel.and_then(|t| t.ssh_password.clone()),
-            ssh_key_path: ssh_tunnel.and_then(|t| t.ssh_key_path.as_ref().map(|p| p.to_string_lossy().to_string())),
+            ssh_key_path: ssh_tunnel.and_then(|t| {
+                t.ssh_key_path
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+            }),
             ssh_local_port: ssh_tunnel.and_then(|t| t.local_port),
             ssh_remote_port: ssh_tunnel.map(|t| t.remote_port),
         }
@@ -125,10 +135,16 @@ impl PostgresDataSource {
 
         let mut extra = HashMap::new();
         if let Some(wal_start) = &backup.wal_start {
-            extra.insert("wal_start".to_string(), serde_json::Value::String(wal_start.clone()));
+            extra.insert(
+                "wal_start".to_string(),
+                serde_json::Value::String(wal_start.clone()),
+            );
         }
         if let Some(wal_end) = &backup.wal_end {
-            extra.insert("wal_end".to_string(), serde_json::Value::String(wal_end.clone()));
+            extra.insert(
+                "wal_end".to_string(),
+                serde_json::Value::String(wal_end.clone()),
+            );
         }
 
         BackupMetadata {
@@ -161,7 +177,9 @@ impl PostgresDataSource {
             PostgresError::PermissionError(msg) => DataSourceError::Authentication(msg),
             PostgresError::Io(err) => DataSourceError::Io(err),
             PostgresError::Postgres(err) => DataSourceError::Connection(err.to_string()),
-            PostgresError::MissingPassword => DataSourceError::Authentication("Missing password".to_string()),
+            PostgresError::MissingPassword => {
+                DataSourceError::Authentication("Missing password".to_string())
+            }
             PostgresError::Anyhow(err) => DataSourceError::Internal(err.to_string()),
             PostgresError::Ssh(err) => DataSourceError::SshTunnel(err.to_string()),
         }
@@ -189,14 +207,17 @@ impl DataSource for PostgresDataSource {
     }
 
     async fn discover(&self, config: &DiscoverConfig) -> Result<DiscoverResult, DataSourceError> {
-        info!("Discovering PostgreSQL server at {}:{}", config.connection.host, config.connection.port);
+        info!(
+            "Discovering PostgreSQL server at {}:{}",
+            config.connection.host, config.connection.port
+        );
         let start = Instant::now();
 
         let pg_config = Self::to_postgres_config(&config.connection, config.ssh_tunnel.as_ref());
 
         // Try to connect and get server information
         let conn_string = pg_config.connection_string();
-        
+
         let (client, connection) = tokio_postgres::connect(&conn_string, tokio_postgres::NoTls)
             .await
             .map_err(|e| DataSourceError::Connection(e.to_string()))?;
@@ -228,7 +249,7 @@ impl DataSource for PostgresDataSource {
 
         // Get additional metadata
         let mut metadata = HashMap::new();
-        
+
         // Get PostgreSQL version number
         let pg_version_row = client
             .query_one("SHOW server_version", &[])
@@ -266,27 +287,33 @@ impl DataSource for PostgresDataSource {
         );
 
         let pg_config = Self::to_postgres_config(&config.connection, config.ssh_tunnel.as_ref());
-        
+
         let mut manager = PostgresManager::new(pg_config, config.backup_dir.clone())
             .map_err(Self::convert_error)?;
 
         let backup = match config.backup_type {
             BackupType::Full => manager.full_backup().await.map_err(Self::convert_error)?,
-            BackupType::Incremental => manager.incremental_backup().await.map_err(Self::convert_error)?,
-            BackupType::Snapshot => manager.snapshot_backup().await.map_err(Self::convert_error)?,
+            BackupType::Incremental => manager
+                .incremental_backup()
+                .await
+                .map_err(Self::convert_error)?,
+            BackupType::Snapshot => manager
+                .snapshot_backup()
+                .await
+                .map_err(Self::convert_error)?,
             BackupType::Differential => {
                 // Map differential to incremental for PostgreSQL
-                manager.incremental_backup().await.map_err(Self::convert_error)?
+                manager
+                    .incremental_backup()
+                    .await
+                    .map_err(Self::convert_error)?
             }
         };
 
         let duration = start.elapsed();
         let metadata = Self::to_backup_metadata(&backup);
 
-        info!(
-            "Backup {} completed in {:?}",
-            backup.id, duration
-        );
+        info!("Backup {} completed in {:?}", backup.id, duration);
 
         Ok(BackupResult {
             backup_id: backup.id,
@@ -306,12 +333,12 @@ impl DataSource for PostgresDataSource {
 
         // For now, we need a backup_dir to list backups
         // In a full implementation, this would also query remote storage
-        
+
         // This is a simplified implementation - in practice, you'd want to:
         // 1. Check local catalog
         // 2. Query remote storage if configured
         // 3. Merge and deduplicate results
-        
+
         // Return empty list if no backup directory is specified
         // The actual listing is done through the CLI commands which have access to the backup_dir
         Ok(vec![])
@@ -329,10 +356,11 @@ impl DataSource for PostgresDataSource {
             DataSourceError::Configuration("backup_dir is required for restore".to_string())
         })?;
 
-        let pg_config = config.connection.as_ref().map(|c| {
-            Self::to_postgres_config(c, config.ssh_tunnel.as_ref())
-        }).unwrap_or_else(|| {
-            PostgresConfig {
+        let pg_config = config
+            .connection
+            .as_ref()
+            .map(|c| Self::to_postgres_config(c, config.ssh_tunnel.as_ref()))
+            .unwrap_or_else(|| PostgresConfig {
                 host: "localhost".to_string(),
                 port: 5432,
                 database: "postgres".to_string(),
@@ -347,11 +375,10 @@ impl DataSource for PostgresDataSource {
                 ssh_key_path: None,
                 ssh_local_port: None,
                 ssh_remote_port: None,
-            }
-        });
+            });
 
-        let mut manager = PostgresManager::new(pg_config, backup_dir)
-            .map_err(Self::convert_error)?;
+        let mut manager =
+            PostgresManager::new(pg_config, backup_dir).map_err(Self::convert_error)?;
 
         // Get backup info to determine type
         let backup = manager
@@ -360,22 +387,20 @@ impl DataSource for PostgresDataSource {
             .clone();
 
         let restore = match backup.backup_type {
-            crate::common::BackupType::Full => {
-                manager
-                    .restore_full_backup(&config.backup_id, config.target_dir.clone())
-                    .await
-                    .map_err(Self::convert_error)?
-            }
-            crate::common::BackupType::Snapshot => {
-                manager
-                    .restore_snapshot_backup(&config.backup_id, config.target_dir.clone())
-                    .await
-                    .map_err(Self::convert_error)?
-            }
+            crate::common::BackupType::Full => manager
+                .restore_full_backup(&config.backup_id, config.target_dir.clone())
+                .await
+                .map_err(Self::convert_error)?,
+            crate::common::BackupType::Snapshot => manager
+                .restore_snapshot_backup(&config.backup_id, config.target_dir.clone())
+                .await
+                .map_err(Self::convert_error)?,
             crate::common::BackupType::Incremental => {
                 // For incremental, we need the base backup ID
                 let base_id = backup.base_backup_id.ok_or_else(|| {
-                    DataSourceError::Restore("Incremental backup missing base_backup_id".to_string())
+                    DataSourceError::Restore(
+                        "Incremental backup missing base_backup_id".to_string(),
+                    )
                 })?;
                 manager
                     .restore_incremental_backup(&base_id, config.target_dir.clone())
@@ -392,10 +417,7 @@ impl DataSource for PostgresDataSource {
             crate::common::RestoreStatus::InProgress => RestoreStatus::InProgress,
         };
 
-        info!(
-            "Restore {} completed in {:?}",
-            restore.id, duration
-        );
+        info!("Restore {} completed in {:?}", restore.id, duration);
 
         Ok(RestoreResult {
             restore_id: restore.id,
@@ -442,8 +464,8 @@ impl DataSource for PostgresDataSource {
             ssh_remote_port: None,
         };
 
-        let mut manager = PostgresManager::new(pg_config, backup_dir)
-            .map_err(Self::convert_error)?;
+        let mut manager =
+            PostgresManager::new(pg_config, backup_dir).map_err(Self::convert_error)?;
 
         let restore = manager
             .restore_point_in_time(
@@ -462,10 +484,7 @@ impl DataSource for PostgresDataSource {
             crate::common::RestoreStatus::InProgress => RestoreStatus::InProgress,
         };
 
-        info!(
-            "PITR restore {} completed in {:?}",
-            restore.id, duration
-        );
+        info!("PITR restore {} completed in {:?}", restore.id, duration);
 
         Ok(RestoreResult {
             restore_id: restore.id,
@@ -488,24 +507,28 @@ impl DataSource for PostgresDataSource {
         let pg_config = Self::to_postgres_config(&config.connection, config.ssh_tunnel.as_ref());
         let conn_string = pg_config.connection_string();
 
-        let (client, connection) = match tokio_postgres::connect(&conn_string, tokio_postgres::NoTls).await {
-            Ok(result) => result,
-            Err(e) => {
-                return Ok(DataSourceStatus {
-                    connected: false,
-                    server_version: None,
-                    accepting_connections: false,
-                    state: Some("disconnected".to_string()),
-                    active_connections: None,
-                    database_size_bytes: None,
-                    extra: {
-                        let mut extra = HashMap::new();
-                        extra.insert("error".to_string(), serde_json::Value::String(e.to_string()));
-                        extra
-                    },
-                });
-            }
-        };
+        let (client, connection) =
+            match tokio_postgres::connect(&conn_string, tokio_postgres::NoTls).await {
+                Ok(result) => result,
+                Err(e) => {
+                    return Ok(DataSourceStatus {
+                        connected: false,
+                        server_version: None,
+                        accepting_connections: false,
+                        state: Some("disconnected".to_string()),
+                        active_connections: None,
+                        database_size_bytes: None,
+                        extra: {
+                            let mut extra = HashMap::new();
+                            extra.insert(
+                                "error".to_string(),
+                                serde_json::Value::String(e.to_string()),
+                            );
+                            extra
+                        },
+                    });
+                }
+            };
 
         // Spawn connection handler
         tokio::spawn(async move {
@@ -531,7 +554,10 @@ impl DataSource for PostgresDataSource {
         let state = if is_recovery { "replica" } else { "primary" };
 
         let mut extra = HashMap::new();
-        extra.insert("is_replica".to_string(), serde_json::Value::Bool(is_recovery));
+        extra.insert(
+            "is_replica".to_string(),
+            serde_json::Value::Bool(is_recovery),
+        );
 
         // Get active connections if requested
         let active_connections = if config.include_metrics {
@@ -551,10 +577,7 @@ impl DataSource for PostgresDataSource {
         let database_size_bytes = if config.include_metrics {
             if let Some(db) = &config.connection.database {
                 let size_row = client
-                    .query_one(
-                        "SELECT pg_database_size($1)",
-                        &[db],
-                    )
+                    .query_one("SELECT pg_database_size($1)", &[db])
                     .await
                     .ok();
                 size_row.map(|row| row.get::<_, i64>(0) as u64)
@@ -603,7 +626,11 @@ impl DataSource for PostgresDataSource {
 
     fn capabilities(&self) -> DataSourceCapabilities {
         DataSourceCapabilities {
-            backup_types: vec![BackupType::Full, BackupType::Incremental, BackupType::Snapshot],
+            backup_types: vec![
+                BackupType::Full,
+                BackupType::Incremental,
+                BackupType::Snapshot,
+            ],
             supports_pitr: true,
             supports_incremental: true,
             supports_logical_backup: true,
@@ -638,7 +665,7 @@ mod tests {
     fn test_datasource_capabilities() {
         let ds = PostgresDataSource::new();
         let caps = ds.capabilities();
-        
+
         assert!(caps.supports_pitr);
         assert!(caps.supports_incremental);
         assert!(caps.supports_logical_backup);

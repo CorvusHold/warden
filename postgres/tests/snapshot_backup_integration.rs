@@ -283,8 +283,9 @@ async fn snapshot_backup_uploads_metadata_to_s3() {
     // Verify remote_path is in output
     assert!(
         stdout.contains("remote_path="),
-        "Output should contain remote_path= when using remote storage, got: {}",
-        stdout
+        "Output should contain remote_path= when using remote storage, got: {} stderr: {}",
+        stdout,
+        stderr
     );
 
     // Verify objects were uploaded to S3

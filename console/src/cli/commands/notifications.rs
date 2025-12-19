@@ -97,7 +97,9 @@ async fn list_channels(format: &str) -> anyhow::Result<()> {
         if notification_config.channels.is_empty() {
             println!("No notification channels configured.");
             println!();
-            println!("To configure notifications, add a 'notifications' section to your warden.toml:");
+            println!(
+                "To configure notifications, add a 'notifications' section to your warden.toml:"
+            );
             println!();
             println!("  [notifications]");
             println!("  [[notifications.channels]]");
@@ -119,7 +121,11 @@ async fn list_channels(format: &str) -> anyhow::Result<()> {
                 common::notifications::ChannelType::Email(_) => "email",
             };
 
-            let status = if channel.enabled { "✓ enabled" } else { "✗ disabled" };
+            let status = if channel.enabled {
+                "✓ enabled"
+            } else {
+                "✗ disabled"
+            };
 
             println!("  {} [{}] {}", channel.name, channel_type, status);
 
@@ -194,18 +200,40 @@ async fn validate_config() -> anyhow::Result<()> {
             println!("✓ Configuration is valid.");
             println!();
             println!("Summary:");
-            println!("  - {} channel(s) configured", notification_config.channels.len());
+            println!(
+                "  - {} channel(s) configured",
+                notification_config.channels.len()
+            );
 
-            let enabled_count = notification_config.channels.iter().filter(|c| c.enabled).count();
+            let enabled_count = notification_config
+                .channels
+                .iter()
+                .filter(|c| c.enabled)
+                .count();
             println!("  - {} channel(s) enabled", enabled_count);
 
             println!();
             println!("Default settings:");
-            println!("  - Notify on failure: {}", notification_config.defaults.on_failure);
-            println!("  - Notify on success: {}", notification_config.defaults.on_success);
-            println!("  - Include details: {}", notification_config.defaults.include_details);
-            println!("  - Retry attempts: {}", notification_config.defaults.retry_attempts);
-            println!("  - Retry delay: {}s", notification_config.defaults.retry_delay_secs);
+            println!(
+                "  - Notify on failure: {}",
+                notification_config.defaults.on_failure
+            );
+            println!(
+                "  - Notify on success: {}",
+                notification_config.defaults.on_success
+            );
+            println!(
+                "  - Include details: {}",
+                notification_config.defaults.include_details
+            );
+            println!(
+                "  - Retry attempts: {}",
+                notification_config.defaults.retry_attempts
+            );
+            println!(
+                "  - Retry delay: {}s",
+                notification_config.defaults.retry_delay_secs
+            );
         }
         Err(errors) => {
             println!("✗ Configuration has {} error(s):", errors.len());
@@ -233,11 +261,26 @@ async fn show_config(format: &str) -> anyhow::Result<()> {
         println!();
 
         println!("Defaults:");
-        println!("  Notify on failure: {}", notification_config.defaults.on_failure);
-        println!("  Notify on success: {}", notification_config.defaults.on_success);
-        println!("  Include details: {}", notification_config.defaults.include_details);
-        println!("  Retry attempts: {}", notification_config.defaults.retry_attempts);
-        println!("  Retry delay: {}s", notification_config.defaults.retry_delay_secs);
+        println!(
+            "  Notify on failure: {}",
+            notification_config.defaults.on_failure
+        );
+        println!(
+            "  Notify on success: {}",
+            notification_config.defaults.on_success
+        );
+        println!(
+            "  Include details: {}",
+            notification_config.defaults.include_details
+        );
+        println!(
+            "  Retry attempts: {}",
+            notification_config.defaults.retry_attempts
+        );
+        println!(
+            "  Retry delay: {}s",
+            notification_config.defaults.retry_delay_secs
+        );
         println!();
 
         if notification_config.channels.is_empty() {
@@ -264,7 +307,10 @@ async fn show_config(format: &str) -> anyhow::Result<()> {
                         if sl.webhook_url.is_some() {
                             println!("    Webhook URL: (configured)");
                         } else if sl.webhook_url_env.is_some() {
-                            println!("    Webhook URL: env:{}", sl.webhook_url_env.as_ref().unwrap());
+                            println!(
+                                "    Webhook URL: env:{}",
+                                sl.webhook_url_env.as_ref().unwrap()
+                            );
                         }
                         if let Some(ref ch) = sl.channel {
                             println!("    Channel: {}", ch);

@@ -110,7 +110,11 @@ impl NotificationManager {
 
         // Send to each matching channel
         for channel in matching_channels {
-            if let Some((_, provider)) = self.providers.iter().find(|(name, _)| name == &channel.name) {
+            if let Some((_, provider)) = self
+                .providers
+                .iter()
+                .find(|(name, _)| name == &channel.name)
+            {
                 let result = self
                     .send_with_retry(provider.clone(), event, &self.config.defaults)
                     .await;
@@ -213,7 +217,10 @@ impl NotificationManager {
 
         match provider.test().await {
             Ok(()) => {
-                info!("Test notification sent successfully to channel '{}'", channel_name);
+                info!(
+                    "Test notification sent successfully to channel '{}'",
+                    channel_name
+                );
                 Ok(NotificationResult {
                     channel: channel_name.to_string(),
                     success: true,
@@ -222,7 +229,10 @@ impl NotificationManager {
                 })
             }
             Err(e) => {
-                error!("Test notification to channel '{}' failed: {}", channel_name, e);
+                error!(
+                    "Test notification to channel '{}' failed: {}",
+                    channel_name, e
+                );
                 Ok(NotificationResult {
                     channel: channel_name.to_string(),
                     success: false,

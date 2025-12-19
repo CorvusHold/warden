@@ -305,7 +305,10 @@ impl NotificationConfig {
             match &channel.channel_type {
                 ChannelType::Webhook(config) => {
                     if config.url.is_empty() {
-                        errors.push(format!("Channel '{}': webhook URL is required", channel.name));
+                        errors.push(format!(
+                            "Channel '{}': webhook URL is required",
+                            channel.name
+                        ));
                     }
                 }
                 ChannelType::Slack(config) => {
@@ -318,10 +321,7 @@ impl NotificationConfig {
                 }
                 ChannelType::Email(config) => {
                     if config.smtp_host.is_empty() {
-                        errors.push(format!(
-                            "Channel '{}': SMTP host is required",
-                            channel.name
-                        ));
+                        errors.push(format!("Channel '{}': SMTP host is required", channel.name));
                     }
                     if config.from.is_empty() {
                         errors.push(format!(
@@ -341,10 +341,7 @@ impl NotificationConfig {
             // Validate event patterns
             for pattern in &channel.events {
                 if pattern.is_empty() {
-                    errors.push(format!(
-                        "Channel '{}': empty event pattern",
-                        channel.name
-                    ));
+                    errors.push(format!("Channel '{}': empty event pattern", channel.name));
                 }
             }
         }
@@ -371,10 +368,7 @@ mod tests {
                 timeout_secs: 30,
                 method: "POST".to_string(),
             }),
-            events: vec![
-                "backup.failed".to_string(),
-                "ha.*".to_string(),
-            ],
+            events: vec!["backup.failed".to_string(), "ha.*".to_string()],
             enabled: true,
         };
 
@@ -445,19 +439,17 @@ mod tests {
     #[test]
     fn test_config_validation() {
         let config = NotificationConfig {
-            channels: vec![
-                NotificationChannel {
-                    name: "valid-webhook".to_string(),
-                    channel_type: ChannelType::Webhook(WebhookChannelConfig {
-                        url: "http://example.com".to_string(),
-                        headers: Default::default(),
-                        timeout_secs: 30,
-                        method: "POST".to_string(),
-                    }),
-                    events: vec!["backup.*".to_string()],
-                    enabled: true,
-                },
-            ],
+            channels: vec![NotificationChannel {
+                name: "valid-webhook".to_string(),
+                channel_type: ChannelType::Webhook(WebhookChannelConfig {
+                    url: "http://example.com".to_string(),
+                    headers: Default::default(),
+                    timeout_secs: 30,
+                    method: "POST".to_string(),
+                }),
+                events: vec!["backup.*".to_string()],
+                enabled: true,
+            }],
             defaults: NotificationDefaults::default(),
         };
 

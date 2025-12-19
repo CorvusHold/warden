@@ -45,7 +45,7 @@ impl PgTestContainer {
     fn new(temp_dir: &TempDir) -> Result<Self, String> {
         let data_dir = temp_dir.path().join("pgdata");
         let wal_archive_dir = temp_dir.path().join("wal_archive");
-        
+
         fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
         fs::create_dir_all(&wal_archive_dir).map_err(|e| e.to_string())?;
 
@@ -58,17 +58,27 @@ impl PgTestContainer {
                 "run",
                 "-d",
                 "--rm",
-                "-e", "POSTGRES_PASSWORD=testpass",
-                "-e", "POSTGRES_USER=testuser",
-                "-e", "POSTGRES_DB=testdb",
-                "-p", &format!("{}:5432", port),
-                "-v", &format!("{}:/var/lib/postgresql/data", data_dir.display()),
-                "-v", &format!("{}:/wal_archive", wal_archive_dir.display()),
+                "-e",
+                "POSTGRES_PASSWORD=testpass",
+                "-e",
+                "POSTGRES_USER=testuser",
+                "-e",
+                "POSTGRES_DB=testdb",
+                "-p",
+                &format!("{}:5432", port),
+                "-v",
+                &format!("{}:/var/lib/postgresql/data", data_dir.display()),
+                "-v",
+                &format!("{}:/wal_archive", wal_archive_dir.display()),
                 "postgres:15",
-                "-c", "wal_level=replica",
-                "-c", "archive_mode=on",
-                "-c", "archive_command=cp %p /wal_archive/%f",
-                "-c", "max_wal_senders=3",
+                "-c",
+                "wal_level=replica",
+                "-c",
+                "archive_mode=on",
+                "-c",
+                "archive_command=cp %p /wal_archive/%f",
+                "-c",
+                "max_wal_senders=3",
             ])
             .output()
             .map_err(|e| format!("Failed to start container: {}", e))?;
@@ -100,9 +110,12 @@ impl PgTestContainer {
                 "exec",
                 &self.container_id,
                 "psql",
-                "-U", "testuser",
-                "-d", "testdb",
-                "-c", sql,
+                "-U",
+                "testuser",
+                "-d",
+                "testdb",
+                "-c",
+                sql,
             ])
             .output()
             .map_err(|e| format!("Failed to execute SQL: {}", e))?;
@@ -149,16 +162,28 @@ fn test_discover_local_wal_segments() {
     fs::create_dir_all(&wal_dir).unwrap();
 
     // Create some mock WAL files
-    fs::write(wal_dir.join("000000010000000000000001"), vec![0u8; 16 * 1024 * 1024]).unwrap();
-    fs::write(wal_dir.join("000000010000000000000002"), vec![0u8; 16 * 1024 * 1024]).unwrap();
-    fs::write(wal_dir.join("000000010000000000000003"), vec![0u8; 16 * 1024 * 1024]).unwrap();
+    fs::write(
+        wal_dir.join("000000010000000000000001"),
+        vec![0u8; 16 * 1024 * 1024],
+    )
+    .unwrap();
+    fs::write(
+        wal_dir.join("000000010000000000000002"),
+        vec![0u8; 16 * 1024 * 1024],
+    )
+    .unwrap();
+    fs::write(
+        wal_dir.join("000000010000000000000003"),
+        vec![0u8; 16 * 1024 * 1024],
+    )
+    .unwrap();
 
     let mut inventory = WalInventory::new();
     let count = inventory.discover_local(&wal_dir).unwrap();
 
     assert_eq!(count, 3);
     assert_eq!(inventory.segments().len(), 3);
-    
+
     let coverage = inventory.calculate_coverage();
     assert_eq!(coverage.segment_count, 3);
     assert!(coverage.gaps.is_empty());
@@ -194,7 +219,8 @@ async fn test_recovery_plan_with_mock_backup() {
     fs::write(
         backup_dir.join("backup_catalog.json"),
         serde_json::to_string_pretty(&catalog).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Create the backup directory with some content
     let backup_path = backup_dir.join("backup_550e8400");
@@ -208,21 +234,23 @@ async fn test_recovery_plan_with_mock_backup() {
     fs::write(wal_dir.join("000000010000000000000002"), vec![0u8; 1024]).unwrap();
 
     // Create planner
-    let planner = PitrPlanner::new(backup_dir)
-        .with_wal_archive_dir(wal_dir);
+    let planner = PitrPlanner::new(backup_dir).with_wal_archive_dir(wal_dir);
 
     // Plan recovery to 1 hour ago (within the backup window)
     let target_time = Utc::now() - Duration::hours(1);
     let target = RecoveryTarget::Time(target_time);
 
     let result = planner.plan_recovery(target).await;
-    
+
     // The plan should succeed (we have a backup before the target time)
     assert!(result.is_ok(), "Plan should succeed: {:?}", result.err());
-    
+
     let plan = result.unwrap();
     assert!(plan.validation.is_valid);
-    assert_eq!(plan.base_backup.id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+    assert_eq!(
+        plan.base_backup.id.to_string(),
+        "550e8400-e29b-41d4-a716-446655440000"
+    );
 }
 
 /// Test that recovery fails when target is before backup
@@ -255,7 +283,8 @@ async fn test_recovery_fails_before_backup() {
     fs::write(
         backup_dir.join("backup_catalog.json"),
         serde_json::to_string_pretty(&catalog).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     fs::create_dir_all(backup_dir.join("backup1")).unwrap();
 
@@ -266,7 +295,7 @@ async fn test_recovery_fails_before_backup() {
     let target = RecoveryTarget::Time(target_time);
 
     let result = planner.plan_recovery(target).await;
-    
+
     // Should fail because target is before backup
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
@@ -276,7 +305,9 @@ async fn test_recovery_fails_before_backup() {
 /// Test executor prepares target directory correctly
 #[tokio::test]
 async fn test_executor_prepares_directory() {
-    use postgres::pitr::{PitrExecutor, RecoveryPlan, RecoveryTarget, BaseBackupInfo, RecoveryWindow, PlanValidation};
+    use postgres::pitr::{
+        BaseBackupInfo, PitrExecutor, PlanValidation, RecoveryPlan, RecoveryTarget, RecoveryWindow,
+    };
     use uuid::Uuid;
 
     let temp_dir = TempDir::new().unwrap();
@@ -314,16 +345,19 @@ async fn test_executor_prepares_directory() {
         estimated_download_bytes: 0,
     };
 
-    let executor = PitrExecutor::new(plan, target_dir.clone())
-        .with_backup_dir(backup_dir);
+    let executor = PitrExecutor::new(plan, target_dir.clone()).with_backup_dir(backup_dir);
 
     // Execute should work (though it won't start PG without auto_start)
     let result = executor.execute().await;
-    assert!(result.is_ok(), "Executor should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Executor should succeed: {:?}",
+        result.err()
+    );
 
     // Verify target directory was created
     assert!(target_dir.exists());
-    
+
     // Verify PG_VERSION was copied
     assert!(target_dir.join("PG_VERSION").exists());
 }
@@ -335,7 +369,7 @@ fn test_full_pitr_with_docker() {
     require_docker!();
 
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Start PostgreSQL container
     let container = match PgTestContainer::new(&temp_dir) {
         Ok(c) => c,
@@ -347,8 +381,10 @@ fn test_full_pitr_with_docker() {
 
     // Create test table and insert initial data
     container.exec_sql("CREATE TABLE test_data (id SERIAL PRIMARY KEY, value TEXT, created_at TIMESTAMP DEFAULT NOW());").unwrap();
-    container.exec_sql("INSERT INTO test_data (value) VALUES ('initial');").unwrap();
-    
+    container
+        .exec_sql("INSERT INTO test_data (value) VALUES ('initial');")
+        .unwrap();
+
     // Force a checkpoint to archive WAL
     container.checkpoint().unwrap();
 
@@ -357,7 +393,9 @@ fn test_full_pitr_with_docker() {
     std::thread::sleep(std::time::Duration::from_secs(1));
 
     // Insert more data
-    container.exec_sql("INSERT INTO test_data (value) VALUES ('after_t1');").unwrap();
+    container
+        .exec_sql("INSERT INTO test_data (value) VALUES ('after_t1');")
+        .unwrap();
     container.checkpoint().unwrap();
 
     // Record timestamp T2
@@ -365,11 +403,15 @@ fn test_full_pitr_with_docker() {
     std::thread::sleep(std::time::Duration::from_secs(1));
 
     // Insert even more data
-    container.exec_sql("INSERT INTO test_data (value) VALUES ('after_t2');").unwrap();
+    container
+        .exec_sql("INSERT INTO test_data (value) VALUES ('after_t2');")
+        .unwrap();
     container.checkpoint().unwrap();
 
     // Verify current state
-    let result = container.exec_sql("SELECT COUNT(*) FROM test_data;").unwrap();
+    let result = container
+        .exec_sql("SELECT COUNT(*) FROM test_data;")
+        .unwrap();
     assert!(result.contains("3"), "Should have 3 rows");
 
     // Verify WAL files were archived
@@ -377,7 +419,7 @@ fn test_full_pitr_with_docker() {
         .unwrap()
         .filter_map(|e| e.ok())
         .collect();
-    
+
     println!("Archived WAL files: {}", wal_files.len());
     assert!(!wal_files.is_empty(), "Should have archived WAL files");
 

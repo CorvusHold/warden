@@ -50,7 +50,8 @@ impl WalSegment {
             || base_name.contains(".backup.");
 
         // Parse the segment name
-        let segment_regex = Regex::new(r"^([0-9A-Fa-f]{8})([0-9A-Fa-f]{8})([0-9A-Fa-f]{8})").ok()?;
+        let segment_regex =
+            Regex::new(r"^([0-9A-Fa-f]{8})([0-9A-Fa-f]{8})([0-9A-Fa-f]{8})").ok()?;
 
         if let Some(caps) = segment_regex.captures(base_name) {
             let timeline = u32::from_str_radix(&caps[1], 16).ok()?;
@@ -200,16 +201,8 @@ impl WalInventory {
 
     /// Returns the PITR window (earliest to latest recoverable time)
     pub fn pitr_window(&self) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
-        let earliest = self
-            .segments
-            .iter()
-            .filter_map(|s| s.last_modified)
-            .min()?;
-        let latest = self
-            .segments
-            .iter()
-            .filter_map(|s| s.last_modified)
-            .max()?;
+        let earliest = self.segments.iter().filter_map(|s| s.last_modified).min()?;
+        let latest = self.segments.iter().filter_map(|s| s.last_modified).max()?;
         Some((earliest, latest))
     }
 
@@ -229,10 +222,7 @@ impl WalInventory {
                 let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 let metadata = entry.metadata()?;
                 let size = metadata.len();
-                let modified = metadata
-                    .modified()
-                    .ok()
-                    .map(DateTime::<Utc>::from);
+                let modified = metadata.modified().ok().map(DateTime::<Utc>::from);
 
                 if let Some(mut segment) = WalSegment::from_filename(
                     filename,

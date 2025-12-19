@@ -7,7 +7,9 @@ use anyhow::{anyhow, Result};
 use common::config::{ClusterConfig, ClusterConfigError, NodeRole};
 use log::info;
 use serde::Serialize;
+use std::convert::Infallible;
 use std::path::Path;
+use std::str::FromStr;
 
 /// Output format for cluster commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,12 +18,14 @@ pub enum OutputFormat {
     Json,
 }
 
-impl OutputFormat {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for OutputFormat {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "json" => OutputFormat::Json,
             _ => OutputFormat::Table,
-        }
+        })
     }
 }
 
@@ -156,7 +160,10 @@ pub fn format_validation_result(result: &ValidationResult, format: OutputFormat)
             }
 
             output.push_str("Summary:\n");
-            output.push_str(&format!("  Clusters:          {}\n", result.summary.clusters));
+            output.push_str(&format!(
+                "  Clusters:          {}\n",
+                result.summary.clusters
+            ));
             output.push_str(&format!("  Nodes:             {}\n", result.summary.nodes));
             output.push_str(&format!(
                 "  Protection Groups: {}\n",
@@ -353,7 +360,11 @@ pub fn format_node_list(list: &NodeList, format: OutputFormat) -> String {
                     node.port,
                     node.role,
                     if node.has_ssh { "✓" } else { "-" },
-                    if node.has_connection_config { "✓" } else { "-" },
+                    if node.has_connection_config {
+                        "✓"
+                    } else {
+                        "-"
+                    },
                 ));
             }
 

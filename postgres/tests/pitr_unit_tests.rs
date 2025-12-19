@@ -1,9 +1,7 @@
 //! Unit tests for PITR functionality.
 
 use chrono::{Duration, Timelike, Utc};
-use postgres::pitr::{
-    PitrPlanner, RecoveryTarget, WalInventory, WalSegmentInfo,
-};
+use postgres::pitr::{PitrPlanner, RecoveryTarget, WalInventory, WalSegmentInfo};
 use tempfile::TempDir;
 
 /// Test parsing of recovery targets
@@ -14,7 +12,7 @@ mod recovery_target_tests {
     fn test_parse_rfc3339_timestamp() {
         let target = RecoveryTarget::parse("2025-01-15T10:30:00Z").unwrap();
         assert!(target.is_time_based());
-        
+
         let time = target.as_time().unwrap();
         assert_eq!(time.hour(), 10);
         assert_eq!(time.minute(), 30);
@@ -36,7 +34,7 @@ mod recovery_target_tests {
     fn test_parse_latest() {
         let target = RecoveryTarget::parse("latest").unwrap();
         assert!(matches!(target, RecoveryTarget::Latest));
-        
+
         let target_upper = RecoveryTarget::parse("LATEST").unwrap();
         assert!(matches!(target_upper, RecoveryTarget::Latest));
     }
@@ -60,7 +58,8 @@ mod wal_segment_tests {
             16 * 1024 * 1024,
             None,
             false,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(seg.timeline_id, 1);
         assert_eq!(seg.log_id, 0);
@@ -77,7 +76,8 @@ mod wal_segment_tests {
             1024 * 1024,
             None,
             true,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(seg.is_compressed);
         assert_eq!(seg.timeline_id, 1);
@@ -91,7 +91,8 @@ mod wal_segment_tests {
             1024 * 1024,
             None,
             true,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(seg.is_compressed);
     }
@@ -104,7 +105,8 @@ mod wal_segment_tests {
             1024 * 1024,
             None,
             false,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(seg.timeline_id, 1);
     }
@@ -112,13 +114,10 @@ mod wal_segment_tests {
     #[test]
     fn test_invalid_wal_filename() {
         // Too short
-        assert!(WalSegmentInfo::parse_filename(
-            "00000001",
-            "/path".to_string(),
-            0,
-            None,
-            false,
-        ).is_none());
+        assert!(
+            WalSegmentInfo::parse_filename("00000001", "/path".to_string(), 0, None, false,)
+                .is_none()
+        );
 
         // Invalid characters
         assert!(WalSegmentInfo::parse_filename(
@@ -127,7 +126,8 @@ mod wal_segment_tests {
             0,
             None,
             false,
-        ).is_none());
+        )
+        .is_none());
     }
 
     #[test]
@@ -138,7 +138,8 @@ mod wal_segment_tests {
             16 * 1024 * 1024,
             None,
             false,
-        ).unwrap();
+        )
+        .unwrap();
 
         let (start, end) = seg.lsn_range();
         assert_eq!(start, 16 * 1024 * 1024); // Segment 1 starts at 16MB
@@ -157,16 +158,28 @@ mod wal_segment_tests {
     fn test_wal_segment_ordering() {
         let seg1 = WalSegmentInfo::parse_filename(
             "000000010000000000000001",
-            "/path".to_string(), 0, None, false,
-        ).unwrap();
+            "/path".to_string(),
+            0,
+            None,
+            false,
+        )
+        .unwrap();
         let seg2 = WalSegmentInfo::parse_filename(
             "000000010000000000000002",
-            "/path".to_string(), 0, None, false,
-        ).unwrap();
+            "/path".to_string(),
+            0,
+            None,
+            false,
+        )
+        .unwrap();
         let seg3 = WalSegmentInfo::parse_filename(
             "000000020000000000000001",
-            "/path".to_string(), 0, None, false,
-        ).unwrap();
+            "/path".to_string(),
+            0,
+            None,
+            false,
+        )
+        .unwrap();
 
         assert!(seg1 < seg2);
         assert!(seg2 < seg3);
@@ -180,8 +193,14 @@ mod wal_inventory_tests {
 
     fn create_segment(timeline: u32, log: u32, seg: u32) -> WalSegmentInfo {
         let filename = format!("{:08X}{:08X}{:08X}", timeline, log, seg);
-        WalSegmentInfo::parse_filename(&filename, "/test".to_string(), 16 * 1024 * 1024, None, false)
-            .unwrap()
+        WalSegmentInfo::parse_filename(
+            &filename,
+            "/test".to_string(),
+            16 * 1024 * 1024,
+            None,
+            false,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -274,7 +293,7 @@ mod wal_inventory_tests {
     fn test_empty_inventory_coverage() {
         let inv = WalInventory::new();
         let coverage = inv.calculate_coverage();
-        
+
         assert_eq!(coverage.segment_count, 0);
         assert!(coverage.earliest_lsn.is_none());
         assert!(coverage.latest_lsn.is_none());
@@ -289,7 +308,7 @@ mod wal_inventory_tests {
 
         // LSN within segment 1 (16MB - 32MB)
         assert!(inv.covers_lsn("0/1000000")); // 16MB
-        
+
         // LSN before all segments
         assert!(!inv.covers_lsn("0/100")); // Very early
     }
@@ -302,7 +321,7 @@ mod recovery_plan_tests {
 
     fn setup_test_backup_dir() -> TempDir {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create a mock backup catalog
         let catalog = serde_json::json!({
             "backups": [
@@ -324,7 +343,8 @@ mod recovery_plan_tests {
         fs::write(
             temp_dir.path().join("backup_catalog.json"),
             serde_json::to_string_pretty(&catalog).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Create the backup directory
         fs::create_dir_all(temp_dir.path().join("backup1")).unwrap();
@@ -343,7 +363,7 @@ mod recovery_plan_tests {
     async fn test_list_recovery_options_empty() {
         let temp_dir = TempDir::new().unwrap();
         let planner = PitrPlanner::new(temp_dir.path().to_path_buf());
-        
+
         let options = planner.list_recovery_options().await.unwrap();
         assert!(options.available_backups.is_empty());
         assert_eq!(options.wal_coverage.segment_count, 0);
@@ -364,25 +384,24 @@ mod validation_tests {
 
     #[test]
     fn test_invalid_plan() {
-        let validation = PlanValidation::invalid(vec!["Error 1".to_string(), "Error 2".to_string()]);
+        let validation =
+            PlanValidation::invalid(vec!["Error 1".to_string(), "Error 2".to_string()]);
         assert!(!validation.is_valid);
         assert_eq!(validation.errors.len(), 2);
     }
 
     #[test]
     fn test_add_warning() {
-        let validation = PlanValidation::valid()
-            .with_warning("Warning 1".to_string());
-        
+        let validation = PlanValidation::valid().with_warning("Warning 1".to_string());
+
         assert!(validation.is_valid);
         assert_eq!(validation.warnings.len(), 1);
     }
 
     #[test]
     fn test_add_error() {
-        let validation = PlanValidation::valid()
-            .with_error("Error 1".to_string());
-        
+        let validation = PlanValidation::valid().with_error("Error 1".to_string());
+
         assert!(!validation.is_valid);
         assert_eq!(validation.errors.len(), 1);
     }

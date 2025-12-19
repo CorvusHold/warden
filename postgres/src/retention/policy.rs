@@ -101,8 +101,7 @@ pub struct SafetySettings {
 }
 
 /// Scope of the retention policy
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RetentionScope {
     /// Apply to specific databases (empty = all)
     pub databases: Vec<String>,
@@ -155,7 +154,6 @@ impl Default for SafetySettings {
         }
     }
 }
-
 
 impl PitrRetentionPolicy {
     /// Creates a new policy with sensible defaults

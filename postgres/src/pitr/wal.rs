@@ -50,10 +50,7 @@ impl WalInventory {
             };
 
             let metadata = entry.metadata().map_err(PostgresError::Io)?;
-            let last_modified = metadata
-                .modified()
-                .ok()
-                .map(DateTime::<Utc>::from);
+            let last_modified = metadata.modified().ok().map(DateTime::<Utc>::from);
 
             if let Some(segment) = WalSegmentInfo::parse_filename(
                 filename,
@@ -144,14 +141,8 @@ impl WalInventory {
         let (_, latest_lsn_val) = last.lsn_range();
 
         // Find time range from modification times
-        let earliest_time = segments
-            .iter()
-            .filter_map(|s| s.last_modified)
-            .min();
-        let latest_time = segments
-            .iter()
-            .filter_map(|s| s.last_modified)
-            .max();
+        let earliest_time = segments.iter().filter_map(|s| s.last_modified).min();
+        let latest_time = segments.iter().filter_map(|s| s.last_modified).max();
 
         // Calculate total size
         let total_size_bytes: u64 = segments.iter().map(|s| s.size_bytes).sum();
@@ -189,7 +180,7 @@ impl WalInventory {
             let mut prev_key: Option<(u32, u32, u32)> = None;
             for (key, _seg) in &timeline_segments {
                 let (t, log, seg) = **key;
-                
+
                 if let Some((_, prev_log, prev_seg)) = prev_key {
                     // Check for gap
                     let expected_next = if prev_seg == 0xFF {
@@ -199,13 +190,8 @@ impl WalInventory {
                     };
 
                     if (log, seg) != expected_next {
-                        let missing_count = self.count_missing_segments(
-                            timeline,
-                            prev_log,
-                            prev_seg,
-                            log,
-                            seg,
-                        );
+                        let missing_count =
+                            self.count_missing_segments(timeline, prev_log, prev_seg, log, seg);
 
                         if missing_count > 0 {
                             gaps.push(WalGap {
@@ -244,7 +230,7 @@ impl WalInventory {
         // Simplified calculation - assumes 256 segments per log
         let start_pos = (start_log as usize) * 256 + (start_seg as usize);
         let end_pos = (end_log as usize) * 256 + (end_seg as usize);
-        
+
         if end_pos > start_pos + 1 {
             end_pos - start_pos - 1
         } else {
@@ -264,12 +250,14 @@ impl WalInventory {
             .ok_or_else(|| PostgresError::WalError(format!("Invalid start LSN: {}", start_lsn)))?;
 
         // Determine the end point
-        let end = if let Some(lsn) = target_lsn {
-            Some(WalSegmentInfo::parse_lsn(lsn)
-                .ok_or_else(|| PostgresError::WalError(format!("Invalid target LSN: {}", lsn)))?)
-        } else {
-            None
-        };
+        let end =
+            if let Some(lsn) = target_lsn {
+                Some(WalSegmentInfo::parse_lsn(lsn).ok_or_else(|| {
+                    PostgresError::WalError(format!("Invalid target LSN: {}", lsn))
+                })?)
+            } else {
+                None
+            };
 
         let mut result = Vec::new();
         let mut found_start = false;
@@ -322,7 +310,10 @@ impl WalInventory {
     }
 
     /// Validate that a sequence of segments is continuous (no gaps).
-    fn validate_segment_continuity(&self, segments: &[WalSegmentInfo]) -> Result<(), PostgresError> {
+    fn validate_segment_continuity(
+        &self,
+        segments: &[WalSegmentInfo],
+    ) -> Result<(), PostgresError> {
         if segments.len() < 2 {
             return Ok(());
         }
@@ -362,11 +353,9 @@ impl WalInventory {
     /// Check if WAL coverage includes a specific time.
     pub fn covers_time(&self, target_time: DateTime<Utc>) -> bool {
         let coverage = self.calculate_coverage();
-        
+
         match (coverage.earliest_time, coverage.latest_time) {
-            (Some(earliest), Some(latest)) => {
-                target_time >= earliest && target_time <= latest
-            }
+            (Some(earliest), Some(latest)) => target_time >= earliest && target_time <= latest,
             _ => false,
         }
     }
@@ -414,8 +403,14 @@ mod tests {
 
     fn create_test_segment(timeline: u32, log: u32, seg: u32) -> WalSegmentInfo {
         let filename = format!("{:08X}{:08X}{:08X}", timeline, log, seg);
-        WalSegmentInfo::parse_filename(&filename, "/test".to_string(), 16 * 1024 * 1024, None, false)
-            .unwrap()
+        WalSegmentInfo::parse_filename(
+            &filename,
+            "/test".to_string(),
+            16 * 1024 * 1024,
+            None,
+            false,
+        )
+        .unwrap()
     }
 
     #[test]

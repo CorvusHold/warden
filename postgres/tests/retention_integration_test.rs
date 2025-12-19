@@ -69,7 +69,11 @@ fn create_test_backup_dir(
     });
 
     let metadata_path = backup_dir.join("backup_metadata.json");
-    std::fs::write(&metadata_path, serde_json::to_string_pretty(&metadata).unwrap()).unwrap();
+    std::fs::write(
+        &metadata_path,
+        serde_json::to_string_pretty(&metadata).unwrap(),
+    )
+    .unwrap();
 
     // Create a dummy data file
     let data_path = backup_dir.join("data.dump");
@@ -79,7 +83,8 @@ fn create_test_backup_dir(
 }
 
 /// Create a test WAL segment file
-fn create_test_wal_segment(wal_dir: &PathBuf, segment_name: &str, days_ago: i64) {
+#[allow(dead_code)]
+fn create_test_wal_segment(wal_dir: &PathBuf, segment_name: &str, _days_ago: i64) {
     std::fs::create_dir_all(wal_dir).unwrap();
     let segment_path = wal_dir.join(segment_name);
     std::fs::write(&segment_path, "dummy wal data").unwrap();
@@ -120,6 +125,7 @@ fn test_local_retention_plan() {
         endpoint: None,
         access_key: None,
         secret_key: None,
+        multi_tenant: Default::default(),
     };
 
     let retention_opts = RetentionOptions {
@@ -175,7 +181,11 @@ fn test_retention_init_presets() {
         let output_path = temp_dir.path().join(format!("{}_policy.json", preset));
         let result = retention_init(&output_path, preset, "json");
         assert!(result.is_ok(), "Failed for preset: {}", preset);
-        assert!(output_path.exists(), "File not created for preset: {}", preset);
+        assert!(
+            output_path.exists(),
+            "File not created for preset: {}",
+            preset
+        );
     }
 }
 
@@ -259,6 +269,7 @@ fn test_remote_retention_plan() {
         endpoint: config.endpoint,
         access_key: config.access_key,
         secret_key: config.secret_key,
+        multi_tenant: Default::default(),
     };
 
     let retention_opts = RetentionOptions {

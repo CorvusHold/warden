@@ -28,6 +28,7 @@ tar = "0.4.44"
 flate2 = "1.1.5"
 regex = "1.12.2"
 clap = { version = "4.5.50", features = ["derive", "env"] }
+dialoguer = { version = "0.11", features = ["fuzzy-select"] }
 storage = { path = "../storage" }
 serial_test = "3.2.0"
 common = { path = "../common" }

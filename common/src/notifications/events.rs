@@ -1,7 +1,9 @@
 //! Standard event types for Warden operations.
 
 use chrono::{DateTime, Utc};
+use serde::de::Error as DeError;
 use serde::{Deserialize, Serialize};
+use serde::{Deserializer, Serializer};
 use std::collections::HashMap;
 
 /// Event severity levels.
@@ -58,8 +60,7 @@ impl std::fmt::Display for EventCategory {
 }
 
 /// Standard event types.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventType {
     // Backup events
     BackupStarted,
@@ -97,6 +98,92 @@ pub enum EventType {
     StatusCritical,
 }
 
+impl Serialize for EventType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for EventType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        let lower = raw.trim().to_lowercase();
+
+        // Normalize to dot-separated form when possible.
+        let dot = if lower.contains('.') {
+            lower.clone()
+        } else if lower.contains('_') {
+            lower.replace('_', ".")
+        } else {
+            lower.clone()
+        };
+
+        let parsed = match dot.as_str() {
+            "backup.started" => EventType::BackupStarted,
+            "backup.completed" => EventType::BackupCompleted,
+            "backup.failed" => EventType::BackupFailed,
+            "restore.started" => EventType::RestoreStarted,
+            "restore.completed" => EventType::RestoreCompleted,
+            "restore.failed" => EventType::RestoreFailed,
+            "pitr.started" => EventType::PitrStarted,
+            "pitr.completed" => EventType::PitrCompleted,
+            "pitr.failed" => EventType::PitrFailed,
+            "pitr.gap" => EventType::PitrGap,
+            "retention.started" => EventType::RetentionStarted,
+            "retention.completed" => EventType::RetentionCompleted,
+            "retention.failed" => EventType::RetentionFailed,
+            "ha.switchover.started" => EventType::HaSwitchoverStarted,
+            "ha.switchover.completed" => EventType::HaSwitchoverCompleted,
+            "ha.switchover.failed" => EventType::HaSwitchoverFailed,
+            "ha.failover.started" => EventType::HaFailoverStarted,
+            "ha.failover.completed" => EventType::HaFailoverCompleted,
+            "ha.failover.failed" => EventType::HaFailoverFailed,
+            "status.warning" => EventType::StatusWarning,
+            "status.critical" => EventType::StatusCritical,
+            _ => {
+                // Backward compatibility for variants like BackupFailed / backupfailed.
+                let compact: String = lower
+                    .chars()
+                    .filter(|c| c.is_ascii_alphanumeric())
+                    .collect();
+
+                match compact.as_str() {
+                    "backupstarted" => EventType::BackupStarted,
+                    "backupcompleted" => EventType::BackupCompleted,
+                    "backupfailed" => EventType::BackupFailed,
+                    "restorestarted" => EventType::RestoreStarted,
+                    "restorecompleted" => EventType::RestoreCompleted,
+                    "restorefailed" => EventType::RestoreFailed,
+                    "pitrstarted" => EventType::PitrStarted,
+                    "pitrcompleted" => EventType::PitrCompleted,
+                    "pitrfailed" => EventType::PitrFailed,
+                    "pitrgap" => EventType::PitrGap,
+                    "retentionstarted" => EventType::RetentionStarted,
+                    "retentioncompleted" => EventType::RetentionCompleted,
+                    "retentionfailed" => EventType::RetentionFailed,
+                    "haswitchoverstarted" => EventType::HaSwitchoverStarted,
+                    "haswitchovercompleted" => EventType::HaSwitchoverCompleted,
+                    "haswitchoverfailed" => EventType::HaSwitchoverFailed,
+                    "hafailoverstarted" => EventType::HaFailoverStarted,
+                    "hafailovercompleted" => EventType::HaFailoverCompleted,
+                    "hafailoverfailed" => EventType::HaFailoverFailed,
+                    "statuswarning" => EventType::StatusWarning,
+                    "statuscritical" => EventType::StatusCritical,
+                    _ => return Err(D::Error::custom(format!("Unknown event type: {raw}"))),
+                }
+            }
+        };
+
+        Ok(parsed)
+    }
+}
+
 impl EventType {
     /// Get the string representation for event matching.
     pub fn as_str(&self) -> &'static str {
@@ -128,12 +215,12 @@ impl EventType {
     /// Get the event category.
     pub fn category(&self) -> EventCategory {
         match self {
-            EventType::BackupStarted
-            | EventType::BackupCompleted
-            | EventType::BackupFailed => EventCategory::Backup,
-            EventType::RestoreStarted
-            | EventType::RestoreCompleted
-            | EventType::RestoreFailed => EventCategory::Restore,
+            EventType::BackupStarted | EventType::BackupCompleted | EventType::BackupFailed => {
+                EventCategory::Backup
+            }
+            EventType::RestoreStarted | EventType::RestoreCompleted | EventType::RestoreFailed => {
+                EventCategory::Restore
+            }
             EventType::PitrStarted
             | EventType::PitrCompleted
             | EventType::PitrFailed
@@ -589,7 +676,10 @@ mod tests {
     #[test]
     fn test_event_type_string() {
         assert_eq!(EventType::BackupStarted.as_str(), "backup.started");
-        assert_eq!(EventType::HaFailoverCompleted.as_str(), "ha.failover.completed");
+        assert_eq!(
+            EventType::HaFailoverCompleted.as_str(),
+            "ha.failover.completed"
+        );
         assert_eq!(EventType::PitrGap.as_str(), "pitr.gap");
     }
 
@@ -602,9 +692,18 @@ mod tests {
 
     #[test]
     fn test_event_severity() {
-        assert_eq!(EventType::BackupStarted.default_severity(), EventSeverity::Info);
-        assert_eq!(EventType::BackupFailed.default_severity(), EventSeverity::Critical);
-        assert_eq!(EventType::PitrGap.default_severity(), EventSeverity::Warning);
+        assert_eq!(
+            EventType::BackupStarted.default_severity(),
+            EventSeverity::Info
+        );
+        assert_eq!(
+            EventType::BackupFailed.default_severity(),
+            EventSeverity::Critical
+        );
+        assert_eq!(
+            EventType::PitrGap.default_severity(),
+            EventSeverity::Warning
+        );
     }
 
     #[test]
@@ -633,8 +732,8 @@ mod tests {
 
     #[test]
     fn test_event_serialization() {
-        let event = Event::new(EventType::BackupFailed, "Test failure")
-            .with_label("env", "production");
+        let event =
+            Event::new(EventType::BackupFailed, "Test failure").with_label("env", "production");
 
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("backup.failed") || json.contains("BackupFailed"));

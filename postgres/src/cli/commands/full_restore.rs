@@ -6,7 +6,7 @@
 use anyhow::{anyhow, Result};
 use log::{error, info, warn};
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 use super::{create_storage_provider, SshOptions, StorageOptions};
@@ -74,7 +74,10 @@ pub async fn full_restore(
     // Determine restore mode
     let mode = match target_database {
         Some(target_name) if target_name != database => {
-            info!("[full-restore] Mode: Restore to new database '{}'", target_name);
+            info!(
+                "[full-restore] Mode: Restore to new database '{}'",
+                target_name
+            );
             RestoreMode::NewDatabase { target_name }
         }
         _ => {
@@ -165,12 +168,11 @@ pub async fn full_restore(
     }
 
     // Confirm if required
-    if plan.requires_confirmation && !yes
-        && !confirm_restore(&plan)? {
-            info!("[full-restore] Restore cancelled by user");
-            close_ssh_tunnel(&config).await;
-            return Ok(());
-        }
+    if plan.requires_confirmation && !yes && !confirm_restore(&plan)? {
+        info!("[full-restore] Restore cancelled by user");
+        close_ssh_tunnel(&config).await;
+        return Ok(());
+    }
 
     // Execute restore
     info!("[full-restore] Executing restore...");
@@ -194,7 +196,7 @@ pub async fn full_restore(
 async fn download_backup_from_storage(
     storage: &StorageOptions,
     backup_id: &str,
-    backup_dir: &PathBuf,
+    backup_dir: &Path,
 ) -> Result<String> {
     let storage_instance = create_storage_provider(storage)
         .await?
@@ -205,7 +207,10 @@ async fn download_backup_from_storage(
         std::fs::create_dir_all(&local_path)?;
     }
 
-    info!("[full-restore] Downloading backup {} to {:?}", backup_id, local_path);
+    info!(
+        "[full-restore] Downloading backup {} to {:?}",
+        backup_id, local_path
+    );
 
     storage_instance
         .download_backup(backup_id, &local_path)
@@ -225,7 +230,14 @@ fn display_preflight_results(preflight: &PreflightResult, format: &str) -> Resul
     }
 
     println!("\n=== Preflight Validation ===");
-    println!("Status: {}", if preflight.passed { "✓ PASSED" } else { "✗ FAILED" });
+    println!(
+        "Status: {}",
+        if preflight.passed {
+            "✓ PASSED"
+        } else {
+            "✗ FAILED"
+        }
+    );
 
     if let Some(backup) = &preflight.backup_info {
         println!("\n📦 Backup Information:");
@@ -234,9 +246,11 @@ fn display_preflight_results(preflight: &PreflightResult, format: &str) -> Resul
         if let Some(db) = &backup.database {
             println!("   Database: {}", db);
         }
-        println!("   Size: {} bytes ({:.2} MB)", 
-            backup.size_bytes, 
-            backup.size_bytes as f64 / 1024.0 / 1024.0);
+        println!(
+            "   Size: {} bytes ({:.2} MB)",
+            backup.size_bytes,
+            backup.size_bytes as f64 / 1024.0 / 1024.0
+        );
         println!("   Created: {}", backup.created_at);
         if let Some(version) = &backup.server_version {
             println!("   Server Version: {}", version);
@@ -302,10 +316,10 @@ fn display_restore_plan(plan: &RestorePlan, format: &str) -> Result<()> {
     println!("\n=== Restore Plan ===");
     println!("Plan ID: {}", plan.id);
     println!("Backup ID: {}", plan.backup_id);
-    println!("Target: {}:{}/{}", 
-        plan.target_config.host, 
-        plan.target_config.port, 
-        plan.target_config.database);
+    println!(
+        "Target: {}:{}/{}",
+        plan.target_config.host, plan.target_config.port, plan.target_config.database
+    );
     println!("Mode: {:?}", plan.mode);
 
     if let Some(duration) = plan.estimated_duration_secs {
@@ -319,8 +333,12 @@ fn display_restore_plan(plan: &RestorePlan, format: &str) -> Result<()> {
     }
 
     if plan.requires_confirmation {
-        println!("\n⚠️  Confirmation Required: {}", 
-            plan.confirmation_reason.as_deref().unwrap_or("Destructive operation"));
+        println!(
+            "\n⚠️  Confirmation Required: {}",
+            plan.confirmation_reason
+                .as_deref()
+                .unwrap_or("Destructive operation")
+        );
     }
 
     println!();
@@ -336,13 +354,23 @@ fn display_restore_result(result: &RestoreResult, format: &str) -> Result<()> {
     }
 
     println!("\n=== Restore Result ===");
-    println!("Status: {}", if result.success { "✓ SUCCESS" } else { "✗ FAILED" });
+    println!(
+        "Status: {}",
+        if result.success {
+            "✓ SUCCESS"
+        } else {
+            "✗ FAILED"
+        }
+    );
     println!("Plan ID: {}", result.plan_id);
     println!("Backup ID: {}", result.backup_id);
     println!("Database: {}", result.database);
     println!("Started: {}", result.started_at);
     println!("Completed: {}", result.completed_at);
-    println!("Duration: {}s", (result.completed_at - result.started_at).num_seconds());
+    println!(
+        "Duration: {}s",
+        (result.completed_at - result.started_at).num_seconds()
+    );
 
     println!("\n📋 Steps Completed:");
     for step in &result.steps_completed {
@@ -406,14 +434,18 @@ mod tests {
     fn test_restore_mode_from_target_database() {
         // Same database = Replace mode
         let mode = match Some("mydb".to_string()) {
-            Some(target) if target != "mydb" => RestoreMode::NewDatabase { target_name: target },
+            Some(target) if target != "mydb" => RestoreMode::NewDatabase {
+                target_name: target,
+            },
             _ => RestoreMode::Replace,
         };
         assert_eq!(mode, RestoreMode::Replace);
 
         // Different database = NewDatabase mode
         let mode = match Some("newdb".to_string()) {
-            Some(target) if target != "mydb" => RestoreMode::NewDatabase { target_name: target },
+            Some(target) if target != "mydb" => RestoreMode::NewDatabase {
+                target_name: target,
+            },
             _ => RestoreMode::Replace,
         };
         assert!(matches!(mode, RestoreMode::NewDatabase { target_name } if target_name == "newdb"));

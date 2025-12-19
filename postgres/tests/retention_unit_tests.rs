@@ -36,7 +36,12 @@ fn create_backup(
 
 /// Helper to create a completed full backup
 fn full_backup(id: &str, days_ago: i64) -> BackupItem {
-    create_backup(id, days_ago, BackupItemType::Full, BackupItemStatus::Completed)
+    create_backup(
+        id,
+        days_ago,
+        BackupItemType::Full,
+        BackupItemStatus::Completed,
+    )
 }
 
 /// Helper to create a completed incremental backup
@@ -96,12 +101,20 @@ fn test_keep_latest_n_backups() {
     assert_eq!(result.backups_to_keep.len(), 3);
     assert_eq!(result.backups_to_delete.len(), 2);
 
-    let kept_ids: Vec<_> = result.backups_to_keep.iter().map(|d| &d.backup_id).collect();
+    let kept_ids: Vec<_> = result
+        .backups_to_keep
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(kept_ids.contains(&&"backup5".to_string()));
     assert!(kept_ids.contains(&&"backup4".to_string()));
     assert!(kept_ids.contains(&&"backup3".to_string()));
 
-    let deleted_ids: Vec<_> = result.backups_to_delete.iter().map(|d| &d.backup_id).collect();
+    let deleted_ids: Vec<_> = result
+        .backups_to_delete
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(deleted_ids.contains(&&"backup1".to_string()));
     assert!(deleted_ids.contains(&&"backup2".to_string()));
 }
@@ -137,7 +150,11 @@ fn test_keep_within_days() {
     assert_eq!(result.backups_to_keep.len(), 2);
     assert_eq!(result.backups_to_delete.len(), 2);
 
-    let kept_ids: Vec<_> = result.backups_to_keep.iter().map(|d| &d.backup_id).collect();
+    let kept_ids: Vec<_> = result
+        .backups_to_keep
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(kept_ids.contains(&&"recent1".to_string()));
     assert!(kept_ids.contains(&&"recent2".to_string()));
 }
@@ -174,7 +191,11 @@ fn test_keep_within_days_minimum() {
     assert_eq!(result.backups_to_delete.len(), 1);
 
     // Should keep the most recent ones
-    let kept_ids: Vec<_> = result.backups_to_keep.iter().map(|d| &d.backup_id).collect();
+    let kept_ids: Vec<_> = result
+        .backups_to_keep
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(kept_ids.contains(&&"old3".to_string()));
     assert!(kept_ids.contains(&&"old2".to_string()));
 }
@@ -197,10 +218,7 @@ fn test_pinned_backups_always_kept() {
 
     let engine = RetentionEngine::new(policy);
 
-    let backups = vec![
-        pinned_backup("pinned_old", 100),
-        full_backup("recent", 1),
-    ];
+    let backups = vec![pinned_backup("pinned_old", 100), full_backup("recent", 1)];
 
     let result = engine.evaluate(&backups, None);
 
@@ -252,7 +270,11 @@ fn test_tagged_backups_kept() {
     assert_eq!(result.backups_to_keep.len(), 2);
     assert_eq!(result.backups_to_delete.len(), 1);
 
-    let kept_ids: Vec<_> = result.backups_to_keep.iter().map(|d| &d.backup_id).collect();
+    let kept_ids: Vec<_> = result
+        .backups_to_keep
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(kept_ids.contains(&&"tagged".to_string()));
     assert!(kept_ids.contains(&&"recent".to_string()));
 }
@@ -405,17 +427,18 @@ fn test_keep_latest_successful() {
 
     let engine = RetentionEngine::new(policy);
 
-    let backups = vec![
-        full_backup("old", 30),
-        full_backup("older", 60),
-    ];
+    let backups = vec![full_backup("old", 30), full_backup("older", 60)];
 
     let result = engine.evaluate(&backups, None);
 
     // At least one should be kept (latest successful)
     assert!(result.backups_to_keep.len() >= 1);
 
-    let kept_ids: Vec<_> = result.backups_to_keep.iter().map(|d| &d.backup_id).collect();
+    let kept_ids: Vec<_> = result
+        .backups_to_keep
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(kept_ids.contains(&&"old".to_string()));
 }
 
@@ -644,7 +667,11 @@ fn test_database_scope_filter() {
 
     // dev_backup should be kept (out of scope)
     // prod_backup should be evaluated by policy
-    let kept_ids: Vec<_> = result.backups_to_keep.iter().map(|d| &d.backup_id).collect();
+    let kept_ids: Vec<_> = result
+        .backups_to_keep
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(kept_ids.contains(&&"dev_backup".to_string())); // Out of scope, kept
 }
 
@@ -672,14 +699,15 @@ fn test_exclude_tags_filter() {
     let mut temp_backup = full_backup("temp_backup", 5);
     temp_backup.tags = vec!["temporary".to_string()];
 
-    let backups = vec![
-        temp_backup,
-        full_backup("normal_backup", 1),
-    ];
+    let backups = vec![temp_backup, full_backup("normal_backup", 1)];
 
     let result = engine.evaluate(&backups, None);
 
     // temp_backup should be kept (excluded from policy scope)
-    let kept_ids: Vec<_> = result.backups_to_keep.iter().map(|d| &d.backup_id).collect();
+    let kept_ids: Vec<_> = result
+        .backups_to_keep
+        .iter()
+        .map(|d| &d.backup_id)
+        .collect();
     assert!(kept_ids.contains(&&"temp_backup".to_string()));
 }

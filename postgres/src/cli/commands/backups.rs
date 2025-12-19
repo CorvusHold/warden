@@ -242,7 +242,13 @@ pub fn format_list_table(result: &ListBackupsResult) -> String {
 
         output.push_str(&format!(
             "{:<38} {:<10} {:<10} {:<20} {:>12} {:<10}{}\n",
-            backup.id, type_str, status_str, timestamp, size_str, backup.server_version, pinned_marker
+            backup.id,
+            type_str,
+            status_str,
+            timestamp,
+            size_str,
+            backup.server_version,
+            pinned_marker
         ));
     }
 
@@ -279,9 +285,18 @@ pub fn format_show_table(result: &ShowBackupResult) -> String {
 
     // Basic info
     output.push_str(&format!("Backup ID:       {}\n", metadata.id));
-    output.push_str(&format!("Type:            {}\n", format_backup_type(&metadata.backup_type)));
-    output.push_str(&format!("Status:          {}\n", format_backup_status(&metadata.status)));
-    output.push_str(&format!("Pinned:          {}\n", if metadata.pinned { "Yes" } else { "No" }));
+    output.push_str(&format!(
+        "Type:            {}\n",
+        format_backup_type(&metadata.backup_type)
+    ));
+    output.push_str(&format!(
+        "Status:          {}\n",
+        format_backup_status(&metadata.status)
+    ));
+    output.push_str(&format!(
+        "Pinned:          {}\n",
+        if metadata.pinned { "Yes" } else { "No" }
+    ));
     output.push('\n');
 
     // Timestamps
@@ -302,8 +317,14 @@ pub fn format_show_table(result: &ShowBackupResult) -> String {
 
     // Size info
     output.push_str("=== Size Information ===\n\n");
-    output.push_str(&format!("Metadata Size:   {}\n", format_size(metadata.size_bytes)));
-    output.push_str(&format!("Storage Size:    {}\n", format_size(details.total_storage_size)));
+    output.push_str(&format!(
+        "Metadata Size:   {}\n",
+        format_size(metadata.size_bytes)
+    ));
+    output.push_str(&format!(
+        "Storage Size:    {}\n",
+        format_size(details.total_storage_size)
+    ));
     output.push_str(&format!("File Count:      {}\n", metadata.files.len()));
     output.push_str(&format!("Object Count:    {}\n", details.objects.len()));
     output.push('\n');
@@ -385,7 +406,10 @@ pub fn format_download_table(result: &DownloadResult) -> String {
     output.push_str(&format!("Backup ID:       {}\n", result.backup_id));
     output.push_str(&format!("Target Dir:      {}\n", result.target_dir));
     output.push_str(&format!("Files:           {}\n", result.files_downloaded));
-    output.push_str(&format!("Size:            {}\n", format_size(result.bytes_downloaded)));
+    output.push_str(&format!(
+        "Size:            {}\n",
+        format_size(result.bytes_downloaded)
+    ));
     output.push_str(&format!("Duration:        {}s\n", result.duration_secs));
 
     if let Some(ref checksum) = result.checksum_verified {
@@ -393,7 +417,11 @@ pub fn format_download_table(result: &DownloadResult) -> String {
         output.push_str("=== Checksum Verification ===\n\n");
         output.push_str(&format!(
             "Status:          {}\n",
-            if checksum.all_matched { "✓ PASSED" } else { "✗ FAILED" }
+            if checksum.all_matched {
+                "✓ PASSED"
+            } else {
+                "✗ FAILED"
+            }
         ));
         output.push_str(&format!("Files Verified:  {}\n", checksum.files_verified));
         output.push_str(&format!("Files Matched:   {}\n", checksum.files_matched));
@@ -416,15 +444,12 @@ pub fn format_download_table(result: &DownloadResult) -> String {
 
 /// Format download results as JSON
 pub fn format_download_json(result: &DownloadResult) -> Result<String> {
-    serde_json::to_string_pretty(result)
-        .map_err(|e| anyhow!("Failed to serialize to JSON: {}", e))
+    serde_json::to_string_pretty(result).map_err(|e| anyhow!("Failed to serialize to JSON: {}", e))
 }
 
 // Helper functions
 
-async fn create_storage_provider(
-    opts: &BackupStorageOptions,
-) -> Result<PostgresBackupStorage> {
+async fn create_storage_provider(opts: &BackupStorageOptions) -> Result<PostgresBackupStorage> {
     let bucket = opts
         .bucket
         .clone()
@@ -482,11 +507,7 @@ fn parse_datetime(s: &str) -> Result<DateTime<Utc>> {
     }
 
     // Try common formats
-    let formats = [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d",
-    ];
+    let formats = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"];
 
     for fmt in &formats {
         if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
@@ -546,19 +567,43 @@ mod tests {
 
     #[test]
     fn test_parse_backup_type() {
-        assert!(matches!(parse_backup_type("full").unwrap(), StorageBackupType::Full));
-        assert!(matches!(parse_backup_type("FULL").unwrap(), StorageBackupType::Full));
-        assert!(matches!(parse_backup_type("snapshot").unwrap(), StorageBackupType::Snapshot));
-        assert!(matches!(parse_backup_type("incremental").unwrap(), StorageBackupType::Incremental));
+        assert!(matches!(
+            parse_backup_type("full").unwrap(),
+            StorageBackupType::Full
+        ));
+        assert!(matches!(
+            parse_backup_type("FULL").unwrap(),
+            StorageBackupType::Full
+        ));
+        assert!(matches!(
+            parse_backup_type("snapshot").unwrap(),
+            StorageBackupType::Snapshot
+        ));
+        assert!(matches!(
+            parse_backup_type("incremental").unwrap(),
+            StorageBackupType::Incremental
+        ));
         assert!(parse_backup_type("invalid").is_err());
     }
 
     #[test]
     fn test_parse_backup_status() {
-        assert!(matches!(parse_backup_status("completed").unwrap(), StorageBackupStatus::Completed));
-        assert!(matches!(parse_backup_status("COMPLETE").unwrap(), StorageBackupStatus::Completed));
-        assert!(matches!(parse_backup_status("in_progress").unwrap(), StorageBackupStatus::InProgress));
-        assert!(matches!(parse_backup_status("failed").unwrap(), StorageBackupStatus::Failed));
+        assert!(matches!(
+            parse_backup_status("completed").unwrap(),
+            StorageBackupStatus::Completed
+        ));
+        assert!(matches!(
+            parse_backup_status("COMPLETE").unwrap(),
+            StorageBackupStatus::Completed
+        ));
+        assert!(matches!(
+            parse_backup_status("in_progress").unwrap(),
+            StorageBackupStatus::InProgress
+        ));
+        assert!(matches!(
+            parse_backup_status("failed").unwrap(),
+            StorageBackupStatus::Failed
+        ));
         assert!(parse_backup_status("invalid").is_err());
     }
 

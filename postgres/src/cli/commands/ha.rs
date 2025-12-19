@@ -17,6 +17,7 @@ use crate::ha::{
 };
 
 /// Execute the ha-switchover command.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_ha_switchover(
     cluster: String,
     from_node: String,
@@ -94,6 +95,7 @@ pub async fn execute_ha_switchover(
 }
 
 /// Execute the ha-failover command.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_ha_failover(
     cluster: String,
     to_node: String,
@@ -184,6 +186,7 @@ pub async fn execute_ha_failover(
 }
 
 /// Execute the ha-clone-node command.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_ha_clone_node(
     cluster: String,
     source_node: String,

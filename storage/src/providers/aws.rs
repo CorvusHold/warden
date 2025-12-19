@@ -456,7 +456,16 @@ impl StorageProvider for S3Provider {
             Ok(_) => Ok(true),
             Err(e) => {
                 let error_string = e.to_string();
-                if error_string.contains("404") || error_string.contains("NotFound") {
+                let looks_not_found = e
+                    .as_service_error()
+                    .map(|e| e.is_not_found())
+                    .unwrap_or(false)
+                    || error_string.contains("404")
+                    || error_string.contains("NotFound")
+                    || error_string.contains("NoSuchKey")
+                    || error_string.contains("NoSuchObject");
+
+                if looks_not_found {
                     Ok(false)
                 } else {
                     error!("Error checking if object exists {}/{}: {}", bucket, key, e);
@@ -484,35 +493,54 @@ impl StorageProvider for S3Provider {
                 info!("Bucket {bucket} already exists");
                 return Ok(());
             }
-            Err(e)
-                if e.as_service_error()
+            Err(e) => {
+                let error_string = e.to_string();
+                let looks_not_found = e
+                    .as_service_error()
                     .map(|e| e.is_not_found())
-                    .unwrap_or(false) =>
-            {
-                let create_bucket_result = self
-                    .client
-                    .create_bucket()
-                    .bucket(bucket)
-                    .create_bucket_configuration(
+                    .unwrap_or(false)
+                    || error_string.contains("404")
+                    || error_string.contains("NotFound")
+                    || error_string.contains("NoSuchBucket");
+
+                if !looks_not_found {
+                    error!("Error checking bucket existence: {e}");
+                    return Err(StorageError::Aws(e.to_string()));
+                }
+
+                let mut create_bucket_request = self.client.create_bucket().bucket(bucket);
+                if self.endpoint.is_none() && self.region != "us-east-1" {
+                    create_bucket_request = create_bucket_request.create_bucket_configuration(
                         aws_sdk_s3::types::CreateBucketConfiguration::builder()
                             .location_constraint(aws_sdk_s3::types::BucketLocationConstraint::from(
                                 self.region.as_str(),
                             ))
                             .build(),
-                    )
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to create bucket {bucket}: {e}");
-                        StorageError::Aws(e.to_string())
-                    })?;
+                    );
+                }
 
-                info!("Created bucket: {:?}", create_bucket_result.location());
-                return Ok(());
-            }
-            Err(e) => {
-                error!("Error checking bucket existence: {e}");
-                return Err(StorageError::Aws(e.to_string()));
+                let create_bucket_result = create_bucket_request.send().await.map_err(|e| {
+                    let create_error_string = e.to_string();
+                    if create_error_string.contains("BucketAlreadyOwnedByYou")
+                        || create_error_string.contains("BucketAlreadyExists")
+                        || create_error_string.contains("409")
+                    {
+                        info!("Bucket {bucket} already exists");
+                        return StorageError::Aws("bucket already exists".to_string());
+                    }
+
+                    error!("Failed to create bucket {bucket}: {e}");
+                    StorageError::Aws(e.to_string())
+                });
+
+                match create_bucket_result {
+                    Ok(resp) => {
+                        info!("Created bucket: {:?}", resp.location());
+                        Ok(())
+                    }
+                    Err(StorageError::Aws(msg)) if msg == "bucket already exists" => Ok(()),
+                    Err(other) => Err(other),
+                }
             }
         }
     }

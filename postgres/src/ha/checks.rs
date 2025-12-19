@@ -201,7 +201,10 @@ pub async fn check_node_is_primary(
         host, port, user, password_part, database
     );
 
-    debug!("[ha-check] Checking if node is primary at {}:{}", host, port);
+    debug!(
+        "[ha-check] Checking if node is primary at {}:{}",
+        host, port
+    );
 
     // Use psql to check pg_is_in_recovery()
     let result = Command::new("psql")
@@ -378,10 +381,7 @@ pub async fn wait_for_replication_catchup(
 }
 
 /// Promote a replica to primary using pg_ctl promote.
-pub async fn promote_replica(
-    data_dir: &str,
-    timeout_secs: u64,
-) -> Result<(), HaError> {
+pub async fn promote_replica(data_dir: &str, timeout_secs: u64) -> Result<(), HaError> {
     info!("[ha-promote] Promoting replica at {}", data_dir);
 
     let result = Command::new("pg_ctl")
@@ -395,11 +395,11 @@ pub async fn promote_replica(
         Ok(output) => {
             if output.status.success() {
                 info!("[ha-promote] Promotion initiated successfully");
-                
+
                 // Wait for promotion to complete by checking for standby.signal removal
                 let start = std::time::Instant::now();
                 let standby_signal = std::path::Path::new(data_dir).join("standby.signal");
-                
+
                 while start.elapsed().as_secs() < timeout_secs {
                     if !standby_signal.exists() {
                         info!("[ha-promote] Promotion completed");
@@ -407,7 +407,7 @@ pub async fn promote_replica(
                     }
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
-                
+
                 warn!("[ha-promote] Promotion may still be in progress after timeout");
                 Ok(())
             } else {
@@ -451,10 +451,7 @@ pub fn configure_as_replica(
         .append(true)
         .open(&auto_conf)?;
 
-    writeln!(
-        file,
-        "\n# Added by Warden HA orchestration"
-    )?;
+    writeln!(file, "\n# Added by Warden HA orchestration")?;
     writeln!(
         file,
         "primary_conninfo = 'host={} port={} user={}'",

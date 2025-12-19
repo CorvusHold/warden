@@ -2,6 +2,7 @@
 
 use chrono::{Duration, Utc};
 use common::config::{C2AuthConfig, FeaturesConfig, WardenConfig};
+use common::notifications::NotificationConfig;
 use common::schedule::{
     BackupSchedule, BackupTarget, BackupType, ParsedSchedule, RetentionSchedule, ScheduleConfig,
     StorageProfile,
@@ -23,6 +24,7 @@ fn create_test_config_with_schedules() -> WardenConfig {
         },
         mqtt: None,
         integration: common::config::IntegrationConfig::default(),
+        notifications: NotificationConfig::default(),
         schedules: Some(ScheduleConfig {
             backups: vec![
                 BackupSchedule {

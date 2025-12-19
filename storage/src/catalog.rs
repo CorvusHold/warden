@@ -280,10 +280,7 @@ impl PostgresBackupStorage {
     }
 
     /// Get detailed information about a specific backup
-    pub async fn get_backup_details(
-        &self,
-        backup_id: &str,
-    ) -> Result<BackupDetails, StorageError> {
+    pub async fn get_backup_details(&self, backup_id: &str) -> Result<BackupDetails, StorageError> {
         info!("Getting details for backup: {}", backup_id);
 
         // Get metadata
@@ -311,9 +308,7 @@ impl PostgresBackupStorage {
     ) -> Result<Vec<BackupObject>, StorageError> {
         let backup_prefix = self.get_backup_prefix(backup_id);
 
-        let objects = self
-            .list_objects_with_prefix(&backup_prefix)
-            .await?;
+        let objects = self.list_objects_with_prefix(&backup_prefix).await?;
 
         Ok(objects.iter().map(BackupObject::from).collect())
     }
@@ -463,7 +458,10 @@ fn verify_backup_checksums(
         let file_path = target_dir.join(&file_info.name);
 
         if !file_path.exists() {
-            warn!("File not found for checksum verification: {}", file_info.name);
+            warn!(
+                "File not found for checksum verification: {}",
+                file_info.name
+            );
             files_skipped += 1;
             continue;
         }
@@ -485,7 +483,9 @@ fn verify_backup_checksums(
                             });
                             error!(
                                 "Checksum mismatch for {}: expected {}, got {}",
-                                file_info.name, expected_checksum, mismatches.last().unwrap().actual
+                                file_info.name,
+                                expected_checksum,
+                                mismatches.last().unwrap().actual
                             );
                         }
                     }

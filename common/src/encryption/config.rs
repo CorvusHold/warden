@@ -123,14 +123,14 @@ impl EncryptionConfig {
         if !self.enabled {
             return "encryption: disabled".to_string();
         }
-        
+
         let key_display = match &self.key_ref {
             Some(k) if k.starts_with("env:") => k.clone(),
             Some(k) if k.starts_with("file:") => k.clone(),
             Some(_) => "[REDACTED]".to_string(),
             None => "[NOT_SET]".to_string(),
         };
-        
+
         format!(
             "encryption: enabled, algorithm: {}, key: {}",
             self.algorithm, key_display

@@ -16,7 +16,9 @@ use uuid::Uuid;
 use crate::common::PostgresConfig;
 use crate::tunnel_keeper::TunnelKeeper;
 
-use storage::{BackupMetadata, BackupStatus as StorageBackupStatus, BackupType as StorageBackupType};
+use storage::{
+    BackupMetadata, BackupStatus as StorageBackupStatus, BackupType as StorageBackupType,
+};
 
 // ============================================================================
 // Discovery Types
@@ -407,11 +409,7 @@ async fn get_database_list(client: &tokio_postgres::Client) -> Result<Vec<Databa
         let allow_connections: bool = row.get("allow_connections");
 
         // Try to get table count for non-template databases
-        let table_count = if allow_connections && !is_template && name != "template1" {
-            None // Would require connecting to each database
-        } else {
-            None
-        };
+        let table_count = None;
 
         databases.push(DatabaseInfo {
             name,
@@ -493,8 +491,7 @@ async fn get_replication_info(client: &tokio_postgres::Client) -> Result<Replica
             )
             .await
             .ok();
-        row.map(|r| r.get::<_, String>(0))
-            .filter(|s| !s.is_empty())
+        row.map(|r| r.get::<_, String>(0)).filter(|s| !s.is_empty())
     } else {
         None
     };
@@ -576,9 +573,7 @@ async fn get_replica_list(client: &tokio_postgres::Client) -> Result<Vec<Replica
     Ok(replicas)
 }
 
-async fn detect_backup_config(
-    client: &tokio_postgres::Client,
-) -> Result<DetectedBackupConfig> {
+async fn detect_backup_config(client: &tokio_postgres::Client) -> Result<DetectedBackupConfig> {
     // Check archive settings
     let archive_row = client
         .query_one(
@@ -626,22 +621,28 @@ fn generate_recommendations(
         .collect();
 
     if user_dbs.is_empty() {
-        recommendations.push("No user databases found. Create databases before configuring backups.".to_string());
+        recommendations.push(
+            "No user databases found. Create databases before configuring backups.".to_string(),
+        );
     } else {
         let total_size: u64 = user_dbs.iter().map(|d| d.size_bytes).sum();
         let size_gb = total_size as f64 / 1024.0 / 1024.0 / 1024.0;
-        
+
         if size_gb > 100.0 {
             recommendations.push(format!(
                 "Large database footprint ({:.1} GB). Consider incremental backups and parallel pg_dump.",
                 size_gb
             ));
         }
-        
+
         recommendations.push(format!(
             "Configure backup schedules for {} user database(s): {}",
             user_dbs.len(),
-            user_dbs.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", ")
+            user_dbs
+                .iter()
+                .map(|d| d.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 
@@ -655,7 +656,8 @@ fn generate_recommendations(
         }
         "replica" => {
             recommendations.push(
-                "This is a replica node. Ideal for running backups without impacting the primary.".to_string()
+                "This is a replica node. Ideal for running backups without impacting the primary."
+                    .to_string(),
             );
             if let Some(lag) = replication.replication_lag_bytes {
                 if lag > 1024 * 1024 {
@@ -668,7 +670,8 @@ fn generate_recommendations(
         }
         "standalone" => {
             recommendations.push(
-                "Standalone instance (no replication). Consider setting up a replica for HA.".to_string()
+                "Standalone instance (no replication). Consider setting up a replica for HA."
+                    .to_string(),
             );
         }
         _ => {}
@@ -677,19 +680,19 @@ fn generate_recommendations(
     // WAL archiving recommendations
     if !replication.wal_archiving_enabled {
         recommendations.push(
-            "WAL archiving is not enabled. Enable it for point-in-time recovery (PITR) capability.".to_string()
+            "WAL archiving is not enabled. Enable it for point-in-time recovery (PITR) capability."
+                .to_string(),
         );
     } else {
-        recommendations.push(
-            "WAL archiving is enabled. PITR will be available for backups.".to_string()
-        );
+        recommendations
+            .push("WAL archiving is enabled. PITR will be available for backups.".to_string());
     }
 
     // Backup configuration recommendations
     if let Some(config) = backup_config {
         if config.archive_directory.is_some() {
             recommendations.push(
-                "Existing WAL archive detected. Consider importing existing WAL files.".to_string()
+                "Existing WAL archive detected. Consider importing existing WAL files.".to_string(),
             );
         }
     }
@@ -739,13 +742,13 @@ pub async fn generate_config(options: GenerateConfigOptions) -> Result<Generated
         let cluster_path = path.join("cluster.yaml");
         std::fs::create_dir_all(path)?;
         std::fs::write(&cluster_path, &cluster_yaml)?;
-        
+
         let schedule_path = path.join("schedule.yaml");
         std::fs::write(&schedule_path, &schedule_config)?;
-        
+
         let retention_path = path.join("retention-policy.json");
         std::fs::write(&retention_path, &retention_policy)?;
-        
+
         info!("[generate-config] Configuration written to {:?}", path);
         Some(path.clone())
     } else {
@@ -767,7 +770,7 @@ fn generate_cluster_yaml(
 ) -> Result<String> {
     let cluster_id = cluster_name.to_lowercase().replace(' ', "-");
     let node_id = format!("{}-node", cluster_id);
-    
+
     let role = match discovery.replication.role.as_str() {
         "primary" => "primary",
         "replica" | "cascading_replica" => "replica",
@@ -820,7 +823,11 @@ protection_groups:
             cluster_id = cluster_id,
             cluster_name = cluster_name,
             databases = user_dbs.join("\n"),
-            preferred_role = if role == "primary" { "replica" } else { "primary" }
+            preferred_role = if role == "primary" {
+                "replica"
+            } else {
+                "primary"
+            }
         )
     } else {
         String::new()
@@ -862,7 +869,11 @@ nodes:
         cluster_name = cluster_name,
         node_id = node_id,
         role = role,
-        pg_version = discovery.version.split_whitespace().nth(1).unwrap_or("unknown"),
+        pg_version = discovery
+            .version
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or("unknown"),
         user = options.user,
         ssh_config = ssh_config,
         protection_group = protection_group,
@@ -873,7 +884,7 @@ nodes:
 
 fn generate_schedule_config(discovery: &DiscoveryResult, cluster_name: &str) -> Result<String> {
     let cluster_id = cluster_name.to_lowercase().replace(' ', "-");
-    
+
     // Get user databases
     let user_dbs: Vec<_> = discovery
         .databases
@@ -1109,7 +1120,7 @@ async fn import_local_backup(
                 .ok_or_else(|| anyhow!("Invalid source path"))?;
             let dest_path = backup_dir.join(file_name);
             std::fs::copy(source, &dest_path)?;
-            
+
             let size = std::fs::metadata(&dest_path)?.len();
             info!(
                 "[import-backup] Copied pg_dump file ({} bytes) to {:?}",
@@ -1190,6 +1201,7 @@ async fn import_s3_backup(
     Ok((backup_dir.to_path_buf(), size))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_import_metadata(
     backup_id: &str,
     database: &str,
@@ -1285,7 +1297,7 @@ async fn upload_imported_backup(
     {
         let relative_path = entry.path().strip_prefix(backup_dir)?;
         let key = format!("{}/{}", key_prefix, relative_path.display());
-        
+
         provider
             .upload_file(bucket, &key, entry.path(), None, None)
             .await?;
@@ -1304,14 +1316,14 @@ async fn upload_imported_backup(
 
 fn copy_directory(src: &Path, dst: &Path) -> Result<()> {
     std::fs::create_dir_all(dst)?;
-    
+
     for entry in walkdir::WalkDir::new(src)
         .into_iter()
         .filter_map(|e| e.ok())
     {
         let relative_path = entry.path().strip_prefix(src)?;
         let dest_path = dst.join(relative_path);
-        
+
         if entry.file_type().is_dir() {
             std::fs::create_dir_all(&dest_path)?;
         } else {
@@ -1321,13 +1333,13 @@ fn copy_directory(src: &Path, dst: &Path) -> Result<()> {
             std::fs::copy(entry.path(), &dest_path)?;
         }
     }
-    
+
     Ok(())
 }
 
 fn calculate_dir_size(path: &Path) -> Result<u64> {
     let mut total = 0u64;
-    
+
     for entry in walkdir::WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -1335,7 +1347,7 @@ fn calculate_dir_size(path: &Path) -> Result<u64> {
     {
         total += entry.metadata()?.len();
     }
-    
+
     Ok(total)
 }
 
@@ -1356,25 +1368,39 @@ fn format_discovery_table(result: &DiscoveryResult) -> String {
     let mut output = String::new();
 
     // Header
-    output.push_str(&"\n╔══════════════════════════════════════════════════════════════════════════════╗\n".to_string());
-    output.push_str(&"║                     PostgreSQL Discovery Report                              ║\n".to_string());
-    output.push_str(&"╚══════════════════════════════════════════════════════════════════════════════╝\n\n".to_string());
+    output.push_str(
+        "\n╔══════════════════════════════════════════════════════════════════════════════╗\n",
+    );
+    output.push_str(
+        "║                     PostgreSQL Discovery Report                              ║\n",
+    );
+    output.push_str(
+        "╚══════════════════════════════════════════════════════════════════════════════╝\n\n",
+    );
 
     // Server Info
-    output.push_str("┌─ Server Information ─────────────────────────────────────────────────────────┐\n");
+    output.push_str(
+        "┌─ Server Information ─────────────────────────────────────────────────────────┐\n",
+    );
     output.push_str(&format!("│ Host:     {}:{}\n", result.host, result.port));
     output.push_str(&format!("│ Version:  {}\n", result.version));
     output.push_str(&format!("│ Role:     {}\n", result.replication.role));
-    output.push_str("└──────────────────────────────────────────────────────────────────────────────┘\n\n");
+    output.push_str(
+        "└──────────────────────────────────────────────────────────────────────────────┘\n\n",
+    );
 
     // Databases
-    output.push_str("┌─ Databases ──────────────────────────────────────────────────────────────────┐\n");
+    output.push_str(
+        "┌─ Databases ──────────────────────────────────────────────────────────────────┐\n",
+    );
     output.push_str(&format!(
         "│ {:20} {:>12} {:15} {:10}\n",
         "Name", "Size", "Owner", "Template"
     ));
-    output.push_str("│ ────────────────────────────────────────────────────────────────────────────\n");
-    
+    output.push_str(
+        "│ ────────────────────────────────────────────────────────────────────────────\n",
+    );
+
     for db in &result.databases {
         let size_str = format_size(db.size_bytes);
         let template_str = if db.is_template { "Yes" } else { "No" };
@@ -1386,10 +1412,14 @@ fn format_discovery_table(result: &DiscoveryResult) -> String {
             template_str
         ));
     }
-    output.push_str("└──────────────────────────────────────────────────────────────────────────────┘\n\n");
+    output.push_str(
+        "└──────────────────────────────────────────────────────────────────────────────┘\n\n",
+    );
 
     // Replication
-    output.push_str("┌─ Replication Status ─────────────────────────────────────────────────────────┐\n");
+    output.push_str(
+        "┌─ Replication Status ─────────────────────────────────────────────────────────┐\n",
+    );
     output.push_str(&format!(
         "│ WAL Archiving:  {}\n",
         if result.replication.wal_archiving_enabled {
@@ -1418,14 +1448,20 @@ fn format_discovery_table(result: &DiscoveryResult) -> String {
     if let Some(lag) = result.replication.replication_lag_bytes {
         output.push_str(&format!("│ Replication Lag: {} bytes\n", lag));
     }
-    output.push_str("└──────────────────────────────────────────────────────────────────────────────┘\n\n");
+    output.push_str(
+        "└──────────────────────────────────────────────────────────────────────────────┘\n\n",
+    );
 
     // Recommendations
-    output.push_str("┌─ Recommendations ────────────────────────────────────────────────────────────┐\n");
+    output.push_str(
+        "┌─ Recommendations ────────────────────────────────────────────────────────────┐\n",
+    );
     for (i, rec) in result.recommendations.iter().enumerate() {
         output.push_str(&format!("│ {}. {}\n", i + 1, rec));
     }
-    output.push_str("└──────────────────────────────────────────────────────────────────────────────┘\n");
+    output.push_str(
+        "└──────────────────────────────────────────────────────────────────────────────┘\n",
+    );
 
     output
 }
@@ -1461,13 +1497,19 @@ pub fn format_import_result(result: &ImportResult, format: &str) -> String {
             output.push_str(&format!("│ Backup ID:       {}\n", result.backup_id));
             output.push_str(&format!("│ Database:        {}\n", result.database));
             output.push_str(&format!("│ Type:            {}\n", result.backup_type));
-            output.push_str(&format!("│ Size:            {}\n", format_size(result.size_bytes)));
+            output.push_str(&format!(
+                "│ Size:            {}\n",
+                format_size(result.size_bytes)
+            ));
             output.push_str(&format!("│ Local Path:      {:?}\n", result.local_path));
             if let Some(ref remote) = result.remote_path {
                 output.push_str(&format!("│ Remote Path:     {}\n", remote));
             }
             output.push_str(&format!("│ Original Source: {}\n", result.original_source));
-            output.push_str(&format!("│ Imported At:     {}\n", result.imported_at.to_rfc3339()));
+            output.push_str(&format!(
+                "│ Imported At:     {}\n",
+                result.imported_at.to_rfc3339()
+            ));
             output.push_str("└──────────────────────────────────────────────────────────────────────────────┘\n");
             output.push_str("\nThe imported backup is now available for restore operations.\n");
             output.push_str(&format!(

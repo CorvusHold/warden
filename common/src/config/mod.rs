@@ -7,6 +7,4 @@ pub use cluster::{
     SshConfig, ValidationError, ValidationErrorCode,
 };
 pub use file::{load_config, update_config, C2AuthConfig, FeaturesConfig, WardenConfig};
-pub use hold::{
-    HoldConfig, HoldCredentials, HoldRetryConfig, HoldTlsConfig, IntegrationConfig,
-};
+pub use hold::{HoldConfig, HoldCredentials, HoldRetryConfig, HoldTlsConfig, IntegrationConfig};

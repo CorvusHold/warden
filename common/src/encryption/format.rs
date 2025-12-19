@@ -48,7 +48,7 @@ impl EncryptedFileHeader {
         use rand::RngCore;
         let mut nonce = [0u8; 12];
         rand::thread_rng().fill_bytes(&mut nonce);
-        
+
         Self {
             version: FORMAT_VERSION,
             algorithm,
@@ -137,10 +137,10 @@ pub fn is_encrypted(data: &[u8]) -> bool {
 #[allow(dead_code)] // Public API for encryption detection
 pub fn is_file_encrypted(path: &std::path::Path) -> std::io::Result<bool> {
     use std::io::Read;
-    
+
     let mut file = std::fs::File::open(path)?;
     let mut magic = [0u8; 8];
-    
+
     match file.read_exact(&mut magic) {
         Ok(()) => Ok(&magic == ENCRYPTED_FILE_MAGIC),
         Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
@@ -156,9 +156,9 @@ mod tests {
     fn test_header_roundtrip() {
         let header = EncryptedFileHeader::new(EncryptionAlgorithm::Aes256Gcm);
         let bytes = header.to_bytes();
-        
+
         assert_eq!(bytes.len(), HEADER_SIZE);
-        
+
         let parsed = EncryptedFileHeader::from_bytes(&bytes).unwrap();
         assert_eq!(parsed.version, header.version);
         assert_eq!(parsed.algorithm, header.algorithm);
@@ -169,7 +169,7 @@ mod tests {
     fn test_header_magic() {
         let header = EncryptedFileHeader::new(EncryptionAlgorithm::Aes256Gcm);
         let bytes = header.to_bytes();
-        
+
         assert_eq!(&bytes[0..8], ENCRYPTED_FILE_MAGIC);
     }
 
@@ -177,7 +177,7 @@ mod tests {
     fn test_invalid_magic() {
         let mut bytes = vec![0u8; HEADER_SIZE];
         bytes[0..8].copy_from_slice(b"INVALID!");
-        
+
         let result = EncryptedFileHeader::from_bytes(&bytes);
         assert!(matches!(result, Err(EncryptionError::InvalidFormat(_))));
     }
@@ -186,7 +186,7 @@ mod tests {
     fn test_is_encrypted() {
         let header = EncryptedFileHeader::new(EncryptionAlgorithm::Aes256Gcm);
         let bytes = header.to_bytes();
-        
+
         assert!(is_encrypted(&bytes));
         assert!(!is_encrypted(b"plaintext data"));
         assert!(!is_encrypted(&[]));

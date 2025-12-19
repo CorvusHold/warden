@@ -4,23 +4,29 @@ use anyhow::{anyhow, Result};
 use chrono::Utc;
 use log::{error, info, warn};
 use std::io::{self, Write};
-use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// Regex pattern for full timestamp format: YYYY-MM-DDTHH-MM-SS
-static FULL_TIMESTAMP_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})").unwrap()
-});
+static FULL_TIMESTAMP_RE: OnceLock<regex::Regex> = OnceLock::new();
 
 /// Regex pattern for date-only format: YYYY-MM-DD
-static DATE_ONLY_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})").unwrap()
-});
+static DATE_ONLY_RE: OnceLock<regex::Regex> = OnceLock::new();
+
+fn full_timestamp_re() -> &'static regex::Regex {
+    FULL_TIMESTAMP_RE.get_or_init(|| {
+        regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})").unwrap()
+    })
+}
+
+fn date_only_re() -> &'static regex::Regex {
+    DATE_ONLY_RE.get_or_init(|| regex::Regex::new(r"(\d{4})-(\d{2})-(\d{2})").unwrap())
+}
 
 use storage::{
     BackupMetadata as StorageBackupMetadata, BackupStatus as StorageBackupStatus,
-    BackupType as StorageBackupType, PostgresBackupStorage, RetentionPolicy as StorageRetentionPolicy,
-    StorageProviderType,
+    BackupType as StorageBackupType, PostgresBackupStorage,
+    RetentionPolicy as StorageRetentionPolicy, StorageProviderType,
 };
 
 use crate::retention::{
@@ -128,10 +134,7 @@ pub async fn retention_plan(
     };
 
     if let Some(ref inv) = wal_inventory {
-        info!(
-            "[retention-plan] Found {} WAL segments",
-            inv.segments.len()
-        );
+        info!("[retention-plan] Found {} WAL segments", inv.segments.len());
     }
 
     // Create retention engine and evaluate
@@ -275,21 +278,19 @@ pub async fn retention_apply(
         );
 
         match &decision.location {
-            BackupLocation::Local(path) => {
-                match delete_local_backup(path, &options.backup_dir) {
-                    Ok(_) => {
-                        deleted_backups += 1;
-                        space_freed += decision.size_bytes;
-                        info!("[retention-apply] Deleted local backup: {}", path);
-                    }
-                    Err(e) => {
-                        failed += 1;
-                        let msg = format!("Failed to delete local backup {}: {}", path, e);
-                        error!("[retention-apply] {}", msg);
-                        errors.push(msg);
-                    }
+            BackupLocation::Local(path) => match delete_local_backup(path, &options.backup_dir) {
+                Ok(_) => {
+                    deleted_backups += 1;
+                    space_freed += decision.size_bytes;
+                    info!("[retention-apply] Deleted local backup: {}", path);
                 }
-            }
+                Err(e) => {
+                    failed += 1;
+                    let msg = format!("Failed to delete local backup {}: {}", path, e);
+                    error!("[retention-apply] {}", msg);
+                    errors.push(msg);
+                }
+            },
             BackupLocation::Remote(key) => {
                 if let Some(ref storage) = storage_instance {
                     match storage.delete_backup(&decision.backup_id).await {
@@ -311,7 +312,7 @@ pub async fn retention_apply(
                 // Delete both local and remote - track errors locally for this backup
                 let mut local_failed = false;
                 let mut remote_failed = false;
-                
+
                 if let Err(e) = delete_local_backup(local, &options.backup_dir) {
                     failed += 1;
                     local_failed = true;
@@ -335,24 +336,24 @@ pub async fn retention_apply(
     }
 
     // Delete WAL segments
-    let wal_dir = options.wal_archive_dir.as_ref()
+    let wal_dir = options
+        .wal_archive_dir
+        .as_ref()
         .cloned()
         .unwrap_or_else(|| options.backup_dir.join("wal_archive"));
-    
+
     for decision in &evaluation.wal_to_delete {
         match &decision.location {
-            BackupLocation::Local(path) => {
-                match delete_local_file(path, &wal_dir) {
-                    Ok(_) => {
-                        deleted_wal += 1;
-                        space_freed += decision.size_bytes;
-                    }
-                    Err(e) => {
-                        failed += 1;
-                        errors.push(format!("Failed to delete WAL segment {}: {}", path, e));
-                    }
+            BackupLocation::Local(path) => match delete_local_file(path, &wal_dir) {
+                Ok(_) => {
+                    deleted_wal += 1;
+                    space_freed += decision.size_bytes;
                 }
-            }
+                Err(e) => {
+                    failed += 1;
+                    errors.push(format!("Failed to delete WAL segment {}: {}", path, e));
+                }
+            },
             _ => {
                 // Remote WAL deletion would go here
                 warn!(
@@ -423,7 +424,10 @@ fn format_retention_plan_table(result: &RetentionPlanResult) -> String {
     output.push_str(&format!("Policy source: {}\n", result.policy_source));
     output.push_str(&format!("Evaluation time: {}\n", eval.timestamp));
     output.push_str(&format!("Total backups: {}\n", eval.total_backups));
-    output.push_str(&format!("Total WAL segments: {}\n", eval.total_wal_segments));
+    output.push_str(&format!(
+        "Total WAL segments: {}\n",
+        eval.total_wal_segments
+    ));
 
     if let (Some(start), Some(end)) = (eval.pitr_window_start, eval.pitr_window_end) {
         output.push_str(&format!("\nPITR Window: {} to {}\n", start, end));
@@ -442,7 +446,11 @@ fn format_retention_plan_table(result: &RetentionPlanResult) -> String {
     ));
     for decision in &eval.backups_to_keep {
         let pinned = if decision.pinned { " 📌" } else { "" };
-        let deps = if decision.has_dependents { " [has deps]" } else { "" };
+        let deps = if decision.has_dependents {
+            " [has deps]"
+        } else {
+            ""
+        };
         output.push_str(&format!(
             "  ✅ {} ({:?}) - {} - {:.2} MB{}{}\n",
             decision.backup_id,
@@ -588,7 +596,9 @@ fn convert_storage_policy(storage_policy: &StorageRetentionPolicy) -> PitrRetent
             // Convert intervals to our format
             // This is a simplified conversion
             if !intervals.is_empty() {
-                let daily = intervals.iter().find(|i| i.spacing_days == 1 || i.spacing_hours == Some(24));
+                let daily = intervals
+                    .iter()
+                    .find(|i| i.spacing_days == 1 || i.spacing_hours == Some(24));
                 let weekly = intervals.iter().find(|i| i.spacing_days == 7);
                 let monthly = intervals.iter().find(|i| i.spacing_days == 30);
 
@@ -716,14 +726,15 @@ fn parse_local_metadata(metadata: &serde_json::Value, path: &PathBuf) -> Result<
         Some(ts) => ts,
         None => {
             // Fallback 1: Try filesystem modification time
-            let fallback_time = path.metadata()
+            let fallback_time = path
+                .metadata()
                 .and_then(|m| m.modified())
                 .ok()
                 .and_then(|mtime| {
                     let duration = mtime.duration_since(std::time::UNIX_EPOCH).ok()?;
                     chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
                 });
-            
+
             match fallback_time {
                 Some(ts) => {
                     warn!(
@@ -767,7 +778,11 @@ fn parse_local_metadata(metadata: &serde_json::Value, path: &PathBuf) -> Result<
         pinned: metadata["pinned"].as_bool().unwrap_or(false),
         tags: metadata["tags"]
             .as_array()
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default(),
         location: BackupLocation::Local(path.to_string_lossy().to_string()),
     })
@@ -794,7 +809,9 @@ fn infer_backup_from_directory(path: &PathBuf) -> Option<BackupItem> {
             // Try filesystem modification time as fallback
             match path.metadata().and_then(|m| m.modified()) {
                 Ok(mtime) => {
-                    let duration = mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                    let duration = mtime
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default();
                     chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
                         .unwrap_or_else(|| chrono::DateTime::<Utc>::from(std::time::UNIX_EPOCH))
                 }
@@ -829,14 +846,14 @@ fn infer_backup_from_directory(path: &PathBuf) -> Option<BackupItem> {
 }
 
 /// Extract timestamp from backup directory name
-/// 
+///
 /// Supports two formats:
 /// - Full timestamp: YYYY-MM-DDTHH-MM-SS (e.g., 2025-01-15T10-30-00)
 /// - Date only: YYYY-MM-DD (e.g., 2025-01-15) - assumes midnight UTC
 fn extract_timestamp_from_name(name: &str) -> Option<chrono::DateTime<Utc>> {
     // First try to match full timestamp pattern like 2025-01-15T10-30-00
     // Uses cached regex patterns for performance
-    if let Some(caps) = FULL_TIMESTAMP_RE.captures(name) {
+    if let Some(caps) = full_timestamp_re().captures(name) {
         let rfc3339 = format!(
             "{}-{}-{}T{}:{}:{}Z",
             &caps[1], &caps[2], &caps[3], &caps[4], &caps[5], &caps[6]
@@ -845,22 +862,25 @@ fn extract_timestamp_from_name(name: &str) -> Option<chrono::DateTime<Utc>> {
             return Some(dt.with_timezone(&Utc));
         }
     }
-    
+
     // Fall back to date-only pattern like 2025-01-15 (assumes midnight UTC)
-    if let Some(caps) = DATE_ONLY_RE.captures(name) {
+    if let Some(caps) = date_only_re().captures(name) {
         let rfc3339 = format!("{}-{}-{}T00:00:00Z", &caps[1], &caps[2], &caps[3]);
         if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&rfc3339) {
             return Some(dt.with_timezone(&Utc));
         }
     }
-    
+
     None
 }
 
 /// Calculate directory size recursively
 fn calculate_dir_size(path: &PathBuf) -> Result<u64> {
     let mut total = 0u64;
-    for entry in walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+    for entry in walkdir::WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         if entry.file_type().is_file() {
             total += entry.metadata().map(|m| m.len()).unwrap_or(0);
         }
@@ -938,24 +958,30 @@ async fn create_storage_provider(storage: &StorageOptions) -> Result<PostgresBac
 }
 
 /// Delete a local backup directory with path traversal protection.
-/// 
+///
 /// This function validates that the path is under the expected backup root
 /// to prevent path traversal attacks or symlink tricks.
-fn delete_local_backup(path: &str, backup_root: &PathBuf) -> Result<()> {
+fn delete_local_backup(path: &str, backup_root: &Path) -> Result<()> {
     let path = PathBuf::from(path);
-    
+
     // Canonicalize both paths to resolve symlinks and relative components
-    let canonical_root = backup_root.canonicalize()
-        .map_err(|e| anyhow!("Failed to canonicalize backup root '{}': {}", backup_root.display(), e))?;
-    
+    let canonical_root = backup_root.canonicalize().map_err(|e| {
+        anyhow!(
+            "Failed to canonicalize backup root '{}': {}",
+            backup_root.display(),
+            e
+        )
+    })?;
+
     // If path doesn't exist, nothing to delete
     if !path.exists() {
         return Ok(());
     }
-    
-    let canonical_path = path.canonicalize()
+
+    let canonical_path = path
+        .canonicalize()
         .map_err(|e| anyhow!("Failed to canonicalize path '{}': {}", path.display(), e))?;
-    
+
     // Verify the path is under the backup root
     if !canonical_path.starts_with(&canonical_root) {
         return Err(anyhow!(
@@ -964,41 +990,48 @@ fn delete_local_backup(path: &str, backup_root: &PathBuf) -> Result<()> {
             canonical_root.display()
         ));
     }
-    
+
     // Re-canonicalize immediately before deletion to mitigate TOCTOU race
-    let final_path = path.canonicalize()
+    let final_path = path
+        .canonicalize()
         .map_err(|e| anyhow!("Path changed during validation '{}': {}", path.display(), e))?;
-    
+
     if !final_path.starts_with(&canonical_root) {
         return Err(anyhow!(
             "Security: Path '{}' escaped backup root during operation. Refusing to delete.",
             final_path.display()
         ));
     }
-    
+
     std::fs::remove_dir_all(&final_path)?;
     Ok(())
 }
 
 /// Delete a local file with path traversal protection.
-/// 
+///
 /// This function validates that the path is under the expected root directory
 /// to prevent path traversal attacks or symlink tricks.
-fn delete_local_file(path: &str, root_dir: &PathBuf) -> Result<()> {
+fn delete_local_file(path: &str, root_dir: &Path) -> Result<()> {
     let path = PathBuf::from(path);
-    
+
     // Canonicalize both paths to resolve symlinks and relative components
-    let canonical_root = root_dir.canonicalize()
-        .map_err(|e| anyhow!("Failed to canonicalize root dir '{}': {}", root_dir.display(), e))?;
-    
+    let canonical_root = root_dir.canonicalize().map_err(|e| {
+        anyhow!(
+            "Failed to canonicalize root dir '{}': {}",
+            root_dir.display(),
+            e
+        )
+    })?;
+
     // If path doesn't exist, nothing to delete
     if !path.exists() {
         return Ok(());
     }
-    
-    let canonical_path = path.canonicalize()
+
+    let canonical_path = path
+        .canonicalize()
         .map_err(|e| anyhow!("Failed to canonicalize path '{}': {}", path.display(), e))?;
-    
+
     // Verify the path is under the root directory
     if !canonical_path.starts_with(&canonical_root) {
         return Err(anyhow!(
@@ -1007,18 +1040,19 @@ fn delete_local_file(path: &str, root_dir: &PathBuf) -> Result<()> {
             canonical_root.display()
         ));
     }
-    
+
     // Re-canonicalize immediately before deletion to mitigate TOCTOU race
-    let final_path = path.canonicalize()
+    let final_path = path
+        .canonicalize()
         .map_err(|e| anyhow!("Path changed during validation '{}': {}", path.display(), e))?;
-    
+
     if !final_path.starts_with(&canonical_root) {
         return Err(anyhow!(
             "Security: Path '{}' escaped root dir during operation. Refusing to delete.",
             final_path.display()
         ));
     }
-    
+
     std::fs::remove_file(&final_path)?;
     Ok(())
 }
@@ -1031,20 +1065,28 @@ pub fn retention_init(output: &PathBuf, preset: &str, format: &str) -> Result<()
         "gfs" => PitrRetentionPolicy::gfs_standard(),
         "standard" => PitrRetentionPolicy::default(),
         other => {
-            warn!("[retention-init] Unknown preset '{}', using 'standard'", other);
+            warn!(
+                "[retention-init] Unknown preset '{}', using 'standard'",
+                other
+            );
             PitrRetentionPolicy::default()
         }
     };
 
     // Validate the policy
     if let Err(errors) = policy.validate() {
-        return Err(anyhow!("Generated policy is invalid: {}", errors.join(", ")));
+        return Err(anyhow!(
+            "Generated policy is invalid: {}",
+            errors.join(", ")
+        ));
     }
 
     let content = match format.to_lowercase().as_str() {
         "yaml" => serde_yaml::to_string(&policy)
             .map_err(|e| anyhow!("Failed to serialize policy to YAML: {}", e))?,
-        "json" | _ => serde_json::to_string_pretty(&policy)
+        "json" => serde_json::to_string_pretty(&policy)
+            .map_err(|e| anyhow!("Failed to serialize policy to JSON: {}", e))?,
+        _ => serde_json::to_string_pretty(&policy)
             .map_err(|e| anyhow!("Failed to serialize policy to JSON: {}", e))?,
     };
 
@@ -1082,7 +1124,7 @@ mod tests {
     fn test_extract_timestamp_from_name() {
         // Test that the function doesn't panic on various inputs
         // and returns expected results for known formats
-        
+
         // Test with date-only format (should parse to midnight UTC)
         let name = "snapshot_backup_2025-01-15";
         let result = extract_timestamp_from_name(name);
@@ -1090,19 +1132,30 @@ mod tests {
         let ts = result.unwrap();
         assert_eq!(ts.format("%Y-%m-%d").to_string(), "2025-01-15");
         assert_eq!(ts.format("%H:%M:%S").to_string(), "00:00:00"); // midnight
-        
+
         // Test with full timestamp format (YYYY-MM-DDTHH-MM-SS)
         let name_with_time = "snapshot_backup_2025-01-15T10-30-45";
         let result = extract_timestamp_from_name(name_with_time);
-        assert!(result.is_some(), "Expected to parse full timestamp from '{}'", name_with_time);
+        assert!(
+            result.is_some(),
+            "Expected to parse full timestamp from '{}'",
+            name_with_time
+        );
         let ts = result.unwrap();
-        assert_eq!(ts.format("%Y-%m-%dT%H:%M:%S").to_string(), "2025-01-15T10:30:45");
-        
+        assert_eq!(
+            ts.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            "2025-01-15T10:30:45"
+        );
+
         // Test with trailing Z (should still work)
         let name_with_z = "snapshot_backup_2025-01-15T10-30-00Z";
         let result = extract_timestamp_from_name(name_with_z);
-        assert!(result.is_some(), "Expected to parse timestamp with Z from '{}'", name_with_z);
-        
+        assert!(
+            result.is_some(),
+            "Expected to parse timestamp with Z from '{}'",
+            name_with_z
+        );
+
         // Test with no timestamp - should return None
         let name_no_date = "snapshot_backup_latest";
         let result = extract_timestamp_from_name(name_no_date);

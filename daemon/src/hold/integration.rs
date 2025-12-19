@@ -223,11 +223,11 @@ impl HoldIntegration {
 
                                     // Publish response
                                     if let Ok(response_json) = serde_json::to_vec(&response) {
-                                        let routing_key = format!(
-                                            "warden.responses.hold.{}",
-                                            client.agent_id()
-                                        );
-                                        if let Err(e) = client.publish(&routing_key, &response_json).await {
+                                        let routing_key =
+                                            format!("warden.responses.hold.{}", client.agent_id());
+                                        if let Err(e) =
+                                            client.publish(&routing_key, &response_json).await
+                                        {
                                             warn!("Failed to publish command response: {}", e);
                                         }
                                     }
@@ -289,7 +289,8 @@ impl HoldIntegration {
                                     }
                                     Err(e) => {
                                         debug!("Reconnection failed: {}", e);
-                                        backoff = (backoff as f64 * retry_config.backoff_multiplier) as u64;
+                                        backoff = (backoff as f64 * retry_config.backoff_multiplier)
+                                            as u64;
                                         backoff = backoff.min(retry_config.max_backoff_secs);
                                     }
                                 }

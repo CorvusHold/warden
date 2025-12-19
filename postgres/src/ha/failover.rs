@@ -111,7 +111,11 @@ impl FailoverOrchestrator {
         let current_primary = self.config.get_primary_node(&self.options.cluster_id);
 
         // Build the plan
-        let mut plan = HaPlan::new("failover", &self.options.cluster_id, &self.options.to_node_id);
+        let mut plan = HaPlan::new(
+            "failover",
+            &self.options.cluster_id,
+            &self.options.to_node_id,
+        );
 
         if let Some(primary) = current_primary {
             plan = plan.with_source(&primary.id);
@@ -215,10 +219,7 @@ impl FailoverOrchestrator {
 
         // Add warnings
         plan.add_warning("⚠️  EMERGENCY FAILOVER - This is a destructive operation");
-        plan.add_warning(format!(
-            "Node {} will be promoted to primary",
-            to_node.id
-        ));
+        plan.add_warning(format!("Node {} will be promoted to primary", to_node.id));
 
         if let Some(primary) = current_primary {
             plan.add_warning(format!(
@@ -230,9 +231,7 @@ impl FailoverOrchestrator {
         if self.options.target_time.is_some() {
             plan.add_warning("PITR will be performed - data after target time will be lost");
         } else {
-            plan.add_warning(
-                "Any transactions not yet replicated to the target node will be lost",
-            );
+            plan.add_warning("Any transactions not yet replicated to the target node will be lost");
         }
 
         if self.options.force {
@@ -424,7 +423,11 @@ impl FailoverOrchestrator {
                     .unwrap_or_default();
                 let conn_str = format!(
                     "host={} port={} user={}{} dbname={}",
-                    node.host, node.port, self.options.pg_user, password_part, self.options.database
+                    node.host,
+                    node.port,
+                    self.options.pg_user,
+                    password_part,
+                    self.options.database
                 );
 
                 let result = std::process::Command::new("psql")

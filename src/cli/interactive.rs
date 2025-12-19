@@ -23,7 +23,7 @@ pub fn confirm(message: &str, default: bool) -> Result<bool> {
 /// Prompt for text input with optional default
 pub fn input(prompt: &str, default: Option<&str>) -> Result<String> {
     let theme = get_theme();
-    
+
     if let Some(def) = default {
         Input::with_theme(&theme)
             .with_prompt(prompt)
@@ -144,11 +144,7 @@ pub fn pitr_restore_wizard() -> Result<PitrRestoreConfig> {
 
     // Step 1: Backup directory
     step(1, 5, "Specify backup location");
-    let backup_dir = input_path(
-        "Backup directory",
-        Some("./backups"),
-        true,
-    )?;
+    let backup_dir = input_path("Backup directory", Some("./backups"), true)?;
 
     // Step 2: Target time
     step(2, 5, "Specify target recovery time");
@@ -228,10 +224,7 @@ pub fn ha_switchover_wizard(
     let cluster = clusters[cluster_idx].to_string();
 
     // Filter nodes by cluster
-    let cluster_nodes: Vec<_> = nodes
-        .iter()
-        .filter(|(_, c, _)| *c == cluster)
-        .collect();
+    let cluster_nodes: Vec<_> = nodes.iter().filter(|(_, c, _)| *c == cluster).collect();
 
     // Step 2: Select source (primary) node
     step(2, 5, "Select source node (current primary)");
@@ -326,7 +319,11 @@ pub fn cluster_validate_wizard() -> Result<ClusterValidateConfig> {
     let config_path = if use_default {
         None
     } else {
-        Some(input_path("Configuration file path", Some("./cluster.yaml"), true)?)
+        Some(input_path(
+            "Configuration file path",
+            Some("./cluster.yaml"),
+            true,
+        )?)
     };
 
     // Step 2: Auto-fix option

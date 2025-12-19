@@ -72,7 +72,11 @@ pub fn encrypt_file(
 /// Decrypt a file.
 ///
 /// Reads the encrypted source file, decrypts it, and writes to the destination.
-pub fn decrypt_file(source: &Path, dest: &Path, key: &EncryptionKey) -> Result<(), EncryptionError> {
+pub fn decrypt_file(
+    source: &Path,
+    dest: &Path,
+    key: &EncryptionKey,
+) -> Result<(), EncryptionError> {
     log::debug!("Decrypting file: {:?} -> {:?}", source, dest);
 
     // Read encrypted file
@@ -101,8 +105,9 @@ fn encrypt_aes256_gcm(plaintext: &[u8], key: &EncryptionKey) -> Result<Vec<u8>, 
     let header = EncryptedFileHeader::new(EncryptionAlgorithm::Aes256Gcm);
 
     // Create cipher
-    let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
-        .map_err(|e| EncryptionError::EncryptionFailed(format!("Failed to create cipher: {}", e)))?;
+    let cipher = Aes256Gcm::new_from_slice(key.as_bytes()).map_err(|e| {
+        EncryptionError::EncryptionFailed(format!("Failed to create cipher: {}", e))
+    })?;
 
     // Create nonce
     let nonce = Nonce::from_slice(&header.nonce);
@@ -135,8 +140,9 @@ fn decrypt_aes256_gcm(
     let ciphertext = &data[HEADER_SIZE..];
 
     // Create cipher
-    let cipher = Aes256Gcm::new_from_slice(key.as_bytes())
-        .map_err(|e| EncryptionError::DecryptionFailed(format!("Failed to create cipher: {}", e)))?;
+    let cipher = Aes256Gcm::new_from_slice(key.as_bytes()).map_err(|e| {
+        EncryptionError::DecryptionFailed(format!("Failed to create cipher: {}", e))
+    })?;
 
     // Create nonce from header
     let nonce = Nonce::from_slice(&header.nonce);
@@ -195,10 +201,10 @@ mod tests {
         let plaintext = b"Hello, World! This is a test message.";
 
         let encrypted = encrypt_data(plaintext, &key, EncryptionAlgorithm::Aes256Gcm).unwrap();
-        
+
         // Encrypted data should be larger (header + tag)
         assert!(encrypted.len() > plaintext.len());
-        
+
         // Should start with magic
         assert_eq!(&encrypted[0..8], b"WARDEN01");
 
@@ -213,7 +219,7 @@ mod tests {
         let plaintext = b"Secret data";
 
         let encrypted = encrypt_data(plaintext, &key1, EncryptionAlgorithm::Aes256Gcm).unwrap();
-        
+
         let result = decrypt_data(&encrypted, &key2);
         assert!(matches!(result, Err(EncryptionError::AuthenticationFailed)));
     }
@@ -224,7 +230,7 @@ mod tests {
         let plaintext = b"Secret data";
 
         let mut encrypted = encrypt_data(plaintext, &key, EncryptionAlgorithm::Aes256Gcm).unwrap();
-        
+
         // Corrupt the ciphertext
         if let Some(byte) = encrypted.last_mut() {
             *byte ^= 0xFF;
@@ -258,7 +264,7 @@ mod tests {
     fn test_file_encrypt_decrypt() {
         let key = test_key();
         let dir = tempdir().unwrap();
-        
+
         let source = dir.path().join("source.txt");
         let encrypted = dir.path().join("encrypted.bin");
         let decrypted = dir.path().join("decrypted.txt");
@@ -286,9 +292,10 @@ mod tests {
         let key = test_key();
         let plaintext = b"Streaming test data";
 
-        let encrypted = encrypt_streaming(&plaintext[..], &key, EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let encrypted =
+            encrypt_streaming(&plaintext[..], &key, EncryptionAlgorithm::Aes256Gcm).unwrap();
         let decrypted = decrypt_streaming(&encrypted[..], &key).unwrap();
-        
+
         assert_eq!(decrypted, plaintext);
     }
 }

@@ -289,12 +289,20 @@ impl fmt::Display for ClusterConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ClusterConfigError::NotFound(paths) => {
-                write!(f, "Cluster config not found. Searched: {}", paths.join(", "))
+                write!(
+                    f,
+                    "Cluster config not found. Searched: {}",
+                    paths.join(", ")
+                )
             }
             ClusterConfigError::Io(e) => write!(f, "IO error reading cluster config: {}", e),
             ClusterConfigError::Parse(e) => write!(f, "Failed to parse cluster config: {}", e),
             ClusterConfigError::Validation(errors) => {
-                writeln!(f, "Cluster config validation failed with {} error(s):", errors.len())?;
+                writeln!(
+                    f,
+                    "Cluster config validation failed with {} error(s):",
+                    errors.len()
+                )?;
                 for err in errors {
                     writeln!(f, "  - {}", err)?;
                 }
@@ -347,7 +355,9 @@ impl ClusterConfig {
             let mut found = None;
 
             for p in &paths {
-                let expanded = shellexpand::full(p).unwrap_or_else(|_| p.into()).into_owned();
+                let expanded = shellexpand::full(p)
+                    .unwrap_or_else(|_| p.into())
+                    .into_owned();
                 if Path::new(&expanded).exists() {
                     found = Some(std::fs::read_to_string(&expanded)?);
                     break;
@@ -644,19 +654,19 @@ impl ClusterConfig {
     /// Get all unique tenants in this configuration.
     pub fn get_tenants(&self) -> Vec<&str> {
         let mut tenants: HashSet<&str> = HashSet::new();
-        
+
         // Add default tenant if set
         if let Some(ref t) = self.default_tenant {
             tenants.insert(t.as_str());
         }
-        
+
         // Add cluster-specific tenants
         for cluster in &self.clusters {
             if let Some(ref t) = cluster.tenant {
                 tenants.insert(t.as_str());
             }
         }
-        
+
         tenants.into_iter().collect()
     }
 }
@@ -740,7 +750,9 @@ mod tests {
         });
 
         let errors = config.validate();
-        assert!(errors.iter().any(|e| e.code == ValidationErrorCode::DuplicateId));
+        assert!(errors
+            .iter()
+            .any(|e| e.code == ValidationErrorCode::DuplicateId));
     }
 
     #[test]
@@ -758,7 +770,9 @@ mod tests {
         });
 
         let errors = config.validate();
-        assert!(errors.iter().any(|e| e.code == ValidationErrorCode::DuplicateId));
+        assert!(errors
+            .iter()
+            .any(|e| e.code == ValidationErrorCode::DuplicateId));
     }
 
     #[test]
@@ -874,7 +888,7 @@ protection_groups:
     fn test_tenant_from_cluster() {
         let mut config = sample_config();
         config.clusters[0].tenant = Some("acme-corp".to_string());
-        
+
         let tenant = config.get_effective_tenant("test-cluster");
         assert_eq!(tenant, Some("acme-corp"));
     }
@@ -883,7 +897,7 @@ protection_groups:
     fn test_tenant_from_default() {
         let mut config = sample_config();
         config.default_tenant = Some("default-tenant".to_string());
-        
+
         let tenant = config.get_effective_tenant("test-cluster");
         assert_eq!(tenant, Some("default-tenant"));
     }
@@ -893,7 +907,7 @@ protection_groups:
         let mut config = sample_config();
         config.default_tenant = Some("default-tenant".to_string());
         config.clusters[0].tenant = Some("cluster-tenant".to_string());
-        
+
         let tenant = config.get_effective_tenant("test-cluster");
         assert_eq!(tenant, Some("cluster-tenant"));
     }
@@ -909,11 +923,11 @@ protection_groups:
             environment: None,
             labels: HashMap::new(),
         });
-        
+
         let default_clusters = config.get_clusters_by_tenant("default-tenant");
         assert_eq!(default_clusters.len(), 1);
         assert_eq!(default_clusters[0].id, "test-cluster");
-        
+
         let other_clusters = config.get_clusters_by_tenant("other-tenant");
         assert_eq!(other_clusters.len(), 1);
         assert_eq!(other_clusters[0].id, "other-cluster");
@@ -930,7 +944,7 @@ protection_groups:
             environment: None,
             labels: HashMap::new(),
         });
-        
+
         let tenants = config.get_tenants();
         assert_eq!(tenants.len(), 2);
         assert!(tenants.contains(&"default-tenant"));
@@ -966,10 +980,19 @@ protection_groups:
         let config: ClusterConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(config.default_tenant, Some("acme-corp".to_string()));
         assert_eq!(config.clusters[0].tenant, None);
-        assert_eq!(config.clusters[1].tenant, Some("staging-tenant".to_string()));
-        
+        assert_eq!(
+            config.clusters[1].tenant,
+            Some("staging-tenant".to_string())
+        );
+
         // Test effective tenant resolution
-        assert_eq!(config.get_effective_tenant("prod-cluster"), Some("acme-corp"));
-        assert_eq!(config.get_effective_tenant("staging-cluster"), Some("staging-tenant"));
+        assert_eq!(
+            config.get_effective_tenant("prod-cluster"),
+            Some("acme-corp")
+        );
+        assert_eq!(
+            config.get_effective_tenant("staging-cluster"),
+            Some("staging-tenant")
+        );
     }
 }

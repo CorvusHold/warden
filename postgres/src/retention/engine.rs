@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 
 use super::policy::{IntervalSpec, PitrRetentionPolicy, RetentionRule};
@@ -82,7 +83,9 @@ impl RetentionEngine {
         result.total_wal_segments = wal_inventory.map(|w| w.segments.len()).unwrap_or(0);
 
         if !self.policy.enabled {
-            result.warnings.push("Retention policy is disabled".to_string());
+            result
+                .warnings
+                .push("Retention policy is disabled".to_string());
             // Keep everything when disabled
             for backup in backups {
                 result.backups_to_keep.push(self.create_keep_decision(
@@ -95,10 +98,8 @@ impl RetentionEngine {
         }
 
         // Filter backups by scope
-        let in_scope_backups: Vec<&BackupItem> = backups
-            .iter()
-            .filter(|b| self.is_in_scope(b))
-            .collect();
+        let in_scope_backups: Vec<&BackupItem> =
+            backups.iter().filter(|b| self.is_in_scope(b)).collect();
 
         // Evaluate backup retention
         let mut keep_ids: HashSet<String> = HashSet::new();
@@ -165,12 +166,10 @@ impl RetentionEngine {
         }
 
         // Sort results by timestamp
-        result
-            .backups_to_keep
-            .sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        result.backups_to_keep.sort_by_key(|d| Reverse(d.timestamp));
         result
             .backups_to_delete
-            .sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            .sort_by_key(|d| Reverse(d.timestamp));
 
         result.calculate_space_freed();
         result
@@ -228,18 +227,13 @@ impl RetentionEngine {
             }
 
             RetentionRule::KeepLatest { count } => {
-                let mut sorted: Vec<_> = backups
-                    .iter()
-                    .filter(|b| b.is_completed())
-                    .collect();
-                sorted.sort_by(|a, b| b.effective_time().cmp(&a.effective_time()));
+                let mut sorted: Vec<_> = backups.iter().filter(|b| b.is_completed()).collect();
+                sorted.sort_by_key(|b| Reverse(b.effective_time()));
 
                 for backup in sorted.iter().take(*count) {
                     keep_ids.insert(backup.id.clone());
-                    keep_reasons.insert(
-                        backup.id.clone(),
-                        format!("Keep latest {} backups", count),
-                    );
+                    keep_reasons
+                        .insert(backup.id.clone(), format!("Keep latest {} backups", count));
                 }
             }
 
@@ -265,7 +259,7 @@ impl RetentionEngine {
                         .iter()
                         .filter(|b| b.is_completed() && !keep_ids.contains(&b.id))
                         .collect();
-                    sorted.sort_by(|a, b| b.effective_time().cmp(&a.effective_time()));
+                    sorted.sort_by_key(|b| Reverse(b.effective_time()));
 
                     for backup in sorted.iter().take(*minimum - kept_count) {
                         keep_ids.insert(backup.id.clone());
@@ -287,19 +281,59 @@ impl RetentionEngine {
                 let now = Utc::now();
 
                 if let Some(spec) = hourly {
-                    self.apply_interval_rule(backups, keep_ids, keep_reasons, spec, 1, "hourly", now);
+                    self.apply_interval_rule(
+                        backups,
+                        keep_ids,
+                        keep_reasons,
+                        spec,
+                        1,
+                        "hourly",
+                        now,
+                    );
                 }
                 if let Some(spec) = daily {
-                    self.apply_interval_rule(backups, keep_ids, keep_reasons, spec, 24, "daily", now);
+                    self.apply_interval_rule(
+                        backups,
+                        keep_ids,
+                        keep_reasons,
+                        spec,
+                        24,
+                        "daily",
+                        now,
+                    );
                 }
                 if let Some(spec) = weekly {
-                    self.apply_interval_rule(backups, keep_ids, keep_reasons, spec, 24 * 7, "weekly", now);
+                    self.apply_interval_rule(
+                        backups,
+                        keep_ids,
+                        keep_reasons,
+                        spec,
+                        24 * 7,
+                        "weekly",
+                        now,
+                    );
                 }
                 if let Some(spec) = monthly {
-                    self.apply_interval_rule(backups, keep_ids, keep_reasons, spec, 24 * 30, "monthly", now);
+                    self.apply_interval_rule(
+                        backups,
+                        keep_ids,
+                        keep_reasons,
+                        spec,
+                        24 * 30,
+                        "monthly",
+                        now,
+                    );
                 }
                 if let Some(spec) = yearly {
-                    self.apply_interval_rule(backups, keep_ids, keep_reasons, spec, 24 * 365, "yearly", now);
+                    self.apply_interval_rule(
+                        backups,
+                        keep_ids,
+                        keep_reasons,
+                        spec,
+                        24 * 365,
+                        "yearly",
+                        now,
+                    );
                 }
             }
 
@@ -308,10 +342,8 @@ impl RetentionEngine {
                     for tag in tags {
                         if backup.tags.contains(tag) {
                             keep_ids.insert(backup.id.clone());
-                            keep_reasons.insert(
-                                backup.id.clone(),
-                                format!("Tagged with '{}'", tag),
-                            );
+                            keep_reasons
+                                .insert(backup.id.clone(), format!("Tagged with '{}'", tag));
                             break;
                         }
                     }
@@ -321,6 +353,7 @@ impl RetentionEngine {
     }
 
     /// Applies an interval-based retention rule (GFS-style)
+    #[allow(clippy::too_many_arguments)]
     fn apply_interval_rule(
         &self,
         backups: &[&BackupItem],
@@ -344,7 +377,7 @@ impl RetentionEngine {
             .iter()
             .filter(|b| b.is_completed() && b.effective_time() >= cutoff)
             .collect();
-        candidates.sort_by(|a, b| b.effective_time().cmp(&a.effective_time()));
+        candidates.sort_by_key(|b| Reverse(b.effective_time()));
 
         // Select backups spaced by the interval
         let mut selected = Vec::new();
@@ -401,7 +434,7 @@ impl RetentionEngine {
                 .iter()
                 .filter(|b| b.is_completed() && !keep_ids.contains(&b.id))
                 .collect();
-            additional.sort_by(|a, b| b.effective_time().cmp(&a.effective_time()));
+            additional.sort_by_key(|b| Reverse(b.effective_time()));
 
             for backup in additional.iter().take(needed) {
                 keep_ids.insert(backup.id.clone());
@@ -653,8 +686,8 @@ impl RetentionEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::policy::SafetySettings;
+    use super::*;
 
     fn create_test_backup(id: &str, days_ago: i64, backup_type: BackupItemType) -> BackupItem {
         let now = Utc::now();

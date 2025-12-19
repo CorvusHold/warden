@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use storage::StorageProviderType;
 
 mod cli;
 
@@ -468,7 +469,8 @@ async fn main() -> Result<()> {
                         include_legacy: false,
                     },
                 };
-                let labels_map: std::collections::HashMap<String, String> = labels.into_iter().collect();
+                let labels_map: std::collections::HashMap<String, String> =
+                    labels.into_iter().collect();
                 match postgres::cli::commands::snapshot_backup(
                     host,
                     port,
@@ -1079,9 +1081,13 @@ async fn main() -> Result<()> {
                 wal_prefix,
                 format,
             } => {
+                let provider_type = match storage_provider.to_lowercase().as_str() {
+                    "s3" => StorageProviderType::S3,
+                    _ => anyhow::bail!("Unsupported storage provider type: {}", storage_provider),
+                };
                 let storage_opts = postgres::cli::commands::PitrStorageOptions {
                     remote_storage,
-                    provider_type: storage_provider,
+                    provider_type,
                     bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
@@ -1119,51 +1125,54 @@ async fn main() -> Result<()> {
                 interactive,
             } => {
                 // Handle interactive mode
-                let (final_target_time, final_target_dir, final_auto_start, final_yes) = if interactive {
-                    match cli::interactive::pitr_restore_wizard() {
-                        Ok(config) => {
-                            if !config.confirmed {
-                                log::info!("PITR restore cancelled by user");
-                                return Ok(());
+                let (final_target_time, final_target_dir, final_auto_start, final_yes) =
+                    if interactive {
+                        match cli::interactive::pitr_restore_wizard() {
+                            Ok(config) => {
+                                if !config.confirmed {
+                                    log::info!("PITR restore cancelled by user");
+                                    return Ok(());
+                                }
+                                (
+                                    config.target_time,
+                                    std::path::PathBuf::from(config.target_dir),
+                                    config.auto_start,
+                                    true, // User confirmed in wizard
+                                )
                             }
-                            (
-                                config.target_time,
-                                std::path::PathBuf::from(config.target_dir),
-                                config.auto_start,
-                                true, // User confirmed in wizard
-                            )
+                            Err(e) => {
+                                log::error!("Interactive mode failed: {}", e);
+                                std::process::exit(1);
+                            }
                         }
-                        Err(e) => {
-                            log::error!("Interactive mode failed: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                } else {
-                    (
-                        target_time.expect("target_time required when not in interactive mode"),
-                        target_dir.expect("target_dir required when not in interactive mode"),
-                        auto_start,
-                        yes,
-                    )
-                };
-
-                let storage_opts = postgres::cli::commands::PitrStorageOptions {
-                    remote_storage,
-                    provider_type: storage_provider,
-                    bucket: storage_bucket,
-                    prefix: storage_prefix,
-                    region: storage_region,
-                    endpoint: storage_endpoint,
-                    access_key: storage_access_key,
-                    secret_key: storage_secret_key,
-                    wal_prefix,
+                    } else {
+                        (
+                            target_time.expect("target_time required when not in interactive mode"),
+                            target_dir.expect("target_dir required when not in interactive mode"),
+                            auto_start,
+                            yes,
+                        )
+                    };
+                let provider_type = match storage_provider.to_lowercase().as_str() {
+                    "s3" => StorageProviderType::S3,
+                    _ => anyhow::bail!("Unsupported storage provider type: {}", storage_provider),
                 };
                 postgres::cli::commands::pitr_restore(
                     final_target_time,
                     final_target_dir,
                     backup_dir,
                     wal_archive_dir,
-                    storage_opts,
+                    postgres::cli::commands::PitrStorageOptions {
+                        remote_storage,
+                        provider_type,
+                        bucket: storage_bucket,
+                        prefix: storage_prefix,
+                        region: storage_region,
+                        endpoint: storage_endpoint,
+                        access_key: storage_access_key,
+                        secret_key: storage_secret_key,
+                        wal_prefix,
+                    },
                     final_auto_start,
                     pg_bin_dir,
                     final_yes,
@@ -1184,9 +1193,13 @@ async fn main() -> Result<()> {
                 wal_prefix,
                 format,
             } => {
+                let provider_type = match storage_provider.to_lowercase().as_str() {
+                    "s3" => StorageProviderType::S3,
+                    _ => anyhow::bail!("Unsupported storage provider type: {}", storage_provider),
+                };
                 let storage_opts = postgres::cli::commands::PitrStorageOptions {
                     remote_storage,
-                    provider_type: storage_provider,
+                    provider_type,
                     bucket: storage_bucket,
                     prefix: storage_prefix,
                     region: storage_region,
@@ -1235,7 +1248,11 @@ async fn main() -> Result<()> {
                 log::info!("[CLI] Starting full-restore command...");
                 log::info!(
                     "[CLI] Parameters: backup_id={}, host={}, port={}, database={}, dry_run={}",
-                    backup_id, host, port, database, dry_run
+                    backup_id,
+                    host,
+                    port,
+                    database,
+                    dry_run
                 );
                 let ssh = postgres::cli::commands::SshOptions {
                     host: ssh_host,
@@ -1321,7 +1338,8 @@ async fn main() -> Result<()> {
                 };
                 match postgres::cli::commands::retention_plan(storage, opts).await {
                     Ok(result) => {
-                        let output = postgres::cli::commands::format_retention_plan(&result, &format);
+                        let output =
+                            postgres::cli::commands::format_retention_plan(&result, &format);
                         println!("{}", output);
                     }
                     Err(e) => {
@@ -1381,17 +1399,15 @@ async fn main() -> Result<()> {
                 output,
                 preset,
                 format,
-            } => {
-                match postgres::cli::commands::retention_init(&output, &preset, &format) {
-                    Ok(_) => {
-                        log::info!("[CLI] retention-init completed successfully");
-                    }
-                    Err(e) => {
-                        log::error!("[CLI] retention-init failed: {}", e);
-                        std::process::exit(1);
-                    }
+            } => match postgres::cli::commands::retention_init(&output, &preset, &format) {
+                Ok(_) => {
+                    log::info!("[CLI] retention-init completed successfully");
                 }
-            }
+                Err(e) => {
+                    log::error!("[CLI] retention-init failed: {}", e);
+                    std::process::exit(1);
+                }
+            },
             postgres::cli::PostgresqlCommands::Backups(backups_cmd) => {
                 match backups_cmd {
                     postgres::cli::BackupsCommands::List {
@@ -1429,7 +1445,12 @@ async fn main() -> Result<()> {
                             limit,
                             format: format.clone(),
                         };
-                        match postgres::cli::commands::backups::list_backups(&storage_opts, &list_opts).await {
+                        match postgres::cli::commands::backups::list_backups(
+                            &storage_opts,
+                            &list_opts,
+                        )
+                        .await
+                        {
                             Ok(result) => {
                                 let output = if format == "json" {
                                     postgres::cli::commands::backups::format_list_json(&result)
@@ -1465,7 +1486,12 @@ async fn main() -> Result<()> {
                             access_key: storage_access_key,
                             secret_key: storage_secret_key,
                         };
-                        match postgres::cli::commands::backups::show_backup(&storage_opts, &backup_id).await {
+                        match postgres::cli::commands::backups::show_backup(
+                            &storage_opts,
+                            &backup_id,
+                        )
+                        .await
+                        {
                             Ok(result) => {
                                 let output = if format == "json" {
                                     postgres::cli::commands::backups::format_show_json(&result)
@@ -1513,7 +1539,9 @@ async fn main() -> Result<()> {
                             &backup_id,
                             &output,
                             verify_checksums,
-                        ).await {
+                        )
+                        .await
+                        {
                             Ok(result) => {
                                 let output_str = if format == "json" {
                                     postgres::cli::commands::backups::format_download_json(&result)
@@ -1522,7 +1550,7 @@ async fn main() -> Result<()> {
                                     postgres::cli::commands::backups::format_download_table(&result)
                                 };
                                 println!("{}", output_str);
-                                
+
                                 // Exit with error if checksum verification failed
                                 if let Some(ref checksum_result) = result.checksum_verified {
                                     if !checksum_result.all_matched {
@@ -1562,11 +1590,16 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            postgres::cli::PostgresqlCommands::ClusterValidate { config, interactive } => {
+            postgres::cli::PostgresqlCommands::ClusterValidate {
+                config,
+                interactive,
+            } => {
                 // Handle interactive mode
                 let config_path = if interactive {
                     match cli::interactive::cluster_validate_wizard() {
-                        Ok(wizard_config) => wizard_config.config_path.map(std::path::PathBuf::from),
+                        Ok(wizard_config) => {
+                            wizard_config.config_path.map(std::path::PathBuf::from)
+                        }
                         Err(e) => {
                             log::error!("Interactive mode failed: {}", e);
                             std::process::exit(1);
@@ -1602,10 +1635,13 @@ async fn main() -> Result<()> {
             }
             postgres::cli::PostgresqlCommands::ClusterShow { config, format } => {
                 let config_path = config.as_deref();
-                let output_format = postgres::cli::commands::OutputFormat::from_str(&format);
+                let output_format: postgres::cli::commands::OutputFormat = format.parse().unwrap();
                 match postgres::cli::commands::cluster_show(config_path) {
                     Ok(overview) => {
-                        let output = postgres::cli::commands::format_cluster_overview(&overview, output_format);
+                        let output = postgres::cli::commands::format_cluster_overview(
+                            &overview,
+                            output_format,
+                        );
                         println!("{}", output);
                     }
                     Err(e) => {
@@ -1615,12 +1651,22 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            postgres::cli::PostgresqlCommands::ClusterNodes { config, cluster, role, format } => {
+            postgres::cli::PostgresqlCommands::ClusterNodes {
+                config,
+                cluster,
+                role,
+                format,
+            } => {
                 let config_path = config.as_deref();
-                let output_format = postgres::cli::commands::OutputFormat::from_str(&format);
-                match postgres::cli::commands::cluster_nodes(config_path, cluster.as_deref(), role.as_deref()) {
+                let output_format: postgres::cli::commands::OutputFormat = format.parse().unwrap();
+                match postgres::cli::commands::cluster_nodes(
+                    config_path,
+                    cluster.as_deref(),
+                    role.as_deref(),
+                ) {
                     Ok(list) => {
-                        let output = postgres::cli::commands::format_node_list(&list, output_format);
+                        let output =
+                            postgres::cli::commands::format_node_list(&list, output_format);
                         println!("{}", output);
                     }
                     Err(e) => {
@@ -1630,12 +1676,22 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            postgres::cli::PostgresqlCommands::ClusterProtectionGroups { config, cluster, format } => {
+            postgres::cli::PostgresqlCommands::ClusterProtectionGroups {
+                config,
+                cluster,
+                format,
+            } => {
                 let config_path = config.as_deref();
-                let output_format = postgres::cli::commands::OutputFormat::from_str(&format);
-                match postgres::cli::commands::cluster_protection_groups(config_path, cluster.as_deref()) {
+                let output_format: postgres::cli::commands::OutputFormat = format.parse().unwrap();
+                match postgres::cli::commands::cluster_protection_groups(
+                    config_path,
+                    cluster.as_deref(),
+                ) {
                     Ok(list) => {
-                        let output = postgres::cli::commands::format_protection_group_list(&list, output_format);
+                        let output = postgres::cli::commands::format_protection_group_list(
+                            &list,
+                            output_format,
+                        );
                         println!("{}", output);
                     }
                     Err(e) => {
@@ -1645,8 +1701,14 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            postgres::cli::PostgresqlCommands::ScheduleList { format, enabled_only, schedule_type } => {
-                match postgres::cli::commands::schedule_list(format, enabled_only, schedule_type).await {
+            postgres::cli::PostgresqlCommands::ScheduleList {
+                format,
+                enabled_only,
+                schedule_type,
+            } => {
+                match postgres::cli::commands::schedule_list(format, enabled_only, schedule_type)
+                    .await
+                {
                     Ok(()) => {}
                     Err(e) => {
                         log::error!("[CLI] schedule-list failed: {}", e);
@@ -1655,8 +1717,13 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            postgres::cli::PostgresqlCommands::ScheduleNextRuns { count, format, enabled_only } => {
-                match postgres::cli::commands::schedule_next_runs(count, format, enabled_only).await {
+            postgres::cli::PostgresqlCommands::ScheduleNextRuns {
+                count,
+                format,
+                enabled_only,
+            } => {
+                match postgres::cli::commands::schedule_next_runs(count, format, enabled_only).await
+                {
                     Ok(()) => {}
                     Err(e) => {
                         log::error!("[CLI] schedule-next-runs failed: {}", e);
@@ -1731,7 +1798,9 @@ async fn main() -> Result<()> {
                     format,
                     backup_warning_age_hours,
                     backup_critical_age_hours,
-                ).await {
+                )
+                .await
+                {
                     Ok(()) => {}
                     Err(e) => {
                         log::error!("[CLI] status failed: {}", e);
@@ -1767,7 +1836,9 @@ async fn main() -> Result<()> {
                     database,
                     storage_opts,
                     format,
-                ).await {
+                )
+                .await
+                {
                     Ok(()) => {}
                     Err(e) => {
                         log::error!("[CLI] backup-status failed: {}", e);
@@ -1805,7 +1876,9 @@ async fn main() -> Result<()> {
                     database,
                     storage_opts,
                     format,
-                ).await {
+                )
+                .await
+                {
                     Ok(()) => {}
                     Err(e) => {
                         log::error!("[CLI] pitr-status failed: {}", e);
@@ -1847,7 +1920,9 @@ async fn main() -> Result<()> {
                     storage_opts,
                     output,
                     format,
-                ).await {
+                )
+                .await
+                {
                     Ok(()) => {}
                     Err(e) => {
                         log::error!("[CLI] metrics failed: {}", e);
@@ -1881,16 +1956,14 @@ async fn main() -> Result<()> {
                     local_port: ssh_local_port,
                     remote_port: ssh_remote_port,
                 };
-                match postgres::cli::commands::discover(
-                    host,
-                    port,
-                    user,
-                    password,
-                    ssl_mode,
-                    ssh,
-                ).await {
+                match postgres::cli::commands::discover(host, port, user, password, ssl_mode, ssh)
+                    .await
+                {
                     Ok(result) => {
-                        println!("{}", postgres::cli::commands::format_discovery_result(&result, &format));
+                        println!(
+                            "{}",
+                            postgres::cli::commands::format_discovery_result(&result, &format)
+                        );
                     }
                     Err(e) => {
                         log::error!("[CLI] discover failed: {}", e);
@@ -1918,7 +1991,11 @@ async fn main() -> Result<()> {
                 ssh_remote_port,
                 format,
             } => {
-                log::info!("[CLI] Starting generate-config command for {}:{}", host, port);
+                log::info!(
+                    "[CLI] Starting generate-config command for {}:{}",
+                    host,
+                    port
+                );
                 let ssh = postgres::cli::commands::MigrationSshOptions {
                     host: ssh_host,
                     user: ssh_user,
@@ -1942,7 +2019,10 @@ async fn main() -> Result<()> {
                 };
                 match postgres::cli::commands::generate_config(options).await {
                     Ok(result) => {
-                        println!("{}", postgres::cli::commands::format_generated_config(&result, &format));
+                        println!(
+                            "{}",
+                            postgres::cli::commands::format_generated_config(&result, &format)
+                        );
                     }
                     Err(e) => {
                         log::error!("[CLI] generate-config failed: {}", e);
@@ -1969,9 +2049,8 @@ async fn main() -> Result<()> {
                 format,
             } => {
                 log::info!("[CLI] Starting import-backup command for {}", source);
-                let backup_type: postgres::cli::commands::ImportBackupType = backup_type
-                    .parse()
-                    .unwrap_or_else(|e| {
+                let backup_type: postgres::cli::commands::ImportBackupType =
+                    backup_type.parse().unwrap_or_else(|e| {
                         eprintln!("Error: {}", e);
                         std::process::exit(1);
                     });
@@ -2001,7 +2080,10 @@ async fn main() -> Result<()> {
                 };
                 match postgres::cli::commands::import_backup(options).await {
                     Ok(result) => {
-                        println!("{}", postgres::cli::commands::format_import_result(&result, &format));
+                        println!(
+                            "{}",
+                            postgres::cli::commands::format_import_result(&result, &format)
+                        );
                     }
                     Err(e) => {
                         log::error!("[CLI] import-backup failed: {}", e);
@@ -2044,23 +2126,21 @@ async fn main() -> Result<()> {
                 cli::completions::generate_completions(shell, &mut cmd);
             }
         }
-        Commands::Docs { topic } => {
-            match topic {
-                Some(t) => {
-                    if let Some(help) = cli::help_topics::get_topic_help(&t) {
-                        println!("{}", help);
-                    } else {
-                        eprintln!("Unknown topic: {}", t);
-                        eprintln!();
-                        println!("{}", cli::help_topics::list_topics());
-                        std::process::exit(1);
-                    }
-                }
-                None => {
+        Commands::Docs { topic } => match topic {
+            Some(t) => {
+                if let Some(help) = cli::help_topics::get_topic_help(&t) {
+                    println!("{}", help);
+                } else {
+                    eprintln!("Unknown topic: {}", t);
+                    eprintln!();
                     println!("{}", cli::help_topics::list_topics());
+                    std::process::exit(1);
                 }
             }
-        }
+            None => {
+                println!("{}", cli::help_topics::list_topics());
+            }
+        },
         Commands::Plugins(plugins_cmd) => {
             let registry = cli::plugins::init_registry();
             match plugins_cmd {

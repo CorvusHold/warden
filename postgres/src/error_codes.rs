@@ -185,7 +185,9 @@ impl fmt::Display for CliError {
 
 impl std::error::Error for CliError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source.as_ref().map(|e| e.as_ref() as &(dyn std::error::Error + 'static))
+        self.source
+            .as_ref()
+            .map(|e| e.as_ref() as &(dyn std::error::Error + 'static))
     }
 }
 

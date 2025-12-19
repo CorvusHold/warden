@@ -4,15 +4,31 @@
 //! When disabled (the default), Warden operates in fully standalone mode with no HOLD overhead.
 
 use percent_encoding::{percent_encode, AsciiSet, CONTROLS};
+use std::collections::HashMap;
 
 /// Encode set for URL userinfo (username/password in URIs)
 /// Based on RFC 3986: encode everything except unreserved chars and sub-delims
 /// that are safe in userinfo. This is more precise than NON_ALPHANUMERIC.
 const USERINFO: &AsciiSet = &CONTROLS
-    .add(b' ').add(b'"').add(b'<').add(b'>').add(b'`')
-    .add(b'#').add(b'?').add(b'{').add(b'}')
-    .add(b'/').add(b':').add(b';').add(b'=').add(b'@')
-    .add(b'[').add(b'\\').add(b']').add(b'^').add(b'|');
+    .add(b' ')
+    .add(b'"')
+    .add(b'<')
+    .add(b'>')
+    .add(b'`')
+    .add(b'#')
+    .add(b'?')
+    .add(b'{')
+    .add(b'}')
+    .add(b'/')
+    .add(b':')
+    .add(b';')
+    .add(b'=')
+    .add(b'@')
+    .add(b'[')
+    .add(b'\\')
+    .add(b']')
+    .add(b'^')
+    .add(b'|');
 use serde::{Deserialize, Serialize};
 
 /// HOLD integration configuration
@@ -20,7 +36,7 @@ use serde::{Deserialize, Serialize};
 /// Controls the optional connection to a HOLD/C2 control plane.
 /// When `enabled` is false, no HOLD connection is attempted and Warden
 /// operates in fully standalone mode.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HoldConfig {
     /// Master switch for HOLD integration (default: false)
     #[serde(default)]
@@ -58,6 +74,22 @@ pub struct HoldConfig {
     /// Labels to attach to this agent for HOLD filtering/grouping
     #[serde(default)]
     pub labels: std::collections::HashMap<String, String>,
+}
+
+impl Default for HoldConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: None,
+            credentials: None,
+            agent_id: default_agent_id(),
+            heartbeat_interval_secs: default_heartbeat_interval(),
+            command_timeout_secs: default_command_timeout(),
+            retry: HoldRetryConfig::default(),
+            tls: None,
+            labels: HashMap::new(),
+        }
+    }
 }
 
 fn default_agent_id() -> String {
@@ -199,7 +231,7 @@ impl Default for HoldTlsConfig {
 
 impl HoldConfig {
     /// Check if HOLD integration is enabled and properly configured
-    /// 
+    ///
     /// Returns false if endpoint is empty or whitespace-only, even if enabled is true.
     pub fn is_configured(&self) -> bool {
         let has_valid_endpoint = self
@@ -227,7 +259,7 @@ impl HoldConfig {
     }
 
     /// Get the AMQP connection URI with credentials
-    /// 
+    ///
     /// Credentials are URL-encoded to handle special characters like @, :, /, %
     pub fn get_connection_uri(&self) -> Option<String> {
         let endpoint = self.endpoint.as_ref()?;
@@ -251,7 +283,10 @@ impl HoldConfig {
                 return Some(format!("amqp://{}:{}@{}", encoded_user, encoded_pass, rest));
             }
             if let Some(rest) = endpoint.strip_prefix("amqps://") {
-                return Some(format!("amqps://{}:{}@{}", encoded_user, encoded_pass, rest));
+                return Some(format!(
+                    "amqps://{}:{}@{}",
+                    encoded_user, encoded_pass, rest
+                ));
             }
         }
 

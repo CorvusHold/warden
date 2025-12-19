@@ -20,8 +20,8 @@ pub fn list_plugins(registry: &PluginRegistry) {
 
     // Print header
     println!(
-        "{:<15} {:<10} {:<6} {:<12} {}",
-        "NAME", "VERSION", "PITR", "INCREMENTAL", "DESCRIPTION"
+        "{:<15} {:<10} {:<6} {:<12} DESCRIPTION",
+        "NAME", "VERSION", "PITR", "INCREMENTAL"
     );
     println!("{}", "-".repeat(70));
 

@@ -476,12 +476,12 @@ impl BackupPerformanceMetrics {
         // Update averages (running average)
         let old_count = self.sample_count as f64;
         let new_count = old_count + 1.0;
-        
-        self.avg_duration_seconds = 
+
+        self.avg_duration_seconds =
             (self.avg_duration_seconds * old_count + duration_seconds) / new_count;
-        self.avg_size_bytes = 
+        self.avg_size_bytes =
             ((self.avg_size_bytes as f64 * old_count + size_bytes as f64) / new_count) as u64;
-        self.avg_throughput_bytes_per_sec = 
+        self.avg_throughput_bytes_per_sec =
             (self.avg_throughput_bytes_per_sec * old_count + throughput) / new_count;
 
         self.sample_count += 1;
@@ -522,10 +522,10 @@ impl PitrPerformanceMetrics {
         // Update averages
         let old_count = self.sample_count as f64;
         let new_count = old_count + 1.0;
-        
-        self.avg_duration_seconds = 
+
+        self.avg_duration_seconds =
             (self.avg_duration_seconds * old_count + duration_seconds) / new_count;
-        self.avg_wal_replay_rate_bytes_per_sec = 
+        self.avg_wal_replay_rate_bytes_per_sec =
             (self.avg_wal_replay_rate_bytes_per_sec * old_count + replay_rate) / new_count;
 
         self.sample_count += 1;
@@ -573,14 +573,14 @@ impl RetentionPerformanceMetrics {
         // Update averages
         let old_count = self.sample_count as f64;
         let new_count = old_count + 1.0;
-        
-        self.avg_duration_seconds = 
+
+        self.avg_duration_seconds =
             (self.avg_duration_seconds * old_count + duration_seconds) / new_count;
-        self.avg_backups_evaluated = 
+        self.avg_backups_evaluated =
             (self.avg_backups_evaluated * old_count + backups_evaluated as f64) / new_count;
-        self.avg_backups_deleted = 
+        self.avg_backups_deleted =
             (self.avg_backups_deleted * old_count + backups_deleted as f64) / new_count;
-        self.avg_bytes_freed = 
+        self.avg_bytes_freed =
             ((self.avg_bytes_freed as f64 * old_count + bytes_freed as f64) / new_count) as u64;
 
         self.sample_count += 1;
@@ -626,7 +626,12 @@ impl PerformanceMetrics {
         backups_deleted: u64,
         bytes_freed: u64,
     ) {
-        self.retention.record(duration_seconds, backups_evaluated, backups_deleted, bytes_freed);
+        self.retention.record(
+            duration_seconds,
+            backups_evaluated,
+            backups_deleted,
+            bytes_freed,
+        );
         self.last_updated = Some(Utc::now());
     }
 

@@ -149,18 +149,9 @@ fn print_status_table(status: &OverallStatus, database: Option<&str>, host: Opti
         backup.health.to_string().to_uppercase(),
         reset
     );
-    println!(
-        "│  Total Backups:    {}",
-        backup.total_backups
-    );
-    println!(
-        "│  Successful:       {}",
-        backup.successful_backups
-    );
-    println!(
-        "│  Failed:           {}",
-        backup.failed_backups
-    );
+    println!("│  Total Backups:    {}", backup.total_backups);
+    println!("│  Successful:       {}", backup.successful_backups);
+    println!("│  Failed:           {}", backup.failed_backups);
 
     if let Some(ref last) = backup.last_successful {
         println!(

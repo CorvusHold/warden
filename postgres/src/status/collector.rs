@@ -4,7 +4,9 @@ use chrono::{Duration, Utc};
 use log::{debug, info, warn};
 use std::path::PathBuf;
 
-use storage::{BackupMetadata, BackupStatus as StorageBackupStatus, PostgresBackupStorage, StorageProviderType};
+use storage::{
+    BackupMetadata, BackupStatus as StorageBackupStatus, PostgresBackupStorage, StorageProviderType,
+};
 
 use crate::common::BackupCatalog;
 use crate::pitr::PitrPlanner;
@@ -117,7 +119,9 @@ impl StatusCollector {
                     None,
                 )
                 .await
-                .map_err(|e| PostgresError::BackupError(format!("Failed to create storage: {}", e)))?;
+                .map_err(|e| {
+                    PostgresError::BackupError(format!("Failed to create storage: {}", e))
+                })?;
                 Ok(Some(storage))
             }
             None => Ok(None),
@@ -374,16 +378,16 @@ impl StatusCollector {
 
         // Check minimum backup count
         if status.successful_backups < thresholds.min_backups_warning
-            && health != HealthStatus::Critical {
-                health = HealthStatus::Warning;
-            }
+            && health != HealthStatus::Critical
+        {
+            health = HealthStatus::Warning;
+        }
 
         // Check for recent failures
         if let Some(ref last_attempt) = status.last_attempt {
-            if !last_attempt.success
-                && health != HealthStatus::Critical {
-                    health = HealthStatus::Warning;
-                }
+            if !last_attempt.success && health != HealthStatus::Critical {
+                health = HealthStatus::Warning;
+            }
         }
 
         health
@@ -494,19 +498,21 @@ impl StatusCollector {
                         Ok(policy) => {
                             status.policy_configured = true;
                             status.policy_name = Some(format!("v{}", policy.version));
-                            status.pitr_window_hours =
-                                Some(policy.wal_retention.pitr_window_hours);
-                            status.min_backups_to_keep =
-                                Some(policy.safety.min_successful_backups);
+                            status.pitr_window_hours = Some(policy.wal_retention.pitr_window_hours);
+                            status.min_backups_to_keep = Some(policy.safety.min_successful_backups);
                             status.health = HealthStatus::Healthy;
                         }
                         Err(e) => {
-                            status.issues.push(format!("Invalid retention policy: {}", e));
+                            status
+                                .issues
+                                .push(format!("Invalid retention policy: {}", e));
                             status.health = HealthStatus::Warning;
                         }
                     },
                     Err(e) => {
-                        status.issues.push(format!("Failed to read retention policy: {}", e));
+                        status
+                            .issues
+                            .push(format!("Failed to read retention policy: {}", e));
                         status.health = HealthStatus::Warning;
                     }
                 }
@@ -571,7 +577,12 @@ impl StatusCollector {
 
         // Calculate remote storage usage if configured
         if let Some(storage) = self.create_storage().await? {
-            let bucket_name = self.config.storage_config.as_ref().map(|c| c.bucket.clone()).unwrap_or_default();
+            let bucket_name = self
+                .config
+                .storage_config
+                .as_ref()
+                .map(|c| c.bucket.clone())
+                .unwrap_or_default();
             match storage.list_all_objects().await {
                 Ok(objects) => {
                     let mut backup_size = 0u64;
@@ -601,7 +612,9 @@ impl StatusCollector {
                 }
                 Err(e) => {
                     warn!("Failed to list remote storage: {}", e);
-                    status.issues.push(format!("Failed to access remote storage: {}", e));
+                    status
+                        .issues
+                        .push(format!("Failed to access remote storage: {}", e));
                 }
             }
         }
@@ -650,7 +663,10 @@ impl StatusCollector {
 /// Calculate total size of a directory.
 fn calculate_dir_size(path: &std::path::Path) -> u64 {
     let mut size = 0u64;
-    for entry in walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+    for entry in walkdir::WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         if entry.file_type().is_file() {
             if let Ok(metadata) = entry.metadata() {
                 size += metadata.len();

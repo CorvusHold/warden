@@ -11,9 +11,7 @@ use storage::PostgresBackupStorage;
 
 use crate::PostgresError;
 
-use super::types::{
-    PitrDetails, PitrResult, PitrStatus, RecoveryPlan, RecoveryTarget,
-};
+use super::types::{PitrDetails, PitrResult, PitrStatus, RecoveryPlan, RecoveryTarget};
 
 /// PITR executor for performing point-in-time recovery.
 pub struct PitrExecutor {
@@ -108,7 +106,10 @@ impl PitrExecutor {
             details.apply_duration_secs = apply_start.elapsed().as_secs();
         } else {
             info!("Auto-start disabled. To complete recovery:");
-            info!("  1. Start PostgreSQL with data directory: {:?}", self.target_dir);
+            info!(
+                "  1. Start PostgreSQL with data directory: {:?}",
+                self.target_dir
+            );
             info!("  2. PostgreSQL will replay WAL and stop at the target");
             info!("  3. After recovery, promote to primary or restart normally");
         }
@@ -172,13 +173,17 @@ impl PitrExecutor {
         if self.plan.base_backup.is_remote {
             // Download from remote storage
             let storage = self.storage.as_ref().ok_or_else(|| {
-                PostgresError::RestoreError("Remote storage required but not configured".to_string())
+                PostgresError::RestoreError(
+                    "Remote storage required but not configured".to_string(),
+                )
             })?;
 
             storage
                 .download_backup(&self.plan.base_backup.id.to_string(), &self.target_dir)
                 .await
-                .map_err(|e| PostgresError::RestoreError(format!("Failed to download backup: {}", e)))?;
+                .map_err(|e| {
+                    PostgresError::RestoreError(format!("Failed to download backup: {}", e))
+                })?;
         } else {
             // Copy from local backup
             let backup_path = Path::new(&self.plan.base_backup.path);
@@ -189,7 +194,7 @@ impl PitrExecutor {
                 )));
             }
 
-            self.copy_directory(backup_path, &self.target_dir)?;
+            Self::copy_directory(backup_path, &self.target_dir)?;
         }
 
         info!("Base backup restored successfully");
@@ -197,7 +202,7 @@ impl PitrExecutor {
     }
 
     /// Copy a directory recursively.
-    fn copy_directory(&self, src: &Path, dst: &Path) -> Result<(), PostgresError> {
+    fn copy_directory(src: &Path, dst: &Path) -> Result<(), PostgresError> {
         if !dst.exists() {
             fs::create_dir_all(dst).map_err(PostgresError::Io)?;
         }
@@ -208,7 +213,7 @@ impl PitrExecutor {
             let dst_path = dst.join(entry.file_name());
 
             if src_path.is_dir() {
-                self.copy_directory(&src_path, &dst_path)?;
+                Self::copy_directory(&src_path, &dst_path)?;
             } else {
                 fs::copy(&src_path, &dst_path).map_err(PostgresError::Io)?;
             }
@@ -237,7 +242,7 @@ impl PitrExecutor {
                     if parts.len() >= 2 {
                         let backup_id = parts[parts.len() - 2];
                         let filename = parts[parts.len() - 1];
-                        
+
                         storage
                             .download_backup_file(backup_id, filename, &target_path)
                             .await
@@ -247,7 +252,7 @@ impl PitrExecutor {
                                     segment.filename, e
                                 ))
                             })?;
-                        
+
                         details.wal_segments_downloaded += 1;
                         details.bytes_downloaded += segment.size_bytes;
                     }
@@ -428,7 +433,7 @@ impl PitrExecutor {
         if version_file.exists() {
             let content = fs::read_to_string(&version_file).map_err(PostgresError::Io)?;
             let version_str = content.trim();
-            
+
             // Parse major version (e.g., "15" or "14.1")
             let major_version = version_str
                 .split('.')
@@ -564,7 +569,7 @@ mod tests {
     fn test_detect_pg_version_from_file() {
         let temp_dir = TempDir::new().unwrap();
         let target = temp_dir.path().to_path_buf();
-        
+
         // Create PG_VERSION file
         fs::write(target.join("PG_VERSION"), "15\n").unwrap();
 
@@ -580,7 +585,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut plan = create_test_plan();
         plan.target = RecoveryTarget::Latest;
-        
+
         let executor = PitrExecutor::new(plan, temp_dir.path().to_path_buf());
         assert_eq!(executor.get_recovery_mode(), "latest");
     }

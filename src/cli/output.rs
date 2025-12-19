@@ -62,7 +62,8 @@ impl TableBuilder {
 
     /// Add a row to the table
     pub fn add_row(&mut self, row: Vec<&str>) {
-        self.rows.push(row.into_iter().map(|s| s.to_string()).collect());
+        self.rows
+            .push(row.into_iter().map(|s| s.to_string()).collect());
     }
 
     /// Add a row with owned strings
@@ -112,7 +113,11 @@ impl TableBuilder {
                 .iter()
                 .enumerate()
                 .map(|(i, cell)| {
-                    format!("{:width$}", cell, width = widths.get(i).copied().unwrap_or(0))
+                    format!(
+                        "{:width$}",
+                        cell,
+                        width = widths.get(i).copied().unwrap_or(0)
+                    )
                 })
                 .collect();
             output.push_str(&row_line.join("  "));

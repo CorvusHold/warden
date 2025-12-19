@@ -9,7 +9,6 @@
 //! - POSTGRES_TEST_IMAGE: PostgreSQL Docker image (default: postgres:15)
 //! - SKIP_DOCKER_TESTS: Set to "1" to skip Docker-based tests
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -33,6 +32,7 @@ fn docker_available() -> bool {
 /// PostgreSQL container for testing
 struct PostgresContainer {
     container_id: String,
+    #[allow(dead_code)]
     port: u16,
     #[allow(dead_code)]
     user: String,
@@ -45,7 +45,8 @@ struct PostgresContainer {
 impl PostgresContainer {
     /// Start a new PostgreSQL container
     fn start(port: u16, database: &str, user: &str, password: &str) -> Result<Self, String> {
-        let image = std::env::var("POSTGRES_TEST_IMAGE").unwrap_or_else(|_| "postgres:15".to_string());
+        let image =
+            std::env::var("POSTGRES_TEST_IMAGE").unwrap_or_else(|_| "postgres:15".to_string());
 
         let output = Command::new("docker")
             .args([
@@ -89,13 +90,7 @@ impl PostgresContainer {
 
         while start.elapsed() < timeout {
             let status = Command::new("docker")
-                .args([
-                    "exec",
-                    &self.container_id,
-                    "pg_isready",
-                    "-U",
-                    "postgres",
-                ])
+                .args(["exec", &self.container_id, "pg_isready", "-U", "postgres"])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status();
@@ -309,7 +304,11 @@ fn test_backup_and_restore_data_equality() {
         .exec_sql("SELECT SUM(value) FROM test_data;")
         .expect("Failed to query sum");
 
-    assert!(result.contains("600"), "Expected sum of 600, got: {}", result);
+    assert!(
+        result.contains("600"),
+        "Expected sum of 600, got: {}",
+        result
+    );
 
     println!("Data equality verified!");
 }
@@ -366,7 +365,7 @@ fn test_restore_to_new_database() {
     assert!(output.status.success());
 
     // Restore to new database
-    let output = Command::new("docker")
+    let _output = Command::new("docker")
         .args([
             "exec",
             &container.container_id,
@@ -464,7 +463,7 @@ fn test_restore_replaces_existing_data() {
     assert!(output.status.success());
 
     // Restore with clean option to replace existing data
-    let output = Command::new("docker")
+    let _output = Command::new("docker")
         .args([
             "exec",
             &container.container_id,
@@ -496,7 +495,10 @@ fn test_restore_replaces_existing_data() {
 
     assert!(result.contains("original1"), "Missing original1");
     assert!(result.contains("original2"), "Missing original2");
-    assert!(!result.contains("modified"), "Should not contain modified data");
+    assert!(
+        !result.contains("modified"),
+        "Should not contain modified data"
+    );
 
     println!("Replace existing data verified!");
 }
@@ -569,7 +571,10 @@ fn test_restore_health_check() {
         .output()
         .expect("Failed to run pg_isready");
 
-    assert!(output.status.success(), "Database should be ready after restore");
+    assert!(
+        output.status.success(),
+        "Database should be ready after restore"
+    );
 
     // Verify we can query
     let result = container

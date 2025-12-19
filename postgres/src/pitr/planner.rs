@@ -5,14 +5,14 @@ use log::{debug, info, warn};
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use storage::{BackupMetadata, BackupStatus, BackupType, PostgresBackupStorage, StorageProviderType};
+use storage::{
+    BackupMetadata, BackupStatus, BackupType, PostgresBackupStorage, StorageProviderType,
+};
 
 use crate::common::BackupCatalog;
 use crate::PostgresError;
 
-use super::types::{
-    BaseBackupInfo, PlanValidation, RecoveryPlan, RecoveryTarget, RecoveryWindow,
-};
+use super::types::{BaseBackupInfo, PlanValidation, RecoveryPlan, RecoveryTarget, RecoveryWindow};
 use super::wal::{RemoteWalObject, WalInventory};
 
 /// PITR planner for computing recovery plans.
@@ -92,7 +92,10 @@ impl PitrPlanner {
     }
 
     /// Plan a recovery to the specified target.
-    pub async fn plan_recovery(&self, target: RecoveryTarget) -> Result<RecoveryPlan, PostgresError> {
+    pub async fn plan_recovery(
+        &self,
+        target: RecoveryTarget,
+    ) -> Result<RecoveryPlan, PostgresError> {
         info!("Planning PITR recovery to target: {:?}", target);
 
         // Step 1: Find available base backups
@@ -105,7 +108,10 @@ impl PitrPlanner {
 
         // Step 2: Select the best base backup for the target
         let base_backup = self.select_base_backup(&base_backups, &target)?;
-        info!("Selected base backup: {} ({})", base_backup.id, base_backup.start_time);
+        info!(
+            "Selected base backup: {} ({})",
+            base_backup.id, base_backup.start_time
+        );
 
         // Step 3: Discover WAL segments
         let mut wal_inventory = WalInventory::new();
@@ -114,9 +120,7 @@ impl PitrPlanner {
         let wal_coverage = wal_inventory.calculate_coverage();
         info!(
             "WAL coverage: {} segments, {:?} to {:?}",
-            wal_coverage.segment_count,
-            wal_coverage.earliest_time,
-            wal_coverage.latest_time
+            wal_coverage.segment_count, wal_coverage.earliest_time, wal_coverage.latest_time
         );
 
         // Step 4: Validate target is reachable
@@ -136,11 +140,8 @@ impl PitrPlanner {
         };
         let target_time = target.as_time();
 
-        let wal_segments = wal_inventory.get_segments_for_recovery(
-            wal_start,
-            target_lsn,
-            target_time,
-        )?;
+        let wal_segments =
+            wal_inventory.get_segments_for_recovery(wal_start, target_lsn, target_time)?;
 
         info!("Recovery requires {} WAL segments", wal_segments.len());
 
@@ -264,7 +265,8 @@ impl PitrPlanner {
                             }
 
                             backups.push(BaseBackupInfo {
-                                id: Uuid::parse_str(&metadata.id).unwrap_or_else(|_| Uuid::new_v4()),
+                                id: Uuid::parse_str(&metadata.id)
+                                    .unwrap_or_else(|_| Uuid::new_v4()),
                                 path: path.to_string_lossy().to_string(),
                                 start_time: metadata.start_time,
                                 end_time: metadata.end_time,
@@ -339,10 +341,7 @@ impl PitrPlanner {
 
         // Find the most recent backup that started before the target time
         let suitable_backups: Vec<_> = if let Some(target) = target_time {
-            backups
-                .iter()
-                .filter(|b| b.start_time <= target)
-                .collect()
+            backups.iter().filter(|b| b.start_time <= target).collect()
         } else {
             backups.iter().collect()
         };
@@ -359,7 +358,10 @@ impl PitrPlanner {
     }
 
     /// Discover WAL segments from local and remote sources.
-    async fn discover_wal_segments(&self, inventory: &mut WalInventory) -> Result<(), PostgresError> {
+    async fn discover_wal_segments(
+        &self,
+        inventory: &mut WalInventory,
+    ) -> Result<(), PostgresError> {
         // Discover local WAL segments
         if let Some(wal_dir) = &self.wal_archive_dir {
             inventory.discover_local(wal_dir)?;
@@ -490,10 +492,7 @@ impl PitrPlanner {
 
         let coverage = wal_inventory.calculate_coverage();
 
-        let earliest_target = backups
-            .iter()
-            .map(|b| b.start_time)
-            .min();
+        let earliest_target = backups.iter().map(|b| b.start_time).min();
 
         let latest_target = coverage.latest_time;
 

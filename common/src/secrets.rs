@@ -236,7 +236,9 @@ pub fn resolve_optional_secret(value: &Option<String>) -> Option<String> {
             std::env::var(env_var).ok()
         } else if let Some(path) = v.strip_prefix("file:") {
             let expanded = shellexpand::full(path).ok()?.into_owned();
-            fs::read_to_string(&expanded).ok().map(|s| s.trim().to_string())
+            fs::read_to_string(&expanded)
+                .ok()
+                .map(|s| s.trim().to_string())
         } else {
             Some(v.clone())
         }
@@ -360,7 +362,10 @@ mod tests {
         }
 
         let env_ref = Some("env:WARDEN_OPT_TEST".to_string());
-        assert_eq!(resolve_optional_secret(&env_ref), Some("opt_value".to_string()));
+        assert_eq!(
+            resolve_optional_secret(&env_ref),
+            Some("opt_value".to_string())
+        );
 
         let plain = Some("plain".to_string());
         assert_eq!(resolve_optional_secret(&plain), Some("plain".to_string()));

@@ -145,7 +145,7 @@ impl SlackProvider {
 
     fn format_slack_message(&self, event: &Event) -> SlackMessage {
         let color = match event.severity {
-            super::events::EventSeverity::Info => "#36a64f",    // Green
+            super::events::EventSeverity::Info => "#36a64f", // Green
             super::events::EventSeverity::Warning => "#ffcc00", // Yellow
             super::events::EventSeverity::Critical => "#ff0000", // Red
         };
@@ -265,10 +265,9 @@ impl SlackProvider {
 #[async_trait]
 impl NotificationProvider for SlackProvider {
     async fn send(&self, event: &Event) -> NotificationResult<()> {
-        let webhook_url = self
-            .config
-            .resolve_webhook_url()
-            .ok_or_else(|| NotificationError::ConfigError("Slack webhook URL not configured".to_string()))?;
+        let webhook_url = self.config.resolve_webhook_url().ok_or_else(|| {
+            NotificationError::ConfigError("Slack webhook URL not configured".to_string())
+        })?;
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(self.config.timeout_secs))
@@ -363,11 +362,7 @@ impl EmailProvider {
     }
 
     fn format_subject(&self, event: &Event) -> String {
-        let prefix = self
-            .config
-            .subject_prefix
-            .as_deref()
-            .unwrap_or("[Warden]");
+        let prefix = self.config.subject_prefix.as_deref().unwrap_or("[Warden]");
         let severity_indicator = match event.severity {
             super::events::EventSeverity::Info => "ℹ️",
             super::events::EventSeverity::Warning => "⚠️",
@@ -386,7 +381,10 @@ impl EmailProvider {
 
         body.push_str(&format!("Event: {}\n", event.event_type_str()));
         body.push_str(&format!("Severity: {}\n", event.severity));
-        body.push_str(&format!("Time: {}\n", event.timestamp.format("%Y-%m-%d %H:%M:%S UTC")));
+        body.push_str(&format!(
+            "Time: {}\n",
+            event.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
 
         if let Some(ref hostname) = event.hostname {
             body.push_str(&format!("Host: {}\n", hostname));
@@ -546,7 +544,8 @@ impl NotificationProvider for EmailProvider {
         // To enable email notifications, add the 'lettre' crate and implement SMTP support.
         Err(NotificationError::NotAvailable(
             "Email notifications require SMTP configuration. \
-             Add 'lettre' crate and configure SMTP settings to enable email sending.".to_string()
+             Add 'lettre' crate and configure SMTP settings to enable email sending."
+                .to_string(),
         ))
     }
 

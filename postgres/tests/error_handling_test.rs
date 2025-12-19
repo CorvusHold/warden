@@ -81,6 +81,7 @@ async fn test_s3_invalid_credentials_error() {
         endpoint: env::var("AWS_ENDPOINT").ok(),
         access_key: Some("INVALID_ACCESS_KEY".to_string()),
         secret_key: Some("INVALID_SECRET_KEY".to_string()),
+        multi_tenant: Default::default(),
     };
 
     // Note: This test may pass locally if there's no actual S3 connection attempt
@@ -104,10 +105,7 @@ async fn test_s3_invalid_credentials_error() {
     if result.is_err() {
         let err_msg = result.unwrap_err().to_string().to_lowercase();
         // Should not panic, should return a proper error
-        assert!(
-            !err_msg.contains("panic"),
-            "Should not panic on S3 errors"
-        );
+        assert!(!err_msg.contains("panic"), "Should not panic on S3 errors");
     }
 }
 
@@ -124,6 +122,7 @@ async fn test_s3_missing_bucket_error() {
         endpoint: None,
         access_key: None,
         secret_key: None,
+        multi_tenant: Default::default(),
     };
 
     // Verify the storage options are invalid
@@ -205,7 +204,9 @@ async fn test_postgres_invalid_credentials() {
     if result.is_err() {
         let err_msg = result.unwrap_err().to_string().to_lowercase();
         assert!(
-            err_msg.contains("auth") || err_msg.contains("password") || err_msg.contains("connection"),
+            err_msg.contains("auth")
+                || err_msg.contains("password")
+                || err_msg.contains("connection"),
             "Error should mention auth issue: {}",
             err_msg
         );
@@ -260,8 +261,8 @@ async fn test_pitr_invalid_target_time_before_backup() {
 
     let err_msg = result.unwrap_err().to_string().to_lowercase();
     assert!(
-        err_msg.contains("before") 
-            || err_msg.contains("no backup") 
+        err_msg.contains("before")
+            || err_msg.contains("no backup")
             || err_msg.contains("not found")
             || err_msg.contains("no base backup")
             || err_msg.contains("pitr"),

@@ -73,7 +73,11 @@ impl HoldClient {
         let mut backoff = self.config.retry.backoff_secs;
 
         loop {
-            info!("Connecting to HOLD (attempt {}/{})", retry_count + 1, max_attempts);
+            info!(
+                "Connecting to HOLD (attempt {}/{})",
+                retry_count + 1,
+                max_attempts
+            );
 
             match self.try_connect(&uri).await {
                 Ok(()) => {
@@ -121,7 +125,10 @@ impl HoldClient {
             .exchange_declare(
                 "warden.hold",
                 ExchangeKind::Topic,
-                ExchangeDeclareOptions { durable: true, ..Default::default() },
+                ExchangeDeclareOptions {
+                    durable: true,
+                    ..Default::default()
+                },
                 FieldTable::default(),
             )
             .await
@@ -129,16 +136,35 @@ impl HoldClient {
 
         let queue_name = format!("warden.commands.hold.{}", self.agent_id);
         channel
-            .queue_declare(&queue_name, QueueDeclareOptions { durable: true, ..Default::default() }, FieldTable::default())
+            .queue_declare(
+                &queue_name,
+                QueueDeclareOptions {
+                    durable: true,
+                    ..Default::default()
+                },
+                FieldTable::default(),
+            )
             .await
             .context("Failed to declare command queue")?;
 
         channel
-            .queue_bind(&queue_name, "warden.hold", &format!("warden.commands.hold.{}", self.agent_id), QueueBindOptions::default(), FieldTable::default())
+            .queue_bind(
+                &queue_name,
+                "warden.hold",
+                &format!("warden.commands.hold.{}", self.agent_id),
+                QueueBindOptions::default(),
+                FieldTable::default(),
+            )
             .await?;
 
         channel
-            .queue_bind(&queue_name, "warden.hold", "warden.commands.hold.broadcast", QueueBindOptions::default(), FieldTable::default())
+            .queue_bind(
+                &queue_name,
+                "warden.hold",
+                "warden.commands.hold.broadcast",
+                QueueBindOptions::default(),
+                FieldTable::default(),
+            )
             .await?;
 
         *self.connection.write().await = Some(connection);
@@ -148,7 +174,10 @@ impl HoldClient {
 
     pub async fn disconnect(&self) -> Result<()> {
         if let Some(connection) = self.connection.write().await.take() {
-            connection.close(0, "Shutting down").await.context("Failed to close HOLD connection")?;
+            connection
+                .close(0, "Shutting down")
+                .await
+                .context("Failed to close HOLD connection")?;
         }
         *self.channel.write().await = None;
         *self.state.write().await = ConnectionState::Disconnected;
@@ -167,7 +196,15 @@ impl HoldClient {
         };
 
         match channel
-            .basic_publish("warden.hold", routing_key, BasicPublishOptions::default(), payload, BasicProperties::default().with_content_type("application/json".into()).with_delivery_mode(2))
+            .basic_publish(
+                "warden.hold",
+                routing_key,
+                BasicPublishOptions::default(),
+                payload,
+                BasicProperties::default()
+                    .with_content_type("application/json".into())
+                    .with_delivery_mode(2),
+            )
             .await
         {
             Ok(confirm) => match confirm.await {
@@ -182,7 +219,10 @@ impl HoldClient {
             },
             Err(e) => {
                 warn!("Failed to publish to HOLD: {}", e);
-                *self.state.write().await = ConnectionState::Failed { reason: format!("{}", e), retry_count: 0 };
+                *self.state.write().await = ConnectionState::Failed {
+                    reason: format!("{}", e),
+                    retry_count: 0,
+                };
                 Ok(None)
             }
         }
@@ -197,7 +237,12 @@ impl HoldClient {
 
         let queue_name = format!("warden.commands.hold.{}", self.agent_id);
         let consumer = channel
-            .basic_consume(&queue_name, &format!("warden-consumer-{}", self.agent_id), BasicConsumeOptions::default(), FieldTable::default())
+            .basic_consume(
+                &queue_name,
+                &format!("warden-consumer-{}", self.agent_id),
+                BasicConsumeOptions::default(),
+                FieldTable::default(),
+            )
             .await
             .context("Failed to create HOLD command consumer")?;
 
@@ -207,7 +252,9 @@ impl HoldClient {
     pub async fn ack(&self, delivery_tag: u64) -> Result<()> {
         let channel_guard = self.channel.read().await;
         if let Some(channel) = channel_guard.as_ref() {
-            channel.basic_ack(delivery_tag, BasicAckOptions::default()).await?;
+            channel
+                .basic_ack(delivery_tag, BasicAckOptions::default())
+                .await?;
         }
         Ok(())
     }

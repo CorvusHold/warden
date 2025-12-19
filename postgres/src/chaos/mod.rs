@@ -16,6 +16,4 @@ pub mod simulators;
 
 pub use fault_injection::{FaultConfig, FaultInjector, FaultType};
 pub use scenarios::{ChaosScenario, ScenarioResult};
-pub use simulators::{
-    DiskSimulator, NetworkSimulator, PostgresSimulator, StorageSimulator,
-};
+pub use simulators::{DiskSimulator, NetworkSimulator, PostgresSimulator, StorageSimulator};

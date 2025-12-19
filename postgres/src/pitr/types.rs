@@ -105,7 +105,13 @@ impl WalSegmentInfo {
     /// Parse WAL segment info from a filename.
     /// WAL filenames are 24 hex characters: TTTTTTTTLLLLLLLLSSSSSSSS
     /// where T=timeline, L=log, S=segment.
-    pub fn parse_filename(filename: &str, path: String, size_bytes: u64, last_modified: Option<DateTime<Utc>>, is_remote: bool) -> Option<Self> {
+    pub fn parse_filename(
+        filename: &str,
+        path: String,
+        size_bytes: u64,
+        last_modified: Option<DateTime<Utc>>,
+        is_remote: bool,
+    ) -> Option<Self> {
         // Strip common extensions
         let base_name = filename
             .trim_end_matches(".gz")
@@ -122,9 +128,8 @@ impl WalSegmentInfo {
         let log_id = u32::from_str_radix(&base_name[8..16], 16).ok()?;
         let segment_id = u32::from_str_radix(&base_name[16..24], 16).ok()?;
 
-        let is_compressed = filename.ends_with(".gz") 
-            || filename.ends_with(".lz4") 
-            || filename.ends_with(".zst");
+        let is_compressed =
+            filename.ends_with(".gz") || filename.ends_with(".lz4") || filename.ends_with(".zst");
 
         Some(Self {
             filename: filename.to_string(),
@@ -169,8 +174,11 @@ impl WalSegmentInfo {
 
 impl Ord for WalSegmentInfo {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.timeline_id, self.log_id, self.segment_id)
-            .cmp(&(other.timeline_id, other.log_id, other.segment_id))
+        (self.timeline_id, self.log_id, self.segment_id).cmp(&(
+            other.timeline_id,
+            other.log_id,
+            other.segment_id,
+        ))
     }
 }
 
@@ -325,8 +333,7 @@ pub enum PitrStatus {
 }
 
 /// Detailed information about PITR execution.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PitrDetails {
     /// Number of WAL segments downloaded.
     pub wal_segments_downloaded: usize,
@@ -341,7 +348,6 @@ pub struct PitrDetails {
     /// PostgreSQL recovery mode used.
     pub recovery_mode: String,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -373,7 +379,8 @@ mod tests {
             16 * 1024 * 1024,
             None,
             false,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(seg.timeline_id, 1);
         assert_eq!(seg.log_id, 0);
@@ -388,7 +395,8 @@ mod tests {
             1024 * 1024,
             None,
             true,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(seg.is_compressed);
         assert_eq!(seg.timeline_id, 1);
@@ -406,16 +414,28 @@ mod tests {
     fn test_wal_segment_ordering() {
         let seg1 = WalSegmentInfo::parse_filename(
             "000000010000000000000001",
-            "/path".to_string(), 0, None, false,
-        ).unwrap();
+            "/path".to_string(),
+            0,
+            None,
+            false,
+        )
+        .unwrap();
         let seg2 = WalSegmentInfo::parse_filename(
             "000000010000000000000002",
-            "/path".to_string(), 0, None, false,
-        ).unwrap();
+            "/path".to_string(),
+            0,
+            None,
+            false,
+        )
+        .unwrap();
         let seg3 = WalSegmentInfo::parse_filename(
             "000000020000000000000001",
-            "/path".to_string(), 0, None, false,
-        ).unwrap();
+            "/path".to_string(),
+            0,
+            None,
+            false,
+        )
+        .unwrap();
 
         assert!(seg1 < seg2);
         assert!(seg2 < seg3);

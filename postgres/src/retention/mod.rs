@@ -10,11 +10,11 @@ mod engine;
 pub mod policy;
 mod wal;
 
-pub use engine::{RetentionEngine, RetentionEvaluation, RetentionDecision};
+pub use engine::{RetentionDecision, RetentionEngine, RetentionEvaluation};
 pub use policy::{
-    PitrRetentionPolicy, RetentionRule, RetentionScope, WalRetentionConfig, SafetySettings,
+    PitrRetentionPolicy, RetentionRule, RetentionScope, SafetySettings, WalRetentionConfig,
 };
-pub use wal::{WalSegment, WalInventory};
+pub use wal::{WalInventory, WalSegment};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -193,7 +193,11 @@ impl RetentionResult {
 
     /// Calculates total space to be freed
     pub fn calculate_space_freed(&mut self) {
-        self.estimated_space_freed = self.backups_to_delete.iter().map(|d| d.size_bytes).sum::<u64>()
+        self.estimated_space_freed = self
+            .backups_to_delete
+            .iter()
+            .map(|d| d.size_bytes)
+            .sum::<u64>()
             + self.wal_to_delete.iter().map(|d| d.size_bytes).sum::<u64>();
     }
 }

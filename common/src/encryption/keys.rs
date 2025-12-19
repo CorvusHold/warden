@@ -91,7 +91,11 @@ impl EncryptionKey {
         }
 
         // Check if it's base64 (44 chars for 32 bytes)
-        if trimmed.len() == 44 && trimmed.chars().all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=') {
+        if trimmed.len() == 44
+            && trimmed
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=')
+        {
             return Self::from_base64(trimmed);
         }
 
@@ -201,7 +205,7 @@ mod tests {
     #[test]
     fn test_generate_and_encode() {
         let key = generate_key();
-        
+
         let b64 = encode_key_base64(&key);
         let key2 = EncryptionKey::from_base64(&b64).unwrap();
         assert_eq!(key.as_bytes(), key2.as_bytes());
@@ -216,7 +220,7 @@ mod tests {
         // Generate a test key and encode it
         let test_key = generate_key();
         let encoded = encode_key_base64(&test_key);
-        
+
         // Set env var
         unsafe {
             std::env::set_var("WARDEN_TEST_KEY", &encoded);

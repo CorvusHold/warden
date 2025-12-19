@@ -16,6 +16,6 @@ pub use types::*;
 
 // Re-export performance metrics types
 pub use types::{
-    BackupPerformanceMetrics, PitrPerformanceMetrics, 
-    RetentionPerformanceMetrics, PerformanceMetrics,
+    BackupPerformanceMetrics, PerformanceMetrics, PitrPerformanceMetrics,
+    RetentionPerformanceMetrics,
 };

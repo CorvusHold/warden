@@ -61,9 +61,7 @@ impl ScenarioResult {
     pub fn pass(mut self) -> Self {
         self.passed = true;
         self.end_time = Utc::now();
-        self.duration_ms = (self.end_time - self.start_time)
-            .num_milliseconds()
-            .max(0) as u64;
+        self.duration_ms = (self.end_time - self.start_time).num_milliseconds().max(0) as u64;
         self
     }
 
@@ -72,9 +70,7 @@ impl ScenarioResult {
         self.passed = false;
         self.error = Some(error.into());
         self.end_time = Utc::now();
-        self.duration_ms = (self.end_time - self.start_time)
-            .num_milliseconds()
-            .max(0) as u64;
+        self.duration_ms = (self.end_time - self.start_time).num_milliseconds().max(0) as u64;
         self
     }
 
@@ -220,48 +216,65 @@ impl ChaosScenario for PostgresCrashDuringBackup {
     }
 
     async fn run(&self) -> ScenarioResult {
-        let mut result = ScenarioResult::new(self.name())
-            .with_expected(self.expected_behavior());
+        let mut result = ScenarioResult::new(self.name()).with_expected(self.expected_behavior());
 
         info!("[chaos-scenario] Running: {}", self.name());
 
         // Validate that postgres simulator has data_dir configured
         if self.postgres.data_dir.is_none() {
-            result.add_step(ScenarioStep::new(0, "Validate PostgreSQL simulator configuration")
-                .failure("Postgres simulator not configured with data_dir", 0));
-            return result.fail("Postgres simulator not configured with data_dir - cannot simulate crash");
+            result.add_step(
+                ScenarioStep::new(0, "Validate PostgreSQL simulator configuration")
+                    .failure("Postgres simulator not configured with data_dir", 0),
+            );
+            return result
+                .fail("Postgres simulator not configured with data_dir - cannot simulate crash");
         }
 
         // Step 1: Verify PostgreSQL is running
         let step1_start = std::time::Instant::now();
         if !self.postgres.is_accepting_connections() {
-            result.add_step(ScenarioStep::new(1, "Verify PostgreSQL is running")
-                .failure("PostgreSQL is not accepting connections", step1_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(1, "Verify PostgreSQL is running").failure(
+                    "PostgreSQL is not accepting connections",
+                    step1_start.elapsed().as_millis() as u64,
+                ),
+            );
             return result.fail("PostgreSQL is not running");
         }
-        result.add_step(ScenarioStep::new(1, "Verify PostgreSQL is running")
-            .success(step1_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(1, "Verify PostgreSQL is running")
+                .success(step1_start.elapsed().as_millis() as u64),
+        );
 
         // Step 2: Start backup in background (simulated)
         let step2_start = std::time::Instant::now();
-        info!("[chaos-scenario] Starting backup (will crash after {}ms)", self.crash_delay_ms);
-        result.add_step(ScenarioStep::new(2, "Start backup operation")
-            .success(step2_start.elapsed().as_millis() as u64));
+        info!(
+            "[chaos-scenario] Starting backup (will crash after {}ms)",
+            self.crash_delay_ms
+        );
+        result.add_step(
+            ScenarioStep::new(2, "Start backup operation")
+                .success(step2_start.elapsed().as_millis() as u64),
+        );
 
         // Step 3: Wait and then crash PostgreSQL
         let step3_start = std::time::Instant::now();
         tokio::time::sleep(Duration::from_millis(self.crash_delay_ms)).await;
-        
+
         match self.postgres.simulate_crash() {
             Ok(_) => {
-                result.add_step(ScenarioStep::new(3, "Simulate PostgreSQL crash")
-                    .success(step3_start.elapsed().as_millis() as u64));
+                result.add_step(
+                    ScenarioStep::new(3, "Simulate PostgreSQL crash")
+                        .success(step3_start.elapsed().as_millis() as u64),
+                );
             }
             Err(e) => {
                 // Crash simulation failed - treat as scenario failure
                 error!("[chaos-scenario] Could not simulate crash: {}", e);
-                result.add_step(ScenarioStep::new(3, "Simulate PostgreSQL crash")
-                    .failure(format!("Could not simulate crash: {}", e), step3_start.elapsed().as_millis() as u64));
+                result.add_step(ScenarioStep::new(3, "Simulate PostgreSQL crash").failure(
+                    format!("Could not simulate crash: {}", e),
+                    step3_start.elapsed().as_millis() as u64,
+                ));
                 return result.fail(format!("Could not simulate crash: {}", e));
             }
         }
@@ -270,24 +283,31 @@ impl ChaosScenario for PostgresCrashDuringBackup {
         let step4_start = std::time::Instant::now();
         // In a real test, we would check the backup result
         // For now, we just verify the expected behavior
-        result.add_step(ScenarioStep::new(4, "Verify backup failure handling")
-            .success(step4_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(4, "Verify backup failure handling")
+                .success(step4_start.elapsed().as_millis() as u64),
+        );
 
         // Step 5: Check for partial artifacts
         let step5_start = std::time::Instant::now();
         let partial_artifacts = self.check_partial_artifacts();
         if partial_artifacts.is_empty() {
             result.artifacts_cleaned = true;
-            result.add_step(ScenarioStep::new(5, "Check for partial artifacts")
-                .success(step5_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(5, "Check for partial artifacts")
+                    .success(step5_start.elapsed().as_millis() as u64),
+            );
         } else {
             result.artifacts_cleaned = false;
-            result.add_step(ScenarioStep::new(5, "Check for partial artifacts")
-                .failure(format!("Found partial artifacts: {:?}", partial_artifacts), 
-                    step5_start.elapsed().as_millis() as u64));
+            result.add_step(ScenarioStep::new(5, "Check for partial artifacts").failure(
+                format!("Found partial artifacts: {:?}", partial_artifacts),
+                step5_start.elapsed().as_millis() as u64,
+            ));
         }
 
-        result.with_actual("Backup failed with error, artifacts cleaned up").pass()
+        result
+            .with_actual("Backup failed with error, artifacts cleaned up")
+            .pass()
     }
 
     fn cleanup(&self) -> Result<(), SimulatorError> {
@@ -296,9 +316,11 @@ impl ChaosScenario for PostgresCrashDuringBackup {
             for entry in std::fs::read_dir(&self.backup_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.is_dir() && path.file_name()
-                    .map(|n| n.to_string_lossy().contains("partial"))
-                    .unwrap_or(false)
+                if path.is_dir()
+                    && path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().contains("partial"))
+                        .unwrap_or(false)
                 {
                     std::fs::remove_dir_all(&path)?;
                 }
@@ -378,51 +400,70 @@ impl ChaosScenario for StorageOutageDuringUpload {
     }
 
     async fn run(&self) -> ScenarioResult {
-        let mut result = ScenarioResult::new(self.name())
-            .with_expected(self.expected_behavior());
+        let mut result = ScenarioResult::new(self.name()).with_expected(self.expected_behavior());
 
         info!("[chaos-scenario] Running: {}", self.name());
 
         // Step 1: Create a local backup (simulated)
         let step1_start = std::time::Instant::now();
-        result.add_step(ScenarioStep::new(1, "Create local backup")
-            .success(step1_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(1, "Create local backup")
+                .success(step1_start.elapsed().as_millis() as u64),
+        );
 
         // Step 2: Simulate storage outage
         let step2_start = std::time::Instant::now();
         let mut storage = self.storage.clone();
         storage.set_unavailable(true);
-        result.add_step(ScenarioStep::new(2, "Simulate storage outage")
-            .success(step2_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(2, "Simulate storage outage")
+                .success(step2_start.elapsed().as_millis() as u64),
+        );
 
         // Step 3: Attempt upload (should fail)
         let step3_start = std::time::Instant::now();
         if storage.should_fail() {
-            result.add_step(ScenarioStep::new(3, "Attempt upload (expected to fail)")
-                .success(step3_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(3, "Attempt upload (expected to fail)")
+                    .success(step3_start.elapsed().as_millis() as u64),
+            );
         } else {
-            result.add_step(ScenarioStep::new(3, "Attempt upload (expected to fail)")
-                .failure("Upload did not fail as expected", step3_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(3, "Attempt upload (expected to fail)").failure(
+                    "Upload did not fail as expected",
+                    step3_start.elapsed().as_millis() as u64,
+                ),
+            );
             return result.fail("Storage outage was not simulated correctly");
         }
 
         // Step 4: Verify local backup is intact
         let step4_start = std::time::Instant::now();
-        result.add_step(ScenarioStep::new(4, "Verify local backup is intact")
-            .success(step4_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(4, "Verify local backup is intact")
+                .success(step4_start.elapsed().as_millis() as u64),
+        );
 
         // Step 5: Restore storage and retry
         let step5_start = std::time::Instant::now();
         storage.set_unavailable(false);
         if !storage.should_fail() {
-            result.add_step(ScenarioStep::new(5, "Restore storage and verify retry possible")
-                .success(step5_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(5, "Restore storage and verify retry possible")
+                    .success(step5_start.elapsed().as_millis() as u64),
+            );
         } else {
-            result.add_step(ScenarioStep::new(5, "Restore storage and verify retry possible")
-                .failure("Storage still failing after restore", step5_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(5, "Restore storage and verify retry possible").failure(
+                    "Storage still failing after restore",
+                    step5_start.elapsed().as_millis() as u64,
+                ),
+            );
         }
 
-        result.with_actual("Upload failed with clear error, local backup intact, retry succeeded").pass()
+        result
+            .with_actual("Upload failed with clear error, local backup intact, retry succeeded")
+            .pass()
     }
 
     fn cleanup(&self) -> Result<(), SimulatorError> {
@@ -471,40 +512,54 @@ impl ChaosScenario for DiskFullDuringBackup {
     }
 
     async fn run(&self) -> ScenarioResult {
-        let mut result = ScenarioResult::new(self.name())
-            .with_expected(self.expected_behavior());
+        let mut result = ScenarioResult::new(self.name()).with_expected(self.expected_behavior());
 
         info!("[chaos-scenario] Running: {}", self.name());
 
         // Step 1: Verify disk space is limited
         let step1_start = std::time::Instant::now();
-        if let Some(err) = self.disk.should_fail_write(1024 * 1024) { // 1MB write
+        if let Some(err) = self.disk.should_fail_write(1024 * 1024) {
+            // 1MB write
             info!("[chaos-scenario] Disk full simulation active: {}", err);
-            result.add_step(ScenarioStep::new(1, "Verify disk space limitation")
-                .success(step1_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(1, "Verify disk space limitation")
+                    .success(step1_start.elapsed().as_millis() as u64),
+            );
         } else {
-            result.add_step(ScenarioStep::new(1, "Verify disk space limitation")
-                .failure("Disk full simulation not active", step1_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(1, "Verify disk space limitation").failure(
+                    "Disk full simulation not active",
+                    step1_start.elapsed().as_millis() as u64,
+                ),
+            );
             return result.fail("Disk full simulation not configured correctly");
         }
 
         // Step 2: Attempt backup (should fail)
         let step2_start = std::time::Instant::now();
-        result.add_step(ScenarioStep::new(2, "Attempt backup (expected to fail)")
-            .success(step2_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(2, "Attempt backup (expected to fail)")
+                .success(step2_start.elapsed().as_millis() as u64),
+        );
 
         // Step 3: Verify error message mentions disk full
         let step3_start = std::time::Instant::now();
-        result.add_step(ScenarioStep::new(3, "Verify error message clarity")
-            .success(step3_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(3, "Verify error message clarity")
+                .success(step3_start.elapsed().as_millis() as u64),
+        );
 
         // Step 4: Verify partial files cleaned up
         let step4_start = std::time::Instant::now();
         result.artifacts_cleaned = true;
-        result.add_step(ScenarioStep::new(4, "Verify partial files cleaned up")
-            .success(step4_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(4, "Verify partial files cleaned up")
+                .success(step4_start.elapsed().as_millis() as u64),
+        );
 
-        result.with_actual("Backup failed with disk full error, partial files cleaned").pass()
+        result
+            .with_actual("Backup failed with disk full error, partial files cleaned")
+            .pass()
     }
 
     fn cleanup(&self) -> Result<(), SimulatorError> {
@@ -542,8 +597,7 @@ impl ChaosScenario for PermissionDeniedDuringBackup {
     }
 
     async fn run(&self) -> ScenarioResult {
-        let mut result = ScenarioResult::new(self.name())
-            .with_expected(self.expected_behavior());
+        let mut result = ScenarioResult::new(self.name()).with_expected(self.expected_behavior());
 
         info!("[chaos-scenario] Running: {}", self.name());
 
@@ -551,30 +605,44 @@ impl ChaosScenario for PermissionDeniedDuringBackup {
         let step1_start = std::time::Instant::now();
         if let Some(err) = self.disk.should_fail_write(100) {
             if err.kind() == std::io::ErrorKind::PermissionDenied {
-                result.add_step(ScenarioStep::new(1, "Verify permission denied simulation")
-                    .success(step1_start.elapsed().as_millis() as u64));
+                result.add_step(
+                    ScenarioStep::new(1, "Verify permission denied simulation")
+                        .success(step1_start.elapsed().as_millis() as u64),
+                );
             } else {
-                result.add_step(ScenarioStep::new(1, "Verify permission denied simulation")
-                    .failure("Wrong error type", step1_start.elapsed().as_millis() as u64));
+                result.add_step(
+                    ScenarioStep::new(1, "Verify permission denied simulation")
+                        .failure("Wrong error type", step1_start.elapsed().as_millis() as u64),
+                );
                 return result.fail("Permission denied simulation not configured correctly");
             }
         } else {
-            result.add_step(ScenarioStep::new(1, "Verify permission denied simulation")
-                .failure("No error simulated", step1_start.elapsed().as_millis() as u64));
+            result.add_step(
+                ScenarioStep::new(1, "Verify permission denied simulation").failure(
+                    "No error simulated",
+                    step1_start.elapsed().as_millis() as u64,
+                ),
+            );
             return result.fail("Permission denied simulation not active");
         }
 
         // Step 2: Attempt backup (should fail)
         let step2_start = std::time::Instant::now();
-        result.add_step(ScenarioStep::new(2, "Attempt backup (expected to fail)")
-            .success(step2_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(2, "Attempt backup (expected to fail)")
+                .success(step2_start.elapsed().as_millis() as u64),
+        );
 
         // Step 3: Verify error message
         let step3_start = std::time::Instant::now();
-        result.add_step(ScenarioStep::new(3, "Verify error message clarity")
-            .success(step3_start.elapsed().as_millis() as u64));
+        result.add_step(
+            ScenarioStep::new(3, "Verify error message clarity")
+                .success(step3_start.elapsed().as_millis() as u64),
+        );
 
-        result.with_actual("Backup failed with permission denied error").pass()
+        result
+            .with_actual("Backup failed with permission denied error")
+            .pass()
     }
 
     fn cleanup(&self) -> Result<(), SimulatorError> {
@@ -620,7 +688,10 @@ pub async fn run_all_scenarios(backup_dir: PathBuf) -> Vec<ScenarioResult> {
         if result.passed {
             info!("[chaos] ✓ {} - PASSED", result.scenario_name);
         } else {
-            error!("[chaos] ✗ {} - FAILED: {:?}", result.scenario_name, result.error);
+            error!(
+                "[chaos] ✗ {} - FAILED: {:?}",
+                result.scenario_name, result.error
+            );
         }
     }
 

@@ -5,9 +5,8 @@
 
 use chrono::Utc;
 use storage::{
-    catalog::BackupFilter,
-    BackupFile, BackupMetadata, BackupStatus, BackupType, PostgresBackupStorage,
-    StorageProviderType,
+    catalog::BackupFilter, BackupFile, BackupMetadata, BackupStatus, BackupType,
+    PostgresBackupStorage, StorageProviderType,
 };
 use tempfile::TempDir;
 
@@ -285,17 +284,17 @@ async fn test_download_backup_verified() {
 
     // Create a real backup with actual files
     let backup_id = format!("backup-download-{}", uuid::Uuid::new_v4());
-    
+
     // Create a temp directory with test files
     let temp_dir = TempDir::new().unwrap();
     let backup_path = temp_dir.path().join(&backup_id);
     std::fs::create_dir_all(&backup_path).unwrap();
-    
+
     // Create test files
     let test_content = b"This is test backup content for verification";
     let dump_path = backup_path.join("pg_dump.dump");
     std::fs::write(&dump_path, test_content).unwrap();
-    
+
     // Upload the backup
     storage
         .upload_backup(&backup_id, &backup_path, None)

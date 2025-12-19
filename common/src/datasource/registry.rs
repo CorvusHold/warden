@@ -326,7 +326,10 @@ mod tests {
             "Mock data source for testing"
         }
 
-        async fn discover(&self, _config: &DiscoverConfig) -> Result<DiscoverResult, DataSourceError> {
+        async fn discover(
+            &self,
+            _config: &DiscoverConfig,
+        ) -> Result<DiscoverResult, DataSourceError> {
             Ok(DiscoverResult {
                 connected: true,
                 server_version: Some("1.0.0".to_string()),
@@ -340,7 +343,10 @@ mod tests {
             unimplemented!()
         }
 
-        async fn list_backups(&self, _filter: &BackupFilter) -> Result<Vec<BackupMetadata>, DataSourceError> {
+        async fn list_backups(
+            &self,
+            _filter: &BackupFilter,
+        ) -> Result<Vec<BackupMetadata>, DataSourceError> {
             Ok(vec![])
         }
 
@@ -352,11 +358,17 @@ mod tests {
             false
         }
 
-        async fn pitr_restore(&self, _config: &PitrConfig) -> Result<RestoreResult, DataSourceError> {
+        async fn pitr_restore(
+            &self,
+            _config: &PitrConfig,
+        ) -> Result<RestoreResult, DataSourceError> {
             Err(DataSourceError::PitrNotSupported)
         }
 
-        async fn status(&self, _config: &StatusConfig) -> Result<DataSourceStatus, DataSourceError> {
+        async fn status(
+            &self,
+            _config: &StatusConfig,
+        ) -> Result<DataSourceStatus, DataSourceError> {
             Ok(DataSourceStatus::connected("1.0.0"))
         }
 
@@ -400,8 +412,12 @@ mod tests {
     #[test]
     fn test_registry_list() {
         let mut registry = PluginRegistry::new();
-        registry.register(Arc::new(MockDataSource::new("plugin1"))).unwrap();
-        registry.register(Arc::new(MockDataSource::new("plugin2"))).unwrap();
+        registry
+            .register(Arc::new(MockDataSource::new("plugin1")))
+            .unwrap();
+        registry
+            .register(Arc::new(MockDataSource::new("plugin2")))
+            .unwrap();
 
         let list = registry.list();
         assert_eq!(list.len(), 2);
@@ -410,7 +426,9 @@ mod tests {
     #[test]
     fn test_registry_unregister() {
         let mut registry = PluginRegistry::new();
-        registry.register(Arc::new(MockDataSource::new("test"))).unwrap();
+        registry
+            .register(Arc::new(MockDataSource::new("test")))
+            .unwrap();
 
         assert!(registry.unregister("test").is_ok());
         assert!(!registry.contains("test"));

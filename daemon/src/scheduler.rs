@@ -12,7 +12,7 @@ use common::schedule::{
 };
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
@@ -172,10 +172,7 @@ impl Scheduler {
             let since_last = (now - *last_run).num_seconds();
             // Don't run if we ran within the last check interval
             if since_last < self.options.check_interval_secs as i64 {
-                debug!(
-                    "Skipping schedule '{}': ran {} seconds ago",
-                    id, since_last
-                );
+                debug!("Skipping schedule '{}': ran {} seconds ago", id, since_last);
                 return false;
             }
         }
@@ -319,9 +316,7 @@ impl Scheduler {
 
         // Emit completion event
         if let Some(tx) = &self.event_tx {
-            let _ = tx
-                .send(SchedulerEvent::TaskCompleted(task_result))
-                .await;
+            let _ = tx.send(SchedulerEvent::TaskCompleted(task_result)).await;
         }
     }
 
@@ -335,7 +330,7 @@ impl Scheduler {
         database: &str,
         user: &str,
         backup_type: &BackupType,
-        backup_dir: &PathBuf,
+        backup_dir: &Path,
         storage_profile: Option<&StorageProfile>,
         labels: &HashMap<String, String>,
     ) -> Result<String> {
@@ -396,7 +391,7 @@ impl Scheduler {
                     user.to_string(),
                     None, // password from env
                     None, // ssl_mode
-                    backup_dir.clone(),
+                    backup_dir.to_path_buf(),
                     ssh_opts,
                     storage_opts,
                     all_labels,
@@ -414,7 +409,7 @@ impl Scheduler {
                     user.to_string(),
                     None,
                     None,
-                    backup_dir.clone(),
+                    backup_dir.to_path_buf(),
                     ssh_opts,
                     storage_opts,
                 )
@@ -432,7 +427,7 @@ impl Scheduler {
                     user.to_string(),
                     None,
                     None,
-                    backup_dir.clone(),
+                    backup_dir.to_path_buf(),
                     ssh_opts,
                     storage_opts,
                 )
@@ -537,7 +532,10 @@ impl Scheduler {
         let completed_at = Utc::now();
         let task_result = match result {
             Ok(_) => {
-                info!("Retention schedule '{}' completed successfully", schedule.id);
+                info!(
+                    "Retention schedule '{}' completed successfully",
+                    schedule.id
+                );
                 TaskResult {
                     schedule_id: schedule.id.clone(),
                     schedule_type: ScheduleType::Retention,
@@ -564,9 +562,7 @@ impl Scheduler {
 
         // Emit completion event
         if let Some(tx) = &self.event_tx {
-            let _ = tx
-                .send(SchedulerEvent::TaskCompleted(task_result))
-                .await;
+            let _ = tx.send(SchedulerEvent::TaskCompleted(task_result)).await;
         }
     }
 
@@ -658,6 +654,7 @@ mod tests {
                 default_backup_dir: Some("./backups".to_string()),
             }),
             integration: common::config::IntegrationConfig::default(),
+            notifications: common::notifications::NotificationConfig::default(),
         }
     }
 

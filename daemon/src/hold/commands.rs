@@ -111,7 +111,10 @@ impl HoldCommandHandler {
     /// Handle a HOLD command and return a response
     pub async fn handle(&self, envelope: HoldCommandEnvelope) -> HoldCommandResponse {
         let request_id = envelope.request_id.clone();
-        info!("Handling HOLD command: {:?} (request_id: {})", envelope.command, request_id);
+        info!(
+            "Handling HOLD command: {:?} (request_id: {})",
+            envelope.command, request_id
+        );
 
         match self.dispatch(envelope).await {
             Ok(response) => response,
@@ -130,21 +133,33 @@ impl HoldCommandHandler {
         let request_id = envelope.request_id;
 
         match envelope.command {
-            HoldCommand::RequestStatus { include_metrics, include_catalog_summary } => {
-                self.handle_request_status(&request_id, include_metrics, include_catalog_summary).await
+            HoldCommand::RequestStatus {
+                include_metrics,
+                include_catalog_summary,
+            } => {
+                self.handle_request_status(&request_id, include_metrics, include_catalog_summary)
+                    .await
             }
-            HoldCommand::RequestBackup { backup_type, database, storage_profile, tags } => {
-                self.handle_request_backup(&request_id, backup_type, database, storage_profile, tags).await
+            HoldCommand::RequestBackup {
+                backup_type,
+                database,
+                storage_profile,
+                tags,
+            } => {
+                self.handle_request_backup(
+                    &request_id,
+                    backup_type,
+                    database,
+                    storage_profile,
+                    tags,
+                )
+                .await
             }
             HoldCommand::RequestBackupStatus => {
                 self.handle_request_backup_status(&request_id).await
             }
-            HoldCommand::RequestPitrStatus => {
-                self.handle_request_pitr_status(&request_id).await
-            }
-            HoldCommand::RequestMetrics => {
-                self.handle_request_metrics(&request_id).await
-            }
+            HoldCommand::RequestPitrStatus => self.handle_request_pitr_status(&request_id).await,
+            HoldCommand::RequestMetrics => self.handle_request_metrics(&request_id).await,
             HoldCommand::ListBackups { limit, database } => {
                 self.handle_list_backups(&request_id, limit, database).await
             }
@@ -269,7 +284,10 @@ impl HoldCommandHandler {
         limit: Option<u32>,
         database: Option<String>,
     ) -> Result<HoldCommandResponse> {
-        debug!("Handling ListBackups: limit={:?}, database={:?}", limit, database);
+        debug!(
+            "Handling ListBackups: limit={:?}, database={:?}",
+            limit, database
+        );
 
         let backups = serde_json::json!({
             "backups": [],

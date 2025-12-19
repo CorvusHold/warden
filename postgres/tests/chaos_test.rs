@@ -100,8 +100,11 @@ async fn test_backup_postgres_unreachable() {
     .await;
 
     // Verify failure
-    assert!(result.is_err(), "Backup should fail when PostgreSQL is unreachable");
-    
+    assert!(
+        result.is_err(),
+        "Backup should fail when PostgreSQL is unreachable"
+    );
+
     let err_msg = result.unwrap_err().to_string().to_lowercase();
     assert!(
         err_msg.contains("connection") || err_msg.contains("refused") || err_msg.contains("failed"),
@@ -113,7 +116,7 @@ async fn test_backup_postgres_unreachable() {
     let entries: Vec<_> = std::fs::read_dir(&backup_dir)
         .map(|r| r.filter_map(|e| e.ok()).collect())
         .unwrap_or_default();
-    
+
     // Allow empty directory or only metadata files
     for entry in entries {
         let path = entry.path();
@@ -231,16 +234,15 @@ async fn test_backup_s3_upload_failure() {
     // Either way, we're testing that errors are handled gracefully
     if result.is_err() {
         let err_msg = result.unwrap_err().to_string().to_lowercase();
-        assert!(
-            !err_msg.contains("panic"),
-            "Should not panic on S3 errors"
-        );
-        
+        assert!(!err_msg.contains("panic"), "Should not panic on S3 errors");
+
         // Error should mention storage/S3/access
         assert!(
-            err_msg.contains("s3") || err_msg.contains("storage") || 
-            err_msg.contains("access") || err_msg.contains("upload") ||
-            err_msg.contains("credential"),
+            err_msg.contains("s3")
+                || err_msg.contains("storage")
+                || err_msg.contains("access")
+                || err_msg.contains("upload")
+                || err_msg.contains("credential"),
             "Error should mention storage issue: {}",
             err_msg
         );
@@ -304,8 +306,9 @@ async fn test_backup_s3_nonexistent_bucket() {
     if result.is_err() {
         let err_msg = result.unwrap_err().to_string().to_lowercase();
         assert!(
-            err_msg.contains("bucket") || err_msg.contains("not found") || 
-            err_msg.contains("nosuchbucket"),
+            err_msg.contains("bucket")
+                || err_msg.contains("not found")
+                || err_msg.contains("nosuchbucket"),
             "Error should mention bucket issue: {}",
             err_msg
         );
@@ -348,12 +351,17 @@ async fn test_backup_dir_not_writable() {
     .await;
 
     // Should fail with permission error
-    assert!(result.is_err(), "Backup should fail for non-writable directory");
-    
+    assert!(
+        result.is_err(),
+        "Backup should fail for non-writable directory"
+    );
+
     let err_msg = result.unwrap_err().to_string().to_lowercase();
     assert!(
-        err_msg.contains("permission") || err_msg.contains("denied") || 
-        err_msg.contains("access") || err_msg.contains("create"),
+        err_msg.contains("permission")
+            || err_msg.contains("denied")
+            || err_msg.contains("access")
+            || err_msg.contains("create"),
         "Error should mention permission issue: {}",
         err_msg
     );
@@ -404,14 +412,16 @@ async fn test_pitr_target_before_backup() {
     let target = RecoveryTarget::Time(target_time);
 
     let result = planner.plan_recovery(target).await;
-    
+
     assert!(result.is_err(), "PITR should fail for target before backup");
-    
+
     let err_msg = result.unwrap_err().to_string().to_lowercase();
     assert!(
-        err_msg.contains("before") || err_msg.contains("no backup") || 
-        err_msg.contains("not found") || err_msg.contains("no base backup") ||
-        err_msg.contains("pitr"),
+        err_msg.contains("before")
+            || err_msg.contains("no backup")
+            || err_msg.contains("not found")
+            || err_msg.contains("no base backup")
+            || err_msg.contains("pitr"),
         "Error should mention target is before backup: {}",
         err_msg
     );
@@ -450,19 +460,19 @@ async fn test_pitr_missing_wal_segments() {
     .expect("Failed to write catalog");
 
     std::fs::create_dir_all(backup_dir.join("backup2")).unwrap();
-    
+
     // Create WAL archive directory but leave it empty (missing WAL)
     std::fs::create_dir_all(backup_dir.join("wal_archive")).unwrap();
 
-    let planner = PitrPlanner::new(backup_dir.clone())
-        .with_wal_archive_dir(backup_dir.join("wal_archive"));
+    let planner =
+        PitrPlanner::new(backup_dir.clone()).with_wal_archive_dir(backup_dir.join("wal_archive"));
 
     // Try to recover to a time that would require WAL
     let target_time = backup_time + Duration::hours(1);
     let target = RecoveryTarget::Time(target_time);
 
     let result = planner.plan_recovery(target).await;
-    
+
     // This might succeed if WAL is not strictly required, or fail if it is
     // The important thing is it doesn't panic
     if result.is_err() {
@@ -499,7 +509,7 @@ async fn test_restore_nonexistent_backup() {
 
     // Use a valid UUID format that doesn't exist
     let nonexistent_backup_id = uuid::Uuid::new_v4().to_string();
-    
+
     let result = restore_full(
         "localhost".to_string(),
         5432,
@@ -515,16 +525,21 @@ async fn test_restore_nonexistent_backup() {
         false, // auto_restart
         SshOptions::default(),
         StorageOptions::default(),
-        true,  // yes (skip confirmation)
+        true, // yes (skip confirmation)
     )
     .await;
 
-    assert!(result.is_err(), "Restore should fail for non-existent backup");
-    
+    assert!(
+        result.is_err(),
+        "Restore should fail for non-existent backup"
+    );
+
     let err_msg = result.unwrap_err().to_string().to_lowercase();
     assert!(
-        err_msg.contains("not found") || err_msg.contains("does not exist") ||
-        err_msg.contains("no backup") || err_msg.contains("failed"),
+        err_msg.contains("not found")
+            || err_msg.contains("does not exist")
+            || err_msg.contains("no backup")
+            || err_msg.contains("failed"),
         "Error should mention backup not found: {}",
         err_msg
     );
@@ -547,7 +562,7 @@ async fn test_restore_to_nonempty_dir_without_yes() {
     let backup_id = uuid::Uuid::new_v4().to_string();
     let backup_path = backup_dir.join(&backup_id);
     std::fs::create_dir_all(&backup_path).unwrap();
-    
+
     let catalog = serde_json::json!({
         "backups": [{
             "id": backup_id,
@@ -590,8 +605,10 @@ async fn test_restore_to_nonempty_dir_without_yes() {
     if result.is_err() {
         let err_msg = result.unwrap_err().to_string().to_lowercase();
         assert!(
-            err_msg.contains("not empty") || err_msg.contains("exists") ||
-            err_msg.contains("confirm") || err_msg.contains("overwrite"),
+            err_msg.contains("not empty")
+                || err_msg.contains("exists")
+                || err_msg.contains("confirm")
+                || err_msg.contains("overwrite"),
             "Error should mention non-empty directory: {}",
             err_msg
         );
@@ -631,14 +648,16 @@ async fn test_retention_invalid_policy() {
     };
 
     let result = retention_plan(storage_opts, retention_opts).await;
-    
+
     // Should fail with parse error
     assert!(result.is_err(), "Retention should fail with invalid policy");
-    
+
     let err_msg = result.unwrap_err().to_string().to_lowercase();
     assert!(
-        err_msg.contains("parse") || err_msg.contains("invalid") ||
-        err_msg.contains("json") || err_msg.contains("syntax"),
+        err_msg.contains("parse")
+            || err_msg.contains("invalid")
+            || err_msg.contains("json")
+            || err_msg.contains("syntax"),
         "Error should mention parse issue: {}",
         err_msg
     );
@@ -664,13 +683,14 @@ async fn test_retention_missing_policy() {
     };
 
     let result = retention_plan(storage_opts, retention_opts).await;
-    
+
     // Should fail or use defaults
     if result.is_err() {
         let err_msg = result.unwrap_err().to_string().to_lowercase();
         assert!(
-            err_msg.contains("not found") || err_msg.contains("does not exist") ||
-            err_msg.contains("no such file"),
+            err_msg.contains("not found")
+                || err_msg.contains("does not exist")
+                || err_msg.contains("no such file"),
             "Error should mention missing file: {}",
             err_msg
         );
@@ -699,7 +719,7 @@ async fn test_backup_performance_metrics() {
     let backup_dir = temp_dir.path().to_path_buf();
 
     let start = Instant::now();
-    
+
     let result = snapshot_backup(
         pg_config.host,
         pg_config.port,
@@ -721,14 +741,17 @@ async fn test_backup_performance_metrics() {
         println!("Backup ID: {}", backup.backup_id);
         println!("Duration: {:?}", duration);
         println!("Size: {} bytes", backup.size_bytes);
-        
+
         if duration.as_secs() > 0 {
             let throughput = backup.size_bytes as f64 / duration.as_secs_f64();
             println!("Throughput: {:.2} bytes/sec", throughput);
         }
-        
+
         // Log metrics for CI/monitoring
-        println!("METRIC backup_duration_seconds={:.3}", duration.as_secs_f64());
+        println!(
+            "METRIC backup_duration_seconds={:.3}",
+            duration.as_secs_f64()
+        );
         println!("METRIC backup_size_bytes={}", backup.size_bytes);
     } else {
         println!("Backup failed: {:?}", result.unwrap_err());
@@ -751,12 +774,10 @@ fn test_error_categorization_comprehensive() {
         ("Invalid argument: --foo", ExitCode::UsageError),
         ("Missing required argument", ExitCode::UsageError),
         ("Unrecognized option", ExitCode::UsageError),
-        
         // Config errors
         ("Configuration file not found", ExitCode::ConfigError),
         ("Invalid config format", ExitCode::ConfigError),
         ("Policy file error", ExitCode::ConfigError),
-        
         // Environment errors
         ("SSH tunnel failed", ExitCode::EnvironmentError),
         ("pg_dump not found", ExitCode::EnvironmentError),
@@ -764,13 +785,11 @@ fn test_error_categorization_comprehensive() {
         ("Network timeout", ExitCode::EnvironmentError),
         ("Disk full", ExitCode::EnvironmentError),
         ("Permission denied", ExitCode::EnvironmentError),
-        
         // Remote service errors
         ("S3 bucket not found", ExitCode::RemoteServiceError),
         ("Upload failed", ExitCode::RemoteServiceError),
         ("MinIO connection error", ExitCode::RemoteServiceError),
         ("Access denied to storage", ExitCode::RemoteServiceError),
-        
         // Internal errors (default)
         ("Unexpected state", ExitCode::InternalError),
         ("Assertion failed", ExitCode::InternalError),
@@ -800,10 +819,10 @@ async fn test_partial_artifact_cleanup() {
     // Create a simulated partial backup
     let partial_backup_dir = backup_dir.join("partial_backup_12345");
     std::fs::create_dir_all(&partial_backup_dir).unwrap();
-    
+
     // Create in-progress marker
     std::fs::write(partial_backup_dir.join(".in_progress"), "").unwrap();
-    
+
     // Create some partial files
     std::fs::write(partial_backup_dir.join("partial_data.bin"), vec![0u8; 1000]).unwrap();
 
@@ -813,7 +832,7 @@ async fn test_partial_artifact_cleanup() {
 
     // In a real scenario, the cleanup would be triggered by the backup failure
     // Here we just verify the structure that should be cleaned up
-    
+
     // Check for in-progress markers
     let has_in_progress = std::fs::read_dir(&backup_dir)
         .unwrap()
