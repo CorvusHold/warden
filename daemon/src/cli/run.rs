@@ -174,12 +174,12 @@ pub async fn execute() -> Result<()> {
         // Wait for task to fully stop (abort error is expected)
         let _ = handle.await;
         info!("Scheduler stopped");
-        
-        // Wait for event handler to finish processing remaining events
-        // The channel will close when scheduler is dropped, causing event_handler to exit
-        let _ = event_handler.await;
-        info!("Event handler stopped");
     }
+
+    // Wait for event handler to finish processing remaining events
+    // The channel will close when scheduler/event_tx is dropped, causing event_handler to exit
+    let _ = event_handler.await;
+    info!("Event handler stopped");
 
     // Perform cleanup
     if let Err(e) = daemon.stop().await {

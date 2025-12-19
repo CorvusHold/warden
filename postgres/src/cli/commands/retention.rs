@@ -796,14 +796,14 @@ fn infer_backup_from_directory(path: &PathBuf) -> Option<BackupItem> {
                 Ok(mtime) => {
                     let duration = mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
                     chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
-                        .unwrap_or_else(Utc::now)
+                        .unwrap_or_else(|| chrono::DateTime::<Utc>::from(std::time::UNIX_EPOCH))
                 }
                 Err(e) => {
                     warn!(
-                        "[retention] Could not extract timestamp from directory '{}' and failed to get mtime: {}. Using current time.",
+                        "[retention] Could not extract timestamp from directory '{}' and failed to get mtime: {}. Using UNIX epoch.",
                         name, e
                     );
-                    Utc::now()
+                    chrono::DateTime::<Utc>::from(std::time::UNIX_EPOCH)
                 }
             }
         }
