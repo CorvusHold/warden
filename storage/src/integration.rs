@@ -4,14 +4,16 @@ use crate::{
 };
 use log::{error, info};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
 /// Integration with PostgreSQL backup system
+#[derive(Clone)]
 pub struct PostgresBackupStorage {
     /// Storage provider
-    pub(crate) provider: Box<dyn StorageProvider>,
+    pub(crate) provider: Arc<dyn StorageProvider>,
     /// Bucket name
     pub(crate) bucket: String,
     /// Base prefix for backups
@@ -34,11 +36,11 @@ impl PostgresBackupStorage {
         _credentials_path: Option<String>,
     ) -> Result<Self, StorageError> {
         // Create the appropriate storage provider
-        let provider = match provider_type {
-            StorageProviderType::S3 => {
+        let provider: Arc<dyn StorageProvider> = match provider_type {
+            StorageProviderType::S3 => Arc::from(
                 StorageProviderFactory::create_s3_provider(region, endpoint, access_key, secret_key)
-                    .await?
-            }
+                    .await?,
+            ),
         };
 
         // Try to create the bucket regardless of whether it exists

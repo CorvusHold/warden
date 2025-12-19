@@ -87,6 +87,8 @@ async fn create_test_backup(
         ],
         tags,
         pinned: false,
+        encrypted: None,
+        encryption_algorithm: None,
     };
 
     // Upload metadata
@@ -320,6 +322,8 @@ async fn test_download_backup_verified() {
         }],
         tags: vec![],
         pinned: false,
+        encrypted: None,
+        encryption_algorithm: None,
     };
     storage
         .upload_backup_metadata(&backup_id, &metadata)
@@ -369,6 +373,8 @@ mod filter_tests {
             files: vec![],
             tags: vec![],
             pinned: false,
+            encrypted: None,
+            encryption_algorithm: None,
         };
 
         let filter = BackupFilter::new().with_backup_type(BackupType::Snapshot);
@@ -395,6 +401,8 @@ mod filter_tests {
             files: vec![],
             tags: vec![],
             pinned: false,
+            encrypted: None,
+            encryption_algorithm: None,
         };
 
         let filter = BackupFilter::new().with_status(BackupStatus::Completed);
@@ -421,6 +429,8 @@ mod filter_tests {
             files: vec![],
             tags: vec!["env=prod".to_string(), "app=billing".to_string()],
             pinned: false,
+            encrypted: None,
+            encryption_algorithm: None,
         };
 
         // Single label match
@@ -462,6 +472,8 @@ mod filter_tests {
             files: vec![],
             tags: vec![],
             pinned: false,
+            encrypted: None,
+            encryption_algorithm: None,
         };
 
         // After filter (backup is after the filter time)
@@ -498,6 +510,8 @@ mod filter_tests {
             files: vec![],
             tags: vec!["env=prod".to_string()],
             pinned: false,
+            encrypted: None,
+            encryption_algorithm: None,
         };
 
         // All conditions match

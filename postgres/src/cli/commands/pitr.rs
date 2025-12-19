@@ -181,6 +181,12 @@ pub async fn pitr_restore(
     info!("[pitr-restore] Starting PITR recovery to: {}", target_time);
     info!("[pitr-restore] Target directory: {:?}", target_dir);
 
+    let remote_storage = if storage_opts.remote_storage {
+        Some(create_storage(&storage_opts).await?)
+    } else {
+        None
+    };
+
     // Parse target time
     let target = RecoveryTarget::parse(&target_time)
         .map_err(|e| anyhow!("Invalid target time '{}': {}", target_time, e))?;
@@ -195,8 +201,7 @@ pub async fn pitr_restore(
     planner = planner.with_wal_prefix(storage_opts.wal_prefix.clone());
 
     // Create storage for planner if remote storage is enabled
-    if storage_opts.remote_storage {
-        let storage = create_storage(&storage_opts).await?;
+    if let Some(storage) = remote_storage.clone() {
         planner = planner.with_storage(storage);
     }
 
@@ -253,8 +258,7 @@ pub async fn pitr_restore(
         .with_auto_start(auto_start);
 
     // Create storage for executor if remote storage is enabled
-    if storage_opts.remote_storage {
-        let storage = create_storage(&storage_opts).await?;
+    if let Some(storage) = remote_storage {
         executor = executor.with_storage(storage);
     }
 
