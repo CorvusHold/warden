@@ -11,6 +11,8 @@ chaos-testing = ["nix", "rand", "libc"]
 [dependencies]
 tokio = { version = "1.48.0", features = ["full"] }
 tokio-postgres = { version = "0.7.15", features = ["with-chrono-0_4", "with-uuid-1"] }
+native-tls = "0.2.14"
+postgres-native-tls = "0.5.2"
 chrono = { version = "0.4.42", features = ["serde"] }
 thiserror = "2.0.17"
 serde = { version = "1.0.228", features = ["derive"] }

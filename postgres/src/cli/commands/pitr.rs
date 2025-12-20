@@ -12,7 +12,7 @@ use storage::{PostgresBackupStorage, StorageProviderType};
 use crate::pitr::{PitrExecutor, PitrPlanner, RecoveryTarget};
 
 /// Options for PITR storage configuration
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PitrStorageOptions {
     pub remote_storage: bool,
     pub provider_type: StorageProviderType,
@@ -23,6 +23,22 @@ pub struct PitrStorageOptions {
     pub access_key: Option<String>,
     pub secret_key: Option<String>,
     pub wal_prefix: String,
+}
+
+impl std::fmt::Debug for PitrStorageOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PitrStorageOptions")
+            .field("remote_storage", &self.remote_storage)
+            .field("provider_type", &self.provider_type)
+            .field("bucket", &self.bucket)
+            .field("prefix", &self.prefix)
+            .field("region", &self.region)
+            .field("endpoint", &self.endpoint)
+            .field("access_key", &self.access_key.as_ref().map(|_| "<redacted>"))
+            .field("secret_key", &self.secret_key.as_ref().map(|_| "<redacted>"))
+            .field("wal_prefix", &self.wal_prefix)
+            .finish()
+    }
 }
 
 impl Default for PitrStorageOptions {

@@ -77,7 +77,7 @@ impl EncryptionKey {
     /// Load a key from a secret reference.
     ///
     /// The secret value can be:
-    /// - Raw 32 bytes (binary file)
+    /// - Raw 32 bytes (UTF-8 text; the key is taken from the string's UTF-8 bytes)
     /// - Base64-encoded key (44 characters)
     /// - Hex-encoded key (64 characters)
     pub fn from_secret_ref(secret_ref: &str) -> Result<Self, KeyError> {

@@ -1,9 +1,9 @@
 use chrono::Utc;
 use reqwest::Url;
 use std::time::{Duration, Instant};
-use trust_dns_resolver::config::ResolverOpts;
-use trust_dns_resolver::proto::rr::RecordType;
-use trust_dns_resolver::TokioAsyncResolver;
+use hickory_resolver::config::ResolverOpts;
+use hickory_resolver::proto::rr::RecordType;
+use hickory_resolver::TokioAsyncResolver;
 
 use crate::error::Error;
 use crate::models::service::{MonitorResult, MonitorType, Service};

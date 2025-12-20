@@ -180,7 +180,11 @@ async fn test_channel(channel_name: &str) -> anyhow::Result<()> {
             }
         }
         Err(e) => {
-            println!("✗ Failed to test channel: {}", e);
+            return Err(anyhow::anyhow!(
+                "Failed to test channel '{}': {}",
+                channel_name,
+                e
+            ));
         }
     }
 

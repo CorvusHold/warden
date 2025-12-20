@@ -10,8 +10,12 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+use common::config::{Cluster, ClusterConfig, ConnectionConfig, Node, NodeRole, ProtectionGroup, SshConfig};
+use common::schedule::{BackupSchedule, BackupTarget, BackupType, RetentionSchedule, ScheduleConfig, StorageProfile};
 
 use crate::common::PostgresConfig;
 use crate::tunnel_keeper::TunnelKeeper;
@@ -352,16 +356,51 @@ pub async fn discover(
 
     // Connect to PostgreSQL
     let conn_string = config.connection_string();
-    let (client, connection) = tokio_postgres::connect(&conn_string, tokio_postgres::NoTls)
-        .await
-        .context("Failed to connect to PostgreSQL")?;
+    let ssl_mode = config.ssl_mode.as_deref().map(|s| s.trim().to_lowercase());
+    let use_tls = match ssl_mode.as_deref() {
+        None => false,
+        Some("") => false,
+        Some("disable") => false,
+        _ => true,
+    };
 
-    // Spawn connection handler
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            error!("[discover] Connection error: {}", e);
+    let client = if use_tls {
+        if matches!(ssl_mode.as_deref(), Some("allow") | Some("prefer")) {
+            log::warn!(
+                "[discover] ssl_mode '{}' requested; using TLS (no non-TLS fallback)",
+                ssl_mode.as_deref().unwrap_or("")
+            );
         }
-    });
+
+        let tls = native_tls::TlsConnector::builder()
+            .build()
+            .context("Failed to build TLS connector")?;
+        let tls = postgres_native_tls::MakeTlsConnector::new(tls);
+
+        let (client, connection) = tokio_postgres::connect(&conn_string, tls)
+            .await
+            .context("Failed to connect to PostgreSQL")?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                error!("[discover] Connection error: {}", e);
+            }
+        });
+
+        client
+    } else {
+        let (client, connection) = tokio_postgres::connect(&conn_string, tokio_postgres::NoTls)
+            .await
+            .context("Failed to connect to PostgreSQL")?;
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                error!("[discover] Connection error: {}", e);
+            }
+        });
+
+        client
+    };
 
     // Get PostgreSQL version
     let version = get_pg_version(&client).await?;
@@ -805,114 +844,99 @@ fn generate_cluster_yaml(
     let cluster_id = cluster_name.to_lowercase().replace(' ', "-");
     let node_id = format!("{}-node", cluster_id);
 
-    let role = match discovery.replication.role.as_str() {
-        "primary" => "primary",
-        "replica" | "cascading_replica" => "replica",
-        _ => "unknown",
+    let node_role = match discovery.replication.role.as_str() {
+        "primary" => NodeRole::Primary,
+        "replica" | "cascading_replica" => NodeRole::Replica,
+        _ => NodeRole::Unknown,
     };
 
-    // Get user databases for protection group
-    let user_dbs: Vec<_> = discovery
+    let user_dbs: Vec<String> = discovery
         .databases
         .iter()
         .filter(|d| !d.is_template && d.name != "postgres" && d.allow_connections)
-        .map(|d| format!("      - \"{}\"", d.name))
+        .map(|d| d.name.clone())
         .collect();
 
-    let tenant_line = options
-        .tenant
-        .as_ref()
-        .map(|t| format!("default_tenant: \"{}\"\n\n", t))
-        .unwrap_or_default();
-
-    let ssh_config = if options.ssh.host.is_some() {
-        format!(
-            r#"    ssh:
-      host: "{}"
-      user: "{}"
-      port: {}
-      key_path: "/etc/warden/ssh/key"  # Update with actual key path
-"#,
-            options.ssh.host.as_deref().unwrap_or(""),
-            options.ssh.user.as_deref().unwrap_or("warden"),
-            options.ssh.port.unwrap_or(22)
-        )
-    } else {
-        String::new()
-    };
-
-    let protection_group = if !user_dbs.is_empty() {
-        format!(
-            r#"
-protection_groups:
-  - id: "{cluster_id}-databases"
-    name: "{cluster_name} Databases"
-    cluster_id: "{cluster_id}"
-    databases:
-{databases}
-    preferred_source_role: {preferred_role}
-    labels:
-      backup_priority: "high"
-"#,
-            cluster_id = cluster_id,
-            cluster_name = cluster_name,
-            databases = user_dbs.join("\n"),
-            preferred_role = if role == "primary" {
-                "replica"
-            } else {
-                "primary"
-            }
-        )
-    } else {
-        String::new()
-    };
-
-    let yaml = format!(
-        r#"# Warden Cluster Configuration
-# Generated from discovery of {host}:{port}
-# Generated at: {timestamp}
-
-version: "1"
-
-{tenant}clusters:
-  - id: "{cluster_id}"
-    name: "{cluster_name}"
-    environment: "production"  # Update as needed
-    labels:
-      discovered: "true"
-      pg_version: "{pg_version}"
-
-nodes:
-  - id: "{node_id}"
-    cluster_id: "{cluster_id}"
-    host: "{host}"
-    port: {port}
-    role: {role}
-    labels:
-      discovered: "true"
-    connection:
-      user: "{user}"
-      database: "postgres"
-      # password_env: "PGPASSWORD"  # Uncomment and set environment variable
-{ssh_config}{protection_group}"#,
-        host = discovery.host,
-        port = discovery.port,
-        timestamp = discovery.discovered_at.to_rfc3339(),
-        tenant = tenant_line,
-        cluster_id = cluster_id,
-        cluster_name = cluster_name,
-        node_id = node_id,
-        role = role,
-        pg_version = discovery
+    let mut cluster_labels = HashMap::new();
+    cluster_labels.insert("discovered".to_string(), "true".to_string());
+    cluster_labels.insert(
+        "pg_version".to_string(),
+        discovery
             .version
             .split_whitespace()
             .nth(1)
-            .unwrap_or("unknown"),
-        user = options.user,
-        ssh_config = ssh_config,
-        protection_group = protection_group,
+            .unwrap_or("unknown")
+            .to_string(),
     );
 
+    let mut node_labels = HashMap::new();
+    node_labels.insert("discovered".to_string(), "true".to_string());
+
+    let ssh = if options.ssh.host.is_some() {
+        Some(SshConfig {
+            host: options.ssh.host.clone().unwrap_or_default(),
+            user: options.ssh.user.clone(),
+            port: options.ssh.port.unwrap_or(22),
+            key_path: Some("/etc/warden/ssh/key".to_string()),
+            password_env: None,
+        })
+    } else {
+        None
+    };
+
+    let node = Node {
+        id: node_id,
+        cluster_id: cluster_id.clone(),
+        host: discovery.host.clone(),
+        port: discovery.port,
+        role: node_role,
+        labels: node_labels,
+        connection: Some(ConnectionConfig {
+            user: Some(options.user.clone()),
+            database: Some("postgres".to_string()),
+            ssl_mode: options.ssl_mode.clone(),
+            password_env: None,
+        }),
+        ssh,
+    };
+
+    let cluster = Cluster {
+        id: cluster_id.clone(),
+        name: Some(cluster_name.to_string()),
+        tenant: None,
+        environment: Some("production".to_string()),
+        labels: cluster_labels,
+    };
+
+    let mut protection_groups = Vec::new();
+    if !user_dbs.is_empty() {
+        let preferred_source_role = match node_role {
+            NodeRole::Primary => Some(NodeRole::Replica),
+            _ => Some(NodeRole::Primary),
+        };
+
+        let mut labels = HashMap::new();
+        labels.insert("backup_priority".to_string(), "high".to_string());
+
+        protection_groups.push(ProtectionGroup {
+            id: format!("{}-databases", cluster_id),
+            name: Some(format!("{} Databases", cluster_name)),
+            cluster_id: cluster_id.clone(),
+            databases: user_dbs,
+            preferred_source_role,
+            labels,
+        });
+    }
+
+    let config = ClusterConfig {
+        version: "1".to_string(),
+        default_tenant: options.tenant.clone(),
+        clusters: vec![cluster],
+        nodes: vec![node],
+        protection_groups,
+    };
+
+    let yaml = serde_yaml::to_string(&config).context("Failed to serialize cluster config")?;
     Ok(yaml)
 }
 
@@ -941,57 +965,68 @@ fn generate_schedule_config(discovery: &DiscoveryResult, cluster_name: &str) -> 
         ("0 2,14 * * *", "0 4 * * *") // 2 AM and 2 PM backup, 4 AM retention
     };
 
-    let yaml = format!(
-        r#"# Warden Schedule Configuration
-# Generated from discovery of {host}:{port}
-# Total database size: {size_gb:.2} GB
+    let profile = StorageProfile {
+        name: "default-s3".to_string(),
+        provider: "s3".to_string(),
+        bucket: "warden-backups".to_string(),
+        prefix: Some(format!("{}/", cluster_id)),
+        region: Some("us-east-1".to_string()),
+        endpoint: None,
+        access_key: Some("env:AWS_ACCESS_KEY_ID".to_string()),
+        secret_key: Some("env:AWS_SECRET_ACCESS_KEY".to_string()),
+        encryption: None,
+    };
 
-schedules:
-  default_backup_dir: "./backups"
+    let mut backup_labels = HashMap::new();
+    backup_labels.insert("cluster".to_string(), cluster_id.clone());
+    backup_labels.insert("type".to_string(), "scheduled".to_string());
 
-  storage_profiles:
-    - name: "default-s3"
-      provider: "s3"
-      bucket: "warden-backups"  # Update with your bucket name
-      prefix: "{cluster_id}/"
-      region: "us-east-1"  # Update with your region
-      access_key: "env:AWS_ACCESS_KEY_ID"
-      secret_key: "env:AWS_SECRET_ACCESS_KEY"
+    let backup = BackupSchedule {
+        id: format!("{}-daily", cluster_id),
+        name: Some(format!("{} Daily Backup", cluster_name)),
+        cron: backup_cron.to_string(),
+        target: BackupTarget::Database {
+            host: discovery.host.clone(),
+            port: Some(discovery.port),
+            database: "postgres".to_string(),
+            user: Some("postgres".to_string()),
+        },
+        backup_type: BackupType::Snapshot,
+        storage_profile: Some("default-s3".to_string()),
+        enabled: true,
+        labels: backup_labels,
+        backup_dir: None,
+        encryption: None,
+    };
 
-  backups:
-    - id: "{cluster_id}-daily"
-      name: "{cluster_name} Daily Backup"
-      cron: "{backup_cron}"
-      target:
-        host: "{host}"
-        port: {port}
-        database: "postgres"  # Update with specific database if needed
-        user: "postgres"  # Update with backup user
-      backup_type: "snapshot"
-      storage_profile: "default-s3"
-      enabled: true
-      labels:
-        cluster: "{cluster_id}"
-        type: "scheduled"
+    let retention = RetentionSchedule {
+        id: format!("{}-retention", cluster_id),
+        name: Some(format!("{} Retention Cleanup", cluster_name)),
+        cron: retention_cron.to_string(),
+        policy_file: Some("./retention-policy.json".to_string()),
+        policy: None,
+        storage_profile: Some("default-s3".to_string()),
+        enabled: true,
+        apply: false,
+        backup_dir: None,
+    };
 
-  retention:
-    - id: "{cluster_id}-retention"
-      name: "{cluster_name} Retention Cleanup"
-      cron: "{retention_cron}"
-      storage_profile: "default-s3"
-      policy_file: "./retention-policy.json"
-      apply: false  # Set to true after testing
-      enabled: true
-"#,
-        host = discovery.host,
-        port = discovery.port,
-        size_gb = size_gb,
-        cluster_id = cluster_id,
-        cluster_name = cluster_name,
-        backup_cron = backup_cron,
-        retention_cron = retention_cron,
-    );
+    let schedule_config = ScheduleConfig {
+        backups: vec![backup],
+        retention: vec![retention],
+        storage_profiles: vec![profile],
+        default_backup_dir: Some("./backups".to_string()),
+    };
 
+    #[derive(Serialize)]
+    struct ScheduleFile {
+        schedules: ScheduleConfig,
+    }
+
+    let yaml = serde_yaml::to_string(&ScheduleFile {
+        schedules: schedule_config,
+    })
+    .context("Failed to serialize schedule config")?;
     Ok(yaml)
 }
 

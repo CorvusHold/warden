@@ -62,11 +62,13 @@ docker-info:
 	docker info
 
 lint-ci: ci-up
-	$(CI_ENV_LINT) cargo fmt -- --check
+	@set -e; trap '$(MAKE) ci-down' EXIT; \
+	$(CI_ENV_LINT) cargo fmt -- --check; \
 	$(CI_ENV_LINT) cargo clippy --workspace -- -D warnings
 
 # Run the full test suite in a CI-like environment (MinIO + Testcontainers)
 test-ci: ci-up docker-info
+	@set -e; trap '$(MAKE) ci-down' EXIT; \
 	$(CI_ENV_TEST) cargo test --workspace -- --test-threads=1
 
 gha-lint: lint-ci
@@ -85,6 +87,7 @@ act: act-lint act-tests
 
 # Run E2E scenario tests (requires Docker + MinIO)
 test-e2e: ci-up
+	@set -e; trap '$(MAKE) ci-down' EXIT; \
 	$(CI_ENV_TEST) cargo test -p postgres --test e2e_scenarios_test -- --ignored --test-threads=1
 
 # Run error handling tests
@@ -93,7 +96,8 @@ test-errors:
 
 # Run chaos/failure tests (requires Docker + MinIO + PostgreSQL)
 chaos-test: ci-up
-	@echo "Running chaos and failure mode tests..."
+	@set -e; trap '$(MAKE) ci-down' EXIT; \
+	echo "Running chaos and failure mode tests..."; \
 	$(CI_ENV_TEST) POSTGRES_HOST=localhost cargo test -p postgres --test chaos_test -- --ignored --test-threads=1
 
 # Run HA failure mode tests
