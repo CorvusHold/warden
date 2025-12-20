@@ -51,6 +51,7 @@ pub trait NotificationProvider: Send + Sync {
 pub struct WebhookProvider {
     config: WebhookChannelConfig,
     channel_name: String,
+    client: reqwest::Client,
 }
 
 impl WebhookProvider {
@@ -58,6 +59,7 @@ impl WebhookProvider {
         Self {
             config,
             channel_name,
+            client: reqwest::Client::new(),
         }
     }
 }
@@ -65,11 +67,6 @@ impl WebhookProvider {
 #[async_trait]
 impl NotificationProvider for WebhookProvider {
     async fn send(&self, event: &Event) -> NotificationResult<()> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(self.config.timeout_secs))
-            .build()
-            .map_err(|e| NotificationError::HttpError(e.to_string()))?;
-
         let payload = serde_json::to_string(event)
             .map_err(|e| NotificationError::SerializationError(e.to_string()))?;
 
@@ -80,9 +77,9 @@ impl NotificationProvider for WebhookProvider {
         );
 
         let mut request = match self.config.method.to_uppercase().as_str() {
-            "POST" => client.post(&self.config.url),
-            "PUT" => client.put(&self.config.url),
-            _ => client.post(&self.config.url),
+            "POST" => self.client.post(&self.config.url),
+            "PUT" => self.client.put(&self.config.url),
+            _ => self.client.post(&self.config.url),
         };
 
         // Add custom headers
@@ -91,9 +88,16 @@ impl NotificationProvider for WebhookProvider {
         }
 
         // Set content type if not already set
-        if !self.config.headers.contains_key("Content-Type") {
+        let has_content_type = self
+            .config
+            .headers
+            .keys()
+            .any(|k| k.eq_ignore_ascii_case("content-type"));
+        if !has_content_type {
             request = request.header("Content-Type", "application/json");
         }
+
+        request = request.timeout(Duration::from_secs(self.config.timeout_secs));
 
         let response = request
             .body(payload)
@@ -133,6 +137,7 @@ impl NotificationProvider for WebhookProvider {
 pub struct SlackProvider {
     config: SlackChannelConfig,
     channel_name: String,
+    client: reqwest::Client,
 }
 
 impl SlackProvider {
@@ -140,6 +145,7 @@ impl SlackProvider {
         Self {
             config,
             channel_name,
+            client: reqwest::Client::new(),
         }
     }
 
@@ -269,11 +275,6 @@ impl NotificationProvider for SlackProvider {
             NotificationError::ConfigError("Slack webhook URL not configured".to_string())
         })?;
 
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(self.config.timeout_secs))
-            .build()
-            .map_err(|e| NotificationError::HttpError(e.to_string()))?;
-
         let message = self.format_slack_message(event);
         let payload = serde_json::to_string(&message)
             .map_err(|e| NotificationError::SerializationError(e.to_string()))?;
@@ -283,10 +284,12 @@ impl NotificationProvider for SlackProvider {
             event.event_type_str()
         );
 
-        let response = client
+        let response = self
+            .client
             .post(&webhook_url)
             .header("Content-Type", "application/json")
             .body(payload)
+            .timeout(Duration::from_secs(self.config.timeout_secs))
             .send()
             .await
             .map_err(|e| NotificationError::HttpError(e.to_string()))?;

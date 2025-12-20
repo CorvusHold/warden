@@ -1096,13 +1096,13 @@ async fn main() -> Result<()> {
                     secret_key: storage_secret_key,
                     wal_prefix,
                 };
-                postgres::cli::commands::pitr_plan(
-                    target_time,
+                postgres::cli::commands::pitr_plan(postgres::cli::commands::PitrPlanConfig {
+                    target: target_time,
                     backup_dir,
                     wal_archive_dir,
                     storage_opts,
                     format,
-                )
+                })
                 .await?;
             }
             postgres::cli::PostgresqlCommands::PitrRestore {
@@ -1157,12 +1157,12 @@ async fn main() -> Result<()> {
                     "s3" => StorageProviderType::S3,
                     _ => anyhow::bail!("Unsupported storage provider type: {}", storage_provider),
                 };
-                postgres::cli::commands::pitr_restore(
-                    final_target_time,
-                    final_target_dir,
+                postgres::cli::commands::pitr_restore(postgres::cli::commands::PitrRestoreConfig {
+                    target: final_target_time,
+                    target_dir: final_target_dir,
                     backup_dir,
                     wal_archive_dir,
-                    postgres::cli::commands::PitrStorageOptions {
+                    storage_opts: postgres::cli::commands::PitrStorageOptions {
                         remote_storage,
                         provider_type,
                         bucket: storage_bucket,
@@ -1173,10 +1173,10 @@ async fn main() -> Result<()> {
                         secret_key: storage_secret_key,
                         wal_prefix,
                     },
-                    final_auto_start,
+                    auto_start: final_auto_start,
                     pg_bin_dir,
-                    final_yes,
-                )
+                    yes: final_yes,
+                })
                 .await?;
             }
             postgres::cli::PostgresqlCommands::PitrList {
@@ -1208,12 +1208,12 @@ async fn main() -> Result<()> {
                     secret_key: storage_secret_key,
                     wal_prefix,
                 };
-                postgres::cli::commands::pitr_list(
+                postgres::cli::commands::pitr_list(postgres::cli::commands::PitrListConfig {
                     backup_dir,
                     wal_archive_dir,
                     storage_opts,
                     format,
-                )
+                })
                 .await?;
             }
             postgres::cli::PostgresqlCommands::FullRestore {

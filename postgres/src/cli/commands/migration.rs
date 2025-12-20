@@ -20,6 +20,34 @@ use storage::{
     BackupMetadata, BackupStatus as StorageBackupStatus, BackupType as StorageBackupType,
 };
 
+struct TunnelGuard {
+    keeper: std::sync::Arc<tokio::sync::Mutex<TunnelKeeper>>,
+    enabled: bool,
+}
+
+impl TunnelGuard {
+    fn new(keeper: std::sync::Arc<tokio::sync::Mutex<TunnelKeeper>>) -> Self {
+        Self {
+            keeper,
+            enabled: true,
+        }
+    }
+}
+
+impl Drop for TunnelGuard {
+    fn drop(&mut self) {
+        if !self.enabled {
+            return;
+        }
+
+        let keeper = self.keeper.clone();
+        tokio::spawn(async move {
+            let mut keeper = keeper.lock().await;
+            let _ = keeper.close().await;
+        });
+    }
+}
+
 // ============================================================================
 // Discovery Types
 // ============================================================================
@@ -306,17 +334,21 @@ pub async fn discover(
         ssh_remote_port: ssh.remote_port,
     };
 
-    // Setup SSH tunnel if needed
-    if config.ssh_host.is_some() {
+    let mut tunnel_guard = if config.ssh_host.is_some() {
         info!("[discover] Setting up SSH tunnel...");
         let keeper_instance = TunnelKeeper::instance().await;
-        let mut keeper = keeper_instance.lock().await;
-        if let Err(e) = keeper.setup(&config).await {
-            error!("[discover] Failed to setup SSH tunnel: {e}");
-            return Err(anyhow!("SSH tunnel setup failed: {}", e));
+        {
+            let mut keeper = keeper_instance.lock().await;
+            if let Err(e) = keeper.setup(&config).await {
+                error!("[discover] Failed to setup SSH tunnel: {e}");
+                return Err(anyhow!("SSH tunnel setup failed: {}", e));
+            }
         }
         info!("[discover] SSH tunnel established successfully");
-    }
+        Some(TunnelGuard::new(keeper_instance))
+    } else {
+        None
+    };
 
     // Connect to PostgreSQL
     let conn_string = config.connection_string();
@@ -350,9 +382,11 @@ pub async fn discover(
     let recommendations = generate_recommendations(&databases, &replication, &backup_config);
 
     // Close SSH tunnel if it was opened
-    if ssh.host.is_some() {
-        let keeper_instance = TunnelKeeper::instance().await;
-        let mut keeper = keeper_instance.lock().await;
+    if let Some(guard) = tunnel_guard.as_mut() {
+        // We're doing an explicit, awaited close here, so disable the Drop handler.
+        guard.enabled = false;
+
+        let mut keeper = guard.keeper.lock().await;
         let _ = keeper.close().await;
         info!("[discover] SSH tunnel closed");
     }

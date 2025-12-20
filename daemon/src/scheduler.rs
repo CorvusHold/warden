@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
+use uuid::Uuid;
 
 /// Result of a scheduled task execution.
 #[derive(Debug, Clone)]
@@ -103,8 +104,13 @@ impl Scheduler {
 
     /// Get the schedule configuration from the current config.
     fn get_schedule_config(&self) -> Option<ScheduleConfig> {
-        let config = self.config.lock().unwrap();
-        config.schedules.clone()
+        match self.config.lock() {
+            Ok(config) => config.schedules.clone(),
+            Err(poison) => {
+                warn!("Scheduler config mutex was poisoned; recovering and continuing");
+                poison.into_inner().schedules.clone()
+            }
+        }
     }
 
     /// Run the scheduler loop.
@@ -197,13 +203,16 @@ impl Scheduler {
 
         // Emit start event
         if let Some(tx) = &self.event_tx {
-            let _ = tx
+            if let Err(e) = tx
                 .send(SchedulerEvent::TaskStarted {
                     schedule_id: schedule.id.clone(),
                     schedule_type: ScheduleType::Backup,
                     started_at,
                 })
-                .await;
+                .await
+            {
+                debug!("Failed to send TaskStarted event: {}", e);
+            }
         }
 
         if self.options.dry_run {
@@ -213,7 +222,7 @@ impl Scheduler {
             );
             // Emit TaskCompleted event for dry-run to maintain event consistency
             if let Some(tx) = &self.event_tx {
-                let _ = tx
+                if let Err(e) = tx
                     .send(SchedulerEvent::TaskCompleted(TaskResult {
                         schedule_id: schedule.id.clone(),
                         schedule_type: ScheduleType::Backup,
@@ -223,7 +232,10 @@ impl Scheduler {
                         message: Some("Dry-run completed".to_string()),
                         backup_id: None,
                     }))
-                    .await;
+                    .await
+                {
+                    debug!("Failed to send TaskCompleted event: {}", e);
+                }
             }
             return;
         }
@@ -316,7 +328,9 @@ impl Scheduler {
 
         // Emit completion event
         if let Some(tx) = &self.event_tx {
-            let _ = tx.send(SchedulerEvent::TaskCompleted(task_result)).await;
+            if let Err(e) = tx.send(SchedulerEvent::TaskCompleted(task_result)).await {
+                debug!("Failed to send TaskCompleted event: {}", e);
+            }
         }
     }
 
@@ -417,7 +431,11 @@ impl Scheduler {
                 .context("Full backup failed")?;
 
                 // Full backup doesn't return an ID in the same way
-                Ok(format!("full_backup_{}", Utc::now().format("%Y%m%d%H%M%S")))
+                Ok(format!(
+                    "full_backup_{}_{}",
+                    Utc::now().format("%Y%m%d%H%M%S"),
+                    Uuid::new_v4()
+                ))
             }
             BackupType::Incremental => {
                 postgres::cli::commands::incremental_backup(
@@ -435,8 +453,9 @@ impl Scheduler {
                 .context("Incremental backup failed")?;
 
                 Ok(format!(
-                    "incremental_backup_{}",
-                    Utc::now().format("%Y%m%d%H%M%S")
+                    "incremental_backup_{}_{}",
+                    Utc::now().format("%Y%m%d%H%M%S"),
+                    Uuid::new_v4()
                 ))
             }
         }
@@ -456,13 +475,16 @@ impl Scheduler {
 
         // Emit start event
         if let Some(tx) = &self.event_tx {
-            let _ = tx
+            if let Err(e) = tx
                 .send(SchedulerEvent::TaskStarted {
                     schedule_id: schedule.id.clone(),
                     schedule_type: ScheduleType::Retention,
                     started_at,
                 })
-                .await;
+                .await
+            {
+                debug!("Failed to send TaskStarted event: {}", e);
+            }
         }
 
         if self.options.dry_run {
@@ -472,7 +494,7 @@ impl Scheduler {
             );
             // Emit TaskCompleted event for dry-run to maintain event consistency
             if let Some(tx) = &self.event_tx {
-                let _ = tx
+                if let Err(e) = tx
                     .send(SchedulerEvent::TaskCompleted(TaskResult {
                         schedule_id: schedule.id.clone(),
                         schedule_type: ScheduleType::Retention,
@@ -482,7 +504,10 @@ impl Scheduler {
                         message: Some("Dry-run completed".to_string()),
                         backup_id: None,
                     }))
-                    .await;
+                    .await
+                {
+                    debug!("Failed to send TaskCompleted event: {}", e);
+                }
             }
             return;
         }
@@ -562,7 +587,9 @@ impl Scheduler {
 
         // Emit completion event
         if let Some(tx) = &self.event_tx {
-            let _ = tx.send(SchedulerEvent::TaskCompleted(task_result)).await;
+            if let Err(e) = tx.send(SchedulerEvent::TaskCompleted(task_result)).await {
+                debug!("Failed to send TaskCompleted event: {}", e);
+            }
         }
     }
 

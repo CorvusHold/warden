@@ -1100,18 +1100,7 @@ fn calculate_dir_size(path: &Path) -> Result<u64> {
 }
 
 fn find_dump_file(backup_path: &Path) -> Result<PathBuf> {
-    // Look for dump files in order of preference (.dump, .backup, .sql)
-    for entry in std::fs::read_dir(backup_path)? {
-        let entry = entry?;
-        let path = entry.path();
-        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-
-        if name.ends_with(".dump") || name.ends_with(".backup") || name.ends_with(".sql") {
-            return Ok(path);
-        }
-    }
-
-    Err(anyhow!("No dump file found in {:?}", backup_path))
+    crate::common::find_dump_file(backup_path, None)
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@
 //! These commands provide offline-first backup management, working entirely
 //! with local CLI and S3-compatible storage without requiring HOLD or C2.
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use log::{error, info};
 use std::path::PathBuf;
@@ -182,17 +182,59 @@ pub async fn download_backup(
         ));
     }
 
-    // Create target directory if it doesn't exist
-    std::fs::create_dir_all(target_dir)
-        .map_err(|e| anyhow!("Failed to create target directory: {}", e))?;
+    let mut temp_dir = target_dir.clone();
+    temp_dir.set_extension(format!("partial_{}", std::process::id()));
 
-    // Download with optional verification
-    let result = storage
-        .download_backup_verified(backup_id, target_dir, verify_checksums)
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir).with_context(|| {
+            format!(
+                "Failed to remove existing temporary download directory: {}",
+                temp_dir.display()
+            )
+        })?;
+    }
+
+    if target_dir.exists() {
+        let mut entries = std::fs::read_dir(target_dir).with_context(|| {
+            format!("Failed to read target directory: {}", target_dir.display())
+        })?;
+
+        if entries.next().is_some() {
+            return Err(anyhow!(
+                "Target directory '{}' already exists and is not empty",
+                target_dir.display()
+            ));
+        }
+
+        std::fs::remove_dir_all(target_dir).with_context(|| {
+            format!(
+                "Failed to remove existing empty target directory: {}",
+                target_dir.display()
+            )
+        })?;
+    }
+
+    std::fs::create_dir_all(&temp_dir).with_context(|| {
+        format!(
+            "Failed to create temporary download directory: {}",
+            temp_dir.display()
+        )
+    })?;
+
+    let download_result = storage
+        .download_backup_verified(backup_id, &temp_dir, verify_checksums)
         .await
-        .map_err(|e| anyhow!("Failed to download backup: {}", e))?;
+        .map_err(|e| anyhow!("Failed to download backup: {}", e));
 
-    // Check checksum verification result
+    let mut result = match download_result {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            return Err(e);
+        }
+    };
+
+    // Check checksum verification result (downloaded into temp dir)
     if let Some(ref checksum_result) = result.checksum_verified {
         if !checksum_result.all_matched {
             error!(
@@ -205,12 +247,23 @@ pub async fn download_backup(
                     mismatch.file, mismatch.expected, mismatch.actual
                 );
             }
+            let _ = std::fs::remove_dir_all(&temp_dir);
             return Err(anyhow!(
                 "Checksum verification failed: {} files have mismatched checksums",
                 checksum_result.files_mismatched
             ));
         }
     }
+
+    std::fs::rename(&temp_dir, target_dir).with_context(|| {
+        format!(
+            "Failed to move verified backup from '{}' to '{}'",
+            temp_dir.display(),
+            target_dir.display()
+        )
+    })?;
+
+    result.target_dir = target_dir.display().to_string();
 
     info!(
         "[backups-download] Download complete: {} files, {} bytes in {}s",
@@ -425,7 +478,10 @@ pub fn format_download_table(result: &DownloadResult) -> String {
         ));
         output.push_str(&format!("Files Verified:  {}\n", checksum.files_verified));
         output.push_str(&format!("Files Matched:   {}\n", checksum.files_matched));
-        output.push_str(&format!("Files Mismatched:{}\n", checksum.files_mismatched));
+        output.push_str(&format!(
+            "Files Mismatched: {}\n",
+            checksum.files_mismatched
+        ));
         output.push_str(&format!("Files Skipped:   {}\n", checksum.files_skipped));
 
         if !checksum.mismatches.is_empty() {
@@ -468,9 +524,9 @@ async fn create_storage_provider(opts: &BackupStorageOptions) -> Result<Postgres
         opts.endpoint.clone(),
         opts.access_key.clone(),
         opts.secret_key.clone(),
-        None,
-        None,
-        None,
+        None, // account_id (optional; unused by current S3/MinIO provider)
+        None, // project_id (optional; unused by current S3/MinIO provider)
+        None, // credentials_path (optional; unused by current S3/MinIO provider)
     )
     .await
     .map_err(|e| anyhow!("Failed to create storage provider: {}", e))
@@ -506,14 +562,15 @@ fn parse_datetime(s: &str) -> Result<DateTime<Utc>> {
         return Ok(dt.with_timezone(&Utc));
     }
 
-    // Try common formats
-    let formats = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"];
-
-    for fmt in &formats {
+    let datetime_formats = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"];
+    for fmt in &datetime_formats {
         if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
             return Ok(DateTime::from_naive_utc_and_offset(dt, Utc));
         }
-        // Try date-only format
+    }
+
+    let date_formats = ["%Y-%m-%d"];
+    for fmt in &date_formats {
         if let Ok(date) = chrono::NaiveDate::parse_from_str(s, fmt) {
             let dt = date.and_hms_opt(0, 0, 0).unwrap();
             return Ok(DateTime::from_naive_utc_and_offset(dt, Utc));

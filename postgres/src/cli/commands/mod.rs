@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use chrono::Utc;
 use log::{error, info, warn};
 use std::collections::HashMap;
-use std::{path::PathBuf, sync::atomic::Ordering};
+use std::{path::Path, path::PathBuf, sync::atomic::Ordering};
 use uuid::Uuid;
 
 // Import storage module
@@ -42,7 +42,10 @@ pub use migration::{
     GeneratedConfig, ImportBackupOptions, ImportBackupType, ImportResult, ReplicationInfo,
     SshOptions as MigrationSshOptions, StorageOptions as MigrationStorageOptions,
 };
-pub use pitr::{pitr_list, pitr_plan, pitr_restore, PitrPlanResult, PitrStorageOptions};
+pub use pitr::{
+    pitr_list, pitr_plan, pitr_restore, PitrListConfig, PitrPlanConfig, PitrPlanResult,
+    PitrRestoreConfig, PitrStorageOptions,
+};
 pub use restore_full_incremental::{restore_full, restore_incremental};
 pub use retention::{
     format_retention_plan, retention_apply, retention_init, retention_plan, RetentionOptions,
@@ -415,34 +418,8 @@ async fn upload_to_remote_storage(
 }
 
 /// Find the dump file in the backup directory
-fn find_dump_file(backup_path: &PathBuf, database: &str) -> Result<PathBuf> {
-    // Try database-specific dump file first
-    let dump_file = backup_path.join(format!("{}.dump", database));
-    if dump_file.exists() {
-        return Ok(dump_file);
-    }
-
-    // Try generic pg_dump.dump
-    let alt_dump_file = backup_path.join("pg_dump.dump");
-    if alt_dump_file.exists() {
-        return Ok(alt_dump_file);
-    }
-
-    // Try any .dump file
-    for entry in std::fs::read_dir(backup_path)
-        .map_err(|e| anyhow!("Failed to read backup directory: {}", e))?
-    {
-        let entry = entry.map_err(|e| anyhow!("Failed to read directory entry: {}", e))?;
-        let path = entry.path();
-        if path.extension().map(|e| e == "dump").unwrap_or(false) {
-            return Ok(path);
-        }
-    }
-
-    Err(anyhow!(
-        "No dump file found in backup directory: {}",
-        backup_path.display()
-    ))
+fn find_dump_file(backup_path: &Path, database: &str) -> Result<PathBuf> {
+    crate::common::find_dump_file(backup_path, Some(database))
 }
 
 #[derive(Clone, Debug, Default)]

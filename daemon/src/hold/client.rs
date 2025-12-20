@@ -155,7 +155,8 @@ impl HoldClient {
                 QueueBindOptions::default(),
                 FieldTable::default(),
             )
-            .await?;
+            .await
+            .context("Failed to bind command queue (direct agent routing key)")?;
 
         channel
             .queue_bind(
@@ -165,7 +166,8 @@ impl HoldClient {
                 QueueBindOptions::default(),
                 FieldTable::default(),
             )
-            .await?;
+            .await
+            .context("Failed to bind command queue (broadcast routing key)")?;
 
         *self.connection.write().await = Some(connection);
         *self.channel.write().await = Some(channel);
@@ -219,9 +221,13 @@ impl HoldClient {
             },
             Err(e) => {
                 warn!("Failed to publish to HOLD: {}", e);
+                let retry_count = match &*self.state.read().await {
+                    ConnectionState::Failed { retry_count, .. } => *retry_count,
+                    _ => 0,
+                };
                 *self.state.write().await = ConnectionState::Failed {
                     reason: format!("{}", e),
-                    retry_count: 0,
+                    retry_count,
                 };
                 Ok(None)
             }

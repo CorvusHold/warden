@@ -49,35 +49,10 @@ pub struct PluginRegistry {
 
 impl PluginRegistry {
     /// Create a new empty registry.
-    ///
-    /// Use `PluginRegistry::with_defaults()` to create a registry
-    /// pre-populated with compile-time enabled plugins.
     pub fn new() -> Self {
         Self {
             plugins: HashMap::new(),
         }
-    }
-
-    /// Create a registry with default plugins based on compile-time features.
-    ///
-    /// This method registers all plugins that are enabled via Cargo features.
-    /// Currently supported:
-    /// - `postgresql` (default)
-    ///
-    /// Future plugins will be added as features are implemented.
-    pub fn with_defaults() -> Self {
-        // Plugins are registered by the main binary or daemon
-        // based on compile-time features. This method provides
-        // a hook for that registration.
-        //
-        // Example (in main.rs):
-        // ```
-        // let mut registry = PluginRegistry::with_defaults();
-        // #[cfg(feature = "postgresql")]
-        // registry.register(Arc::new(postgres::PostgresDataSource::new()))?;
-        // ```
-
-        Self::new()
     }
 
     /// Register a new plugin.
@@ -218,6 +193,15 @@ impl std::fmt::Debug for PluginRegistry {
 /// from anywhere in the application. The registry is initialized
 /// lazily on first access.
 ///
+/// # Immutability after initialization
+///
+/// The global registry is stored in a `std::sync::OnceLock`, which means it is
+/// immutable after `init()` completes. All plugin registration must happen
+/// inside the `init()` closure.
+///
+/// If you need dynamic registration at runtime, use a separately-managed
+/// `PluginRegistry` instance wrapped in your own synchronization primitive.
+///
 /// # Thread Safety
 ///
 /// The global registry uses `std::sync::OnceLock` for thread-safe
@@ -240,6 +224,10 @@ impl std::fmt::Debug for PluginRegistry {
 /// for plugin in registry.list() {
 ///     println!("{}", plugin.name);
 /// }
+///
+/// // After initialization, you can only read from the registry.
+/// // This will not compile because `get()` returns `&PluginRegistry`:
+/// // registry.register(Arc::new(OtherDataSource::new()))?;
 /// ```
 pub mod global_registry {
     use super::*;
@@ -251,11 +239,8 @@ pub mod global_registry {
     ///
     /// This should be called once at application startup. The initializer
     /// function receives a mutable reference to the registry for plugin
-    /// registration.
-    ///
-    /// # Panics
-    ///
-    /// Panics if called more than once.
+    /// registration. After this completes successfully, the global registry is
+    /// immutable and can only be accessed via `get()`/`try_get()`.
     pub fn init<F>(initializer: F) -> PluginResult<()>
     where
         F: FnOnce(&mut PluginRegistry) -> PluginResult<()>,
@@ -436,5 +421,30 @@ mod tests {
             registry.unregister("test"),
             Err(PluginError::NotFound(_))
         ));
+    }
+
+    #[test]
+    fn test_global_registry_init_and_access() {
+        assert!(!global_registry::is_initialized());
+        assert!(global_registry::try_get().is_none());
+
+        global_registry::init(|registry| registry.register(Arc::new(MockDataSource::new("test"))))
+            .unwrap();
+
+        assert!(global_registry::is_initialized());
+        assert!(global_registry::try_get().is_some());
+        assert!(global_registry::get().contains("test"));
+
+        assert!(matches!(
+            global_registry::init(|_| Ok(())),
+            Err(PluginError::InitializationFailed(_))
+        ));
+    }
+
+    #[test]
+    #[ignore]
+    #[should_panic]
+    fn test_global_registry_get_panics_before_init() {
+        let _ = global_registry::get();
     }
 }

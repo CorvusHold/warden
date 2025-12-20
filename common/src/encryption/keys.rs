@@ -55,9 +55,12 @@ impl EncryptionKey {
     /// Create a key from a hex-encoded string.
     pub fn from_hex(hex: &str) -> Result<Self, KeyError> {
         let hex = hex.trim();
-        if hex.len() != 64 {
+        let expected_hex_len = EncryptionAlgorithm::Aes256Gcm.key_size() * 2;
+        if hex.len() != expected_hex_len {
             return Err(KeyError::InvalidFormat(format!(
-                "Hex key must be 64 characters (32 bytes), got {}",
+                "Hex key must be {} characters ({} bytes), got {}",
+                expected_hex_len,
+                expected_hex_len / 2,
                 hex.len()
             )));
         }
@@ -117,9 +120,10 @@ impl EncryptionKey {
     /// Generate a random key for testing.
     #[cfg(test)]
     pub fn generate_random() -> Self {
+        use rand::rngs::OsRng;
         use rand::RngCore;
         let mut bytes = vec![0u8; 32];
-        rand::thread_rng().fill_bytes(&mut bytes);
+        OsRng.fill_bytes(&mut bytes);
         Self { bytes }
     }
 }
@@ -139,9 +143,10 @@ impl fmt::Display for EncryptionKey {
 /// Generate a new random encryption key.
 #[allow(dead_code)] // Public API for key generation
 pub fn generate_key() -> EncryptionKey {
+    use rand::rngs::OsRng;
     use rand::RngCore;
     let mut bytes = vec![0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    OsRng.fill_bytes(&mut bytes);
     EncryptionKey { bytes }
 }
 

@@ -1,6 +1,6 @@
 //! Integration tests for the scheduler module.
 
-use chrono::{Duration, Utc};
+use chrono::{Duration, Timelike, Utc};
 use common::config::{C2AuthConfig, FeaturesConfig, WardenConfig};
 use common::notifications::NotificationConfig;
 use common::schedule::{
@@ -216,7 +216,7 @@ fn test_schedule_config_next_runs() {
 
     // Should have runs for all schedules (including disabled ones)
     // We have 3 schedules: "every-minute", "disabled-backup", and "daily-retention"
-    assert!(runs.len() >= 3);
+    assert_eq!(runs.len(), 3);
 
     // Runs should be sorted by time
     for i in 1..runs.len() {
@@ -323,5 +323,3 @@ fn test_should_run_at_tolerance() {
     // Should not run outside tolerance
     assert!(!schedule.should_run_at(next + Duration::seconds(60), 30));
 }
-
-use chrono::Timelike;

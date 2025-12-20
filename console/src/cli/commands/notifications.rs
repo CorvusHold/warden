@@ -53,16 +53,16 @@ impl Notifications {
     pub async fn run(&self) -> anyhow::Result<()> {
         match &self.command {
             NotificationCommands::List { format } => {
-                list_channels(format).await?;
+                list_channels(format)?;
             }
             NotificationCommands::Test { channel } => {
                 test_channel(channel).await?;
             }
             NotificationCommands::Validate => {
-                validate_config().await?;
+                validate_config()?;
             }
             NotificationCommands::Show { format } => {
-                show_config(format).await?;
+                show_config(format)?;
             }
         }
         Ok(())
@@ -70,7 +70,7 @@ impl Notifications {
 }
 
 /// List all configured notification channels.
-async fn list_channels(format: &str) -> anyhow::Result<()> {
+fn list_channels(format: &str) -> anyhow::Result<()> {
     let config = load_config()?;
     let notification_config = &config.notifications;
 
@@ -157,7 +157,7 @@ async fn test_channel(channel_name: &str) -> anyhow::Result<()> {
         for c in &notification_config.channels {
             println!("  - {}", c.name);
         }
-        return Ok(());
+        anyhow::bail!("Channel '{}' not found", channel_name);
     }
 
     println!("Testing notification channel '{}'...", channel_name);
@@ -188,7 +188,7 @@ async fn test_channel(channel_name: &str) -> anyhow::Result<()> {
 }
 
 /// Validate the notification configuration.
-async fn validate_config() -> anyhow::Result<()> {
+fn validate_config() -> anyhow::Result<()> {
     let config = load_config()?;
     let notification_config = &config.notifications;
 
@@ -241,7 +241,7 @@ async fn validate_config() -> anyhow::Result<()> {
             for error in errors {
                 println!("  - {}", error);
             }
-            std::process::exit(1);
+            anyhow::bail!("Notification configuration is invalid");
         }
     }
 
@@ -249,7 +249,7 @@ async fn validate_config() -> anyhow::Result<()> {
 }
 
 /// Show the full notification configuration.
-async fn show_config(format: &str) -> anyhow::Result<()> {
+fn show_config(format: &str) -> anyhow::Result<()> {
     let config = load_config()?;
     let notification_config = &config.notifications;
 

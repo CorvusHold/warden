@@ -5,6 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use cron::Schedule as CronSchedule;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -275,9 +276,11 @@ impl ParsedSchedule {
 
     /// Check if the schedule should run at the given time (within tolerance).
     pub fn should_run_at(&self, time: DateTime<Utc>, tolerance_secs: i64) -> bool {
-        if let Some(next) = self.next_after(time - chrono::Duration::seconds(tolerance_secs)) {
-            let diff = (next - time).num_seconds().abs();
-            diff <= tolerance_secs
+        let tolerance = chrono::Duration::seconds(tolerance_secs);
+        let window_start = time - tolerance;
+        let window_end = time + tolerance;
+        if let Some(next) = self.next_after(window_start) {
+            next <= window_end
         } else {
             false
         }
@@ -409,29 +412,42 @@ impl ScheduleConfig {
         let mut runs = Vec::new();
 
         for schedule in &self.backups {
-            if let Ok(parsed) = ParsedSchedule::new(schedule.id.clone(), &schedule.cron) {
-                if let Some(next) = parsed.next_after(after) {
-                    runs.push(ScheduledRun {
-                        schedule_id: schedule.id.clone(),
-                        schedule_name: schedule.name.clone(),
-                        schedule_type: ScheduleType::Backup,
-                        next_run: next,
-                        enabled: schedule.enabled,
-                    });
+            match ParsedSchedule::new(schedule.id.clone(), &schedule.cron) {
+                Ok(parsed) => {
+                    if let Some(next) = parsed.next_after(after) {
+                        runs.push(ScheduledRun {
+                            schedule_id: schedule.id.clone(),
+                            schedule_name: schedule.name.clone(),
+                            schedule_type: ScheduleType::Backup,
+                            next_run: next,
+                            enabled: schedule.enabled,
+                        });
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to parse backup schedule '{}': {}", schedule.id, e);
                 }
             }
         }
 
         for schedule in &self.retention {
-            if let Ok(parsed) = ParsedSchedule::new(schedule.id.clone(), &schedule.cron) {
-                if let Some(next) = parsed.next_after(after) {
-                    runs.push(ScheduledRun {
-                        schedule_id: schedule.id.clone(),
-                        schedule_name: schedule.name.clone(),
-                        schedule_type: ScheduleType::Retention,
-                        next_run: next,
-                        enabled: schedule.enabled,
-                    });
+            match ParsedSchedule::new(schedule.id.clone(), &schedule.cron) {
+                Ok(parsed) => {
+                    if let Some(next) = parsed.next_after(after) {
+                        runs.push(ScheduledRun {
+                            schedule_id: schedule.id.clone(),
+                            schedule_name: schedule.name.clone(),
+                            schedule_type: ScheduleType::Retention,
+                            next_run: next,
+                            enabled: schedule.enabled,
+                        });
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to parse retention schedule '{}': {}",
+                        schedule.id, e
+                    );
                 }
             }
         }

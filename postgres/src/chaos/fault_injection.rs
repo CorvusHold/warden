@@ -198,15 +198,31 @@ impl FaultInjector {
 
     /// Remove all faults for a component.
     pub fn clear_faults(&self, component: &str) {
-        if let Ok(mut faults) = self.inner.faults.write() {
-            faults.remove(component);
+        match self.inner.faults.write() {
+            Ok(mut faults) => {
+                faults.remove(component);
+            }
+            Err(poisoned) => {
+                log::warn!("[chaos] Faults RwLock was poisoned during clear_faults, recovering");
+                let mut faults = poisoned.into_inner();
+                faults.remove(component);
+            }
         }
     }
 
     /// Clear all registered faults.
     pub fn clear_all_faults(&self) {
-        if let Ok(mut faults) = self.inner.faults.write() {
-            faults.clear();
+        match self.inner.faults.write() {
+            Ok(mut faults) => {
+                faults.clear();
+            }
+            Err(poisoned) => {
+                log::warn!(
+                    "[chaos] Faults RwLock was poisoned during clear_all_faults, recovering"
+                );
+                let mut faults = poisoned.into_inner();
+                faults.clear();
+            }
         }
     }
 
