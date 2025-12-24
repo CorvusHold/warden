@@ -8,12 +8,14 @@
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
+use futures::stream::{self, StreamExt};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use serde_yml;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use common::config::{
@@ -53,7 +55,7 @@ impl Drop for TunnelGuard {
     /// - The system is under heavy resource pressure
     /// - The tunnel was already explicitly closed before drop
     ///
-    /// For guaranteed cleanup, explicitly call the cleanup method at lines 424-431
+    /// For guaranteed cleanup, explicitly call the cleanup method at lines 435-442
     /// before the scope ends or when done with the tunnel.
     fn drop(&mut self) {
         if !self.enabled {
@@ -388,9 +390,26 @@ pub async fn discover(
             .context("Failed to build TLS connector")?;
         let tls = postgres_native_tls::MakeTlsConnector::new(tls);
 
-        let (client, connection) = tokio_postgres::connect(&conn_string, tls)
-            .await
-            .context("Failed to connect to PostgreSQL")?;
+        let (client, connection) =
+            tokio_postgres::connect(&conn_string, tls)
+                .await
+                .map_err(|e| {
+                    // Sanitize error to avoid exposing connection string or passwords
+                    let error_hint = if e.to_string().to_lowercase().contains("authentication") {
+                        "authentication failed"
+                    } else if e.to_string().to_lowercase().contains("connection") {
+                        "connection failed"
+                    } else {
+                        "check credentials and network connection"
+                    };
+                    anyhow!(
+                        "Failed to connect to PostgreSQL at {}:{} with user '{}' ({})",
+                        config.host,
+                        config.port,
+                        config.user,
+                        error_hint
+                    )
+                })?;
 
         tokio::spawn(async move {
             if let Err(e) = connection.await {
@@ -402,7 +421,23 @@ pub async fn discover(
     } else {
         let (client, connection) = tokio_postgres::connect(&conn_string, tokio_postgres::NoTls)
             .await
-            .context("Failed to connect to PostgreSQL")?;
+            .map_err(|e| {
+                // Sanitize error to avoid exposing connection string or passwords
+                let error_hint = if e.to_string().to_lowercase().contains("authentication") {
+                    "authentication failed"
+                } else if e.to_string().to_lowercase().contains("connection") {
+                    "connection failed"
+                } else {
+                    "check credentials and network connection"
+                };
+                anyhow!(
+                    "Failed to connect to PostgreSQL at {}:{} with user '{}' ({})",
+                    config.host,
+                    config.port,
+                    config.user,
+                    error_hint
+                )
+            })?;
 
         tokio::spawn(async move {
             if let Err(e) = connection.await {
@@ -1385,23 +1420,54 @@ async fn upload_imported_backup(
     )
     .await?;
 
-    // Upload all files in backup directory
-    for entry in walkdir::WalkDir::new(backup_dir)
+    // Wrap provider in Arc for sharing across parallel uploads
+    let provider = Arc::new(provider);
+
+    // Collect files to upload in parallel for better performance
+    let entries: Vec<_> = walkdir::WalkDir::new(backup_dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-    {
-        let relative_path = entry.path().strip_prefix(backup_dir)?;
-        let key = format!("{}/{}", key_prefix, relative_path.display());
+        .collect();
 
-        provider
-            .upload_file(bucket, &key, entry.path(), None, None)
-            .await?;
-        info!("[import-backup] Uploaded: {}", key);
+    info!(
+        "[import-backup] Uploading {} files in parallel (concurrency limit: 10)",
+        entries.len()
+    );
+
+    // Upload files in parallel with concurrency limit
+    let upload_tasks = stream::iter(entries)
+        .map(|entry| {
+            let provider = Arc::clone(&provider);
+            let bucket = bucket.clone();
+            let key_prefix = key_prefix.clone();
+
+            async move {
+                let relative_path = entry.path().strip_prefix(backup_dir)?;
+                let key = format!("{}/{}", key_prefix, relative_path.display());
+
+                provider
+                    .upload_file(&bucket, &key, entry.path(), None, None)
+                    .await?;
+                info!("[import-backup] Uploaded: {}", key);
+                Ok::<_, anyhow::Error>(key)
+            }
+        })
+        .buffer_unordered(10); // Concurrency limit of 10 uploads
+
+    // Wait for all uploads to complete
+    let mut upload_count = 0;
+    tokio::pin!(upload_tasks);
+    while let Some(result) = upload_tasks.next().await {
+        result?; // Propagate any upload errors
+        upload_count += 1;
     }
 
     let remote_path = format!("s3://{}/{}", bucket, key_prefix);
-    info!("[import-backup] Upload complete: {}", remote_path);
+    info!(
+        "[import-backup] Upload complete: {} files uploaded to {}",
+        upload_count, remote_path
+    );
 
     Ok(Some(remote_path))
 }

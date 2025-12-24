@@ -569,6 +569,16 @@ async fn create_storage(opts: &PitrStorageOptions) -> Result<PostgresBackupStora
         // but are included in the API for forward compatibility with future storage
         // backends (e.g., cloud provider-specific storage like GCS with service accounts,
         // or Azure Blob Storage with client credentials).
+        //
+        // FUTURE REFACTORING: As more storage backends are added (GCS, Azure, etc.),
+        // consider refactoring this to use a builder pattern instead of passing many None
+        // values. Example:
+        //   PostgresBackupStorage::builder(provider_type)
+        //       .bucket(bucket)
+        //       .with_s3(region, endpoint, access_key, secret_key)
+        //       .build()
+        //
+        // This would provide a cleaner API and avoid visual noise from unused parameters.
         None, // account_id
         None, // project_id
         None, // credentials_path
