@@ -9,14 +9,18 @@
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use log::{error, info};
-use serde_yml;
 use serde::{Deserialize, Serialize};
+use serde_yml;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use common::config::{Cluster, ClusterConfig, ConnectionConfig, Node, NodeRole, ProtectionGroup, SshConfig};
-use common::schedule::{BackupSchedule, BackupTarget, BackupType, RetentionSchedule, ScheduleConfig, StorageProfile};
+use common::config::{
+    Cluster, ClusterConfig, ConnectionConfig, Node, NodeRole, ProtectionGroup, SshConfig,
+};
+use common::schedule::{
+    BackupSchedule, BackupTarget, BackupType, RetentionSchedule, ScheduleConfig, StorageProfile,
+};
 
 use crate::common::PostgresConfig;
 use crate::tunnel_keeper::TunnelKeeper;
@@ -358,12 +362,7 @@ pub async fn discover(
     // Connect to PostgreSQL
     let conn_string = config.connection_string();
     let ssl_mode = config.ssl_mode.as_deref().map(|s| s.trim().to_lowercase());
-    let use_tls = match ssl_mode.as_deref() {
-        None => false,
-        Some("") => false,
-        Some("disable") => false,
-        _ => true,
-    };
+    let use_tls = !matches!(ssl_mode.as_deref(), None | Some("") | Some("disable"));
 
     let client = if use_tls {
         if matches!(ssl_mode.as_deref(), Some("allow") | Some("prefer")) {

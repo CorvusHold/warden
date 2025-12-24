@@ -100,7 +100,9 @@ async fn test_provider_matrix() {
         let objects = match provider.list_objects(&test_bucket, Some("matrix/")).await {
             Ok(objects) => objects,
             Err(e) => {
-                eprintln!("[SKIP] providers_matrix: list_objects failed after delete for {name}: {e:?}");
+                eprintln!(
+                    "[SKIP] providers_matrix: list_objects failed after delete for {name}: {e:?}"
+                );
                 return;
             }
         };

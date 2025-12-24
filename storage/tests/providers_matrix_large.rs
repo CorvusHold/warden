@@ -30,9 +30,7 @@ async fn test_provider_matrix_large_file() {
     };
 
     if access_key.is_none() || secret_key.is_none() {
-        eprintln!(
-            "[SKIP] providers_matrix_large: AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY not set"
-        );
+        eprintln!("[SKIP] providers_matrix_large: AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY not set");
         return;
     }
 
@@ -69,9 +67,7 @@ async fn test_provider_matrix_large_file() {
         {
             Ok(p) => p,
             Err(e) => {
-                eprintln!(
-                    "[SKIP] providers_matrix_large: provider init failed for {name}: {e:?}"
-                );
+                eprintln!("[SKIP] providers_matrix_large: provider init failed for {name}: {e:?}");
                 return;
             }
         };

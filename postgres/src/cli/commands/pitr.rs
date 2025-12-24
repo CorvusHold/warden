@@ -34,8 +34,14 @@ impl std::fmt::Debug for PitrStorageOptions {
             .field("prefix", &self.prefix)
             .field("region", &self.region)
             .field("endpoint", &self.endpoint)
-            .field("access_key", &self.access_key.as_ref().map(|_| "<redacted>"))
-            .field("secret_key", &self.secret_key.as_ref().map(|_| "<redacted>"))
+            .field(
+                "access_key",
+                &self.access_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field(
+                "secret_key",
+                &self.secret_key.as_ref().map(|_| "<redacted>"),
+            )
             .field("wal_prefix", &self.wal_prefix)
             .finish()
     }

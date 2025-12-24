@@ -1,9 +1,9 @@
 use chrono::Utc;
-use reqwest::Url;
-use std::time::{Duration, Instant};
 use hickory_resolver::config::ResolverOpts;
 use hickory_resolver::proto::rr::RecordType;
 use hickory_resolver::Resolver;
+use reqwest::Url;
+use std::time::{Duration, Instant};
 
 use crate::error::Error;
 use crate::models::service::{MonitorResult, MonitorType, Service};
