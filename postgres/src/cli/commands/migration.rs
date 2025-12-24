@@ -10,6 +10,7 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use serde_yml;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -44,6 +45,16 @@ impl TunnelGuard {
 }
 
 impl Drop for TunnelGuard {
+    /// Closes the SSH tunnel on drop if enabled.
+    ///
+    /// This is a best-effort cleanup mechanism that spawns an async task to close the tunnel.
+    /// The async task may fail or be cancelled if:
+    /// - The Tokio runtime is shutting down
+    /// - The system is under heavy resource pressure
+    /// - The tunnel was already explicitly closed before drop
+    ///
+    /// For guaranteed cleanup, explicitly call the cleanup method at lines 424-431
+    /// before the scope ends or when done with the tunnel.
     fn drop(&mut self) {
         if !self.enabled {
             return;
@@ -482,7 +493,25 @@ async fn get_database_list(client: &tokio_postgres::Client) -> Result<Vec<Databa
         let allow_connections: bool = row.get("allow_connections");
 
         // Try to get table count for non-template databases
-        let table_count = None;
+        let table_count = if !is_template && allow_connections {
+            match client
+                .query_one(
+                    r#"
+                    SELECT COUNT(*) as table_count
+                    FROM information_schema.tables
+                    WHERE table_catalog = $1
+                      AND table_schema NOT IN ('pg_catalog', 'information_schema')
+                    "#,
+                    &[&name],
+                )
+                .await
+            {
+                Ok(count_row) => Some(count_row.get::<_, i64>("table_count")),
+                Err(_) => None, // Silently ignore errors for individual databases
+            }
+        } else {
+            None
+        };
 
         databases.push(DatabaseInfo {
             name,
@@ -1050,45 +1079,43 @@ fn generate_retention_policy(discovery: &DiscoveryResult) -> Result<String> {
         (30, 12, 12) // Longer retention for small DBs
     };
 
-    let json = format!(
-        r#"{{
-  "version": "1",
-  "description": "Retention policy generated from discovery (total size: {size_gb:.2} GB)",
-  "rules": [
-    {{
-      "name": "daily",
-      "keep_count": {daily_count},
-      "keep_days": null,
-      "backup_types": ["snapshot", "full"],
-      "labels": {{}},
-      "description": "Keep last {daily_count} daily backups"
-    }},
-    {{
-      "name": "weekly",
-      "keep_count": {weekly_count},
-      "keep_days": null,
-      "backup_types": ["snapshot", "full"],
-      "labels": {{"weekly": "true"}},
-      "description": "Keep last {weekly_count} weekly backups"
-    }},
-    {{
-      "name": "monthly",
-      "keep_count": {monthly_count},
-      "keep_days": null,
-      "backup_types": ["snapshot", "full"],
-      "labels": {{"monthly": "true"}},
-      "description": "Keep last {monthly_count} monthly backups"
-    }}
-  ],
-  "default_action": "delete",
-  "pitr_retention_days": 7,
-  "wal_retention_days": 7
-}}"#,
-        size_gb = size_gb,
-        daily_count = daily_count,
-        weekly_count = weekly_count,
-        monthly_count = monthly_count,
-    );
+    // Build retention policy using serde_json for type-safe JSON generation
+    let policy = json!({
+        "version": "1",
+        "description": format!("Retention policy generated from discovery (total size: {:.2} GB)", size_gb),
+        "rules": [
+            {
+                "name": "daily",
+                "keep_count": daily_count,
+                "keep_days": Value::Null,
+                "backup_types": ["snapshot", "full"],
+                "labels": {},
+                "description": format!("Keep last {} daily backups", daily_count)
+            },
+            {
+                "name": "weekly",
+                "keep_count": weekly_count,
+                "keep_days": Value::Null,
+                "backup_types": ["snapshot", "full"],
+                "labels": {"weekly": "true"},
+                "description": format!("Keep last {} weekly backups", weekly_count)
+            },
+            {
+                "name": "monthly",
+                "keep_count": monthly_count,
+                "keep_days": Value::Null,
+                "backup_types": ["snapshot", "full"],
+                "labels": {"monthly": "true"},
+                "description": format!("Keep last {} monthly backups", monthly_count)
+            }
+        ],
+        "default_action": "delete",
+        "pitr_retention_days": 7,
+        "wal_retention_days": 7
+    });
+
+    let json = serde_json::to_string_pretty(&policy)
+        .context("Failed to serialize retention policy to JSON")?;
 
     Ok(json)
 }
@@ -1613,7 +1640,13 @@ fn truncate_str(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else {
-        format!("{}...", &s[..max_len - 3])
+        let truncate_at = s
+            .char_indices()
+            .take_while(|(i, _)| *i < max_len - 3)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+        format!("{}...", &s[..truncate_at])
     }
 }
 
@@ -1655,5 +1688,20 @@ mod tests {
     fn test_truncate_str() {
         assert_eq!(truncate_str("short", 10), "short");
         assert_eq!(truncate_str("this is a long string", 10), "this is...");
+    }
+
+    #[test]
+    fn test_truncate_str_utf8_edge_cases() {
+        // Test with multi-byte UTF-8 characters (emoji and special chars)
+        assert_eq!(truncate_str("Hello 世界", 20), "Hello 世界");
+        assert_eq!(truncate_str("Hello 世界 🦀", 8), "Hello...");
+        // Ensure truncation doesn't panic on multi-byte boundaries
+        // "Café ☕" with max_len=6 should safely truncate at character boundary
+        let result = truncate_str("Café ☕", 6);
+        assert!(result.ends_with("..."));
+        // Test truncation at exact multi-byte character boundary
+        let result2 = truncate_str("Test™™™™™™™™™", 10);
+        assert!(result2.ends_with("..."));
+        // Test that it doesn't panic - the important part
     }
 }

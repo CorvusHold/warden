@@ -565,9 +565,13 @@ async fn create_storage(opts: &PitrStorageOptions) -> Result<PostgresBackupStora
         opts.endpoint.clone(),
         opts.access_key.clone(),
         opts.secret_key.clone(),
-        None, // account_id (optional; unused by current S3/MinIO provider)
-        None, // project_id (optional; unused by current S3/MinIO provider)
-        None, // credentials_path (optional; unused by current S3/MinIO provider)
+        // The following three parameters are currently unused by S3/MinIO providers,
+        // but are included in the API for forward compatibility with future storage
+        // backends (e.g., cloud provider-specific storage like GCS with service accounts,
+        // or Azure Blob Storage with client credentials).
+        None, // account_id
+        None, // project_id
+        None, // credentials_path
     )
     .await
     .map_err(|e| anyhow!("Failed to create storage provider: {}", e))
