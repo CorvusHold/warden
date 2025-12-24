@@ -1673,7 +1673,7 @@ pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&evaluation).unwrap());
         }
         "yaml" => {
-            println!("{}", serde_yaml::to_string(&evaluation).unwrap());
+            println!("{}", serde_yml::to_string(&evaluation).unwrap());
         }
         _ => {
             println!("\n=== Purge Evaluation ===");

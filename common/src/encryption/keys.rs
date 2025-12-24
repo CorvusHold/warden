@@ -140,34 +140,28 @@ impl fmt::Display for EncryptionKey {
     }
 }
 
-/// Generate a new random encryption key.
-#[allow(dead_code)] // Public API for key generation
-pub fn generate_key() -> EncryptionKey {
-    use rand::rngs::OsRng;
-    use rand::RngCore;
-    let mut bytes = vec![0u8; 32];
-    OsRng.fill_bytes(&mut bytes);
-    EncryptionKey { bytes }
-}
-
-/// Encode a key as base64 for storage.
-#[allow(dead_code)] // Public API for key encoding
-pub fn encode_key_base64(key: &EncryptionKey) -> String {
-    BASE64.encode(key.as_bytes())
-}
-
-/// Encode a key as hex for storage.
-#[allow(dead_code)] // Public API for key encoding
-pub fn encode_key_hex(key: &EncryptionKey) -> String {
-    key.as_bytes()
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn generate_key() -> EncryptionKey {
+        use rand::rngs::OsRng;
+        use rand::RngCore;
+        let mut bytes = vec![0u8; 32];
+        OsRng.fill_bytes(&mut bytes);
+        EncryptionKey { bytes }
+    }
+
+    fn encode_key_base64(key: &EncryptionKey) -> String {
+        BASE64.encode(key.as_bytes())
+    }
+
+    fn encode_key_hex(key: &EncryptionKey) -> String {
+        key.as_bytes()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect()
+    }
 
     #[test]
     fn test_key_from_bytes() {

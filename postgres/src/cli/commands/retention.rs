@@ -408,7 +408,7 @@ pub fn format_retention_plan(result: &RetentionPlanResult, format: &str) -> Stri
             warn!("[retention] Failed to serialize to JSON: {}", e);
             String::new()
         }),
-        "yaml" => serde_yaml::to_string(&result.evaluation).unwrap_or_else(|e| {
+        "yaml" => serde_yml::to_string(&result.evaluation).unwrap_or_else(|e| {
             warn!("[retention] Failed to serialize to YAML: {}", e);
             String::new()
         }),
@@ -518,7 +518,7 @@ async fn load_policy(
         if policy_file.exists() {
             let content = std::fs::read_to_string(policy_file)?;
             let policy: PitrRetentionPolicy = serde_json::from_str(&content)
-                .or_else(|_| serde_yaml::from_str(&content))
+                .or_else(|_| serde_yml::from_str(&content))
                 .map_err(|e| anyhow!("Failed to parse policy file: {}", e))?;
             return Ok((policy, format!("file:{}", policy_file.display())));
         }
@@ -1082,12 +1082,11 @@ pub fn retention_init(output: &PathBuf, preset: &str, format: &str) -> Result<()
     }
 
     let content = match format.to_lowercase().as_str() {
-        "yaml" => serde_yaml::to_string(&policy)
+        "yaml" => serde_yml::to_string(&policy)
             .map_err(|e| anyhow!("Failed to serialize policy to YAML: {}", e))?,
         "json" => serde_json::to_string_pretty(&policy)
             .map_err(|e| anyhow!("Failed to serialize policy to JSON: {}", e))?,
-        _ => serde_json::to_string_pretty(&policy)
-            .map_err(|e| anyhow!("Failed to serialize policy to JSON: {}", e))?,
+        _ => return Err(anyhow!("Unsupported format: {}", format)),
     };
 
     // Create parent directories if needed

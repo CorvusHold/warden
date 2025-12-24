@@ -172,11 +172,17 @@ async fn test_channel(channel_name: &str) -> anyhow::Result<()> {
                 println!("The channel '{}' is configured correctly.", channel_name);
             } else {
                 println!("✗ Test notification failed.");
-                if let Some(error) = result.error {
-                    println!("  Error: {}", error);
-                }
+                let error_message = result
+                    .error
+                    .unwrap_or_else(|| "Notification test failed".to_string());
+                println!("  Error: {}", error_message);
                 println!();
                 println!("Please check your channel configuration and try again.");
+                return Err(anyhow::anyhow!(
+                    "Test notification failed for channel '{}': {}",
+                    channel_name,
+                    error_message
+                ));
             }
         }
         Err(e) => {

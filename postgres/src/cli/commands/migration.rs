@@ -9,6 +9,7 @@
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use log::{error, info};
+use serde_yml;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -936,7 +937,7 @@ fn generate_cluster_yaml(
         protection_groups,
     };
 
-    let yaml = serde_yaml::to_string(&config).context("Failed to serialize cluster config")?;
+    let yaml = serde_yml::to_string(&config).context("Failed to serialize cluster config")?;
     Ok(yaml)
 }
 
@@ -1023,7 +1024,7 @@ fn generate_schedule_config(discovery: &DiscoveryResult, cluster_name: &str) -> 
         schedules: ScheduleConfig,
     }
 
-    let yaml = serde_yaml::to_string(&ScheduleFile {
+    let yaml = serde_yml::to_string(&ScheduleFile {
         schedules: schedule_config,
     })
     .context("Failed to serialize schedule config")?;
@@ -1428,7 +1429,7 @@ fn calculate_dir_size(path: &Path) -> Result<u64> {
 pub fn format_discovery_result(result: &DiscoveryResult, format: &str) -> String {
     match format {
         "json" => serde_json::to_string_pretty(result).unwrap_or_default(),
-        "yaml" => serde_yaml::to_string(result).unwrap_or_default(),
+        "yaml" => serde_yml::to_string(result).unwrap_or_default(),
         _ => format_discovery_table(result),
     }
 }
@@ -1559,7 +1560,7 @@ pub fn format_generated_config(config: &GeneratedConfig, format: &str) -> String
 pub fn format_import_result(result: &ImportResult, format: &str) -> String {
     match format {
         "json" => serde_json::to_string_pretty(result).unwrap_or_default(),
-        "yaml" => serde_yaml::to_string(result).unwrap_or_default(),
+        "yaml" => serde_yml::to_string(result).unwrap_or_default(),
         _ => {
             let mut output = String::new();
             output.push_str("\n┌─ Backup Import Result ───────────────────────────────────────────────────────┐\n");

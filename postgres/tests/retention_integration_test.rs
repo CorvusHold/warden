@@ -202,7 +202,7 @@ fn test_retention_init_yaml_format() {
 
     // Verify the policy is valid YAML
     let content = std::fs::read_to_string(&output_path).unwrap();
-    let policy: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
+    let policy: serde_yml::Value = serde_yml::from_str(&content).unwrap();
     assert!(policy["version"].as_str().is_some());
 }
 
@@ -384,10 +384,10 @@ fn test_policy_yaml_serialization() {
     let original = PitrRetentionPolicy::conservative();
 
     // Serialize to YAML
-    let yaml = serde_yaml::to_string(&original).unwrap();
+    let yaml = serde_yml::to_string(&original).unwrap();
 
     // Deserialize back
-    let restored: PitrRetentionPolicy = serde_yaml::from_str(&yaml).unwrap();
+    let restored: PitrRetentionPolicy = serde_yml::from_str(&yaml).unwrap();
 
     assert_eq!(original.version, restored.version);
     assert_eq!(original.enabled, restored.enabled);

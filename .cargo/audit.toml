@@ -1,6 +1,17 @@
 [advisories]
 ignore = [
+    # rsa: Marvin Attack timing sidechannel
+    # Transitive dependency via `russh`/`ssh-key` used for optional SSH tunneling.
+    # Warden does not expose an RSA decryption/signing oracle to untrusted callers; RSA operations
+    # (if any) happen locally for SSH client authentication, where remote timing observation is not
+    # practically exploitable in our deployment model.
+    # Advisory: https://rustsec.org/advisories/RUSTSEC-2023-0071
     "RUSTSEC-2023-0071",
+
+    # tokio-tar: incorrect PAX handling allows tar entry smuggling
+    # Present only as a transitive dependency of `testcontainers` (dev-dependency).
+    # Not used in production code paths.
+    # Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0111.html
     "RUSTSEC-2025-0111",
 ]
 
