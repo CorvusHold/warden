@@ -1,0 +1,206 @@
+# Warden Cluster Configuration Example
+#
+# This file describes a PostgreSQL HA cluster topology for Warden.
+# It enables Warden to understand cluster structure, node roles, and
+# protection groups without requiring external services.
+#
+# Default search paths:
+#   - ./cluster.yaml
+#   - ~/.warden/cluster.yaml
+#   - /etc/warden/cluster.yaml
+#
+# Validate with: warden postgresql cluster-validate --config cluster.yaml
+# View with:     warden postgresql cluster-show --config cluster.yaml
+
+version: "1"
+
+# =============================================================================
+# MULTI-TENANT CONFIGURATION (Optional)
+# =============================================================================
+# Default tenant for all clusters in this config. Can be overridden per-cluster.
+# When set, backups are organized as: <tenant>/<cluster>/<pg>/<db>/<backup_id>/
+# When not set, backups use the legacy flat layout: <prefix>/<backup_id>/
+default_tenant: "acme-corp"
+
+# =============================================================================
+# CLUSTERS
+# =============================================================================
+# Define your PostgreSQL clusters. Each cluster represents a logical grouping
+# of database nodes that work together (e.g., a primary with replicas).
+
+clusters:
+  - id: "prod-billing"
+    name: "Production Billing Cluster"
+    environment: "production"
+    labels:
+      team: "billing"
+      tier: "critical"
+      region: "us-east-1"
+
+  - id: "prod-analytics"
+    name: "Production Analytics Cluster"
+    environment: "production"
+    labels:
+      team: "data-platform"
+      tier: "standard"
+      region: "us-east-1"
+
+  - id: "staging-billing"
+    name: "Staging Billing Cluster"
+    environment: "staging"
+    labels:
+      team: "billing"
+      tier: "non-critical"
+
+# =============================================================================
+# NODES
+# =============================================================================
+# Define individual PostgreSQL instances. Each node belongs to exactly one
+# cluster and has a role (primary, replica, or unknown).
+
+nodes:
+  # --- Production Billing Cluster ---
+  - id: "billing-primary"
+    cluster_id: "prod-billing"
+    host: "db-primary.billing.internal"
+    port: 5432
+    role: primary
+    labels:
+      az: "us-east-1a"
+      instance_type: "db.r6g.xlarge"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+      # password_env: "BILLING_PRIMARY_PASSWORD"
+    ssh:
+      host: "bastion.billing.internal"
+      user: "warden"
+      port: 22
+      key_path: "/etc/warden/ssh/billing_key"
+
+  - id: "billing-replica-1"
+    cluster_id: "prod-billing"
+    host: "db-replica-1.billing.internal"
+    port: 5432
+    role: replica
+    labels:
+      az: "us-east-1b"
+      instance_type: "db.r6g.xlarge"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+    ssh:
+      host: "bastion.billing.internal"
+      user: "warden"
+      port: 22
+      key_path: "/etc/warden/ssh/billing_key"
+
+  - id: "billing-replica-2"
+    cluster_id: "prod-billing"
+    host: "db-replica-2.billing.internal"
+    port: 5432
+    role: replica
+    labels:
+      az: "us-east-1c"
+      instance_type: "db.r6g.xlarge"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+    ssh:
+      host: "bastion.billing.internal"
+      user: "warden"
+      port: 22
+      key_path: "/etc/warden/ssh/billing_key"
+
+  # --- Production Analytics Cluster ---
+  - id: "analytics-primary"
+    cluster_id: "prod-analytics"
+    host: "db-primary.analytics.internal"
+    port: 5432
+    role: primary
+    labels:
+      az: "us-east-1a"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+
+  - id: "analytics-replica"
+    cluster_id: "prod-analytics"
+    host: "db-replica.analytics.internal"
+    port: 5432
+    role: replica
+    labels:
+      az: "us-east-1b"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "require"
+
+  # --- Staging Billing Cluster ---
+  - id: "staging-billing-primary"
+    cluster_id: "staging-billing"
+    host: "db.staging-billing.internal"
+    port: 5432
+    role: primary
+    labels:
+      az: "us-east-1a"
+    connection:
+      user: "warden_backup"
+      database: "postgres"
+      ssl_mode: "prefer"
+
+# =============================================================================
+# PROTECTION GROUPS
+# =============================================================================
+# Define which databases are protected together. Protection groups enable:
+#   - Coordinated backup scheduling
+#   - Consistent retention policies
+#   - Preferred backup source selection (e.g., backup from replica)
+
+protection_groups:
+  - id: "billing-core"
+    name: "Billing Core Databases"
+    cluster_id: "prod-billing"
+    databases:
+      - "billing_main"
+      - "billing_transactions"
+      - "billing_audit"
+    preferred_source_role: replica  # Prefer backups from replica to reduce primary load
+    labels:
+      compliance: "pci"
+      backup_priority: "high"
+
+  - id: "billing-reporting"
+    name: "Billing Reporting Databases"
+    cluster_id: "prod-billing"
+    databases:
+      - "billing_reports"
+      - "billing_analytics"
+    preferred_source_role: replica
+    labels:
+      compliance: "internal"
+      backup_priority: "medium"
+
+  - id: "analytics-warehouse"
+    name: "Analytics Data Warehouse"
+    cluster_id: "prod-analytics"
+    databases:
+      - "analytics_warehouse"
+      - "analytics_staging"
+    preferred_source_role: replica
+    labels:
+      backup_priority: "medium"
+
+  - id: "staging-billing-all"
+    name: "Staging Billing (All DBs)"
+    cluster_id: "staging-billing"
+    databases:
+      - "billing_main"
+      - "billing_transactions"
+    # No preferred_source_role - will use primary (only node)
+    labels:
+      backup_priority: "low"

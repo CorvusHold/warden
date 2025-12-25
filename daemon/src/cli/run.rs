@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::signal;
 
+use crate::scheduler::{SchedulerEvent, SchedulerOptions};
 use crate::Daemon;
 
 pub async fn execute() -> Result<()> {
@@ -81,12 +82,120 @@ pub async fn execute() -> Result<()> {
     // Start the daemon
     info!("Daemon started, processing messages");
 
+    // Check if schedules are configured and start the scheduler
+    let config_for_scheduler = daemon.config();
+    let has_schedules = {
+        match config_for_scheduler.lock() {
+            Ok(cfg) => cfg
+                .schedules
+                .as_ref()
+                .map(|s| !s.backups.is_empty() || !s.retention.is_empty())
+                .unwrap_or(false),
+            Err(poisoned) => {
+                // Mutex was poisoned (another thread panicked while holding it)
+                // Recover the data and continue - schedules are non-critical for startup
+                error!("Config mutex was poisoned, recovering: {}", poisoned);
+                let cfg = poisoned.into_inner();
+                cfg.schedules
+                    .as_ref()
+                    .map(|s| !s.backups.is_empty() || !s.retention.is_empty())
+                    .unwrap_or(false)
+            }
+        }
+    };
+
+    // Create scheduler event channel
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<SchedulerEvent>(100);
+
+    // Spawn scheduler event handler (track handle for clean shutdown)
+    let event_handler = tokio::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                SchedulerEvent::TaskStarted {
+                    schedule_id,
+                    schedule_type,
+                    started_at,
+                } => {
+                    info!(
+                        "[Scheduler] Task started: {} ({}) at {}",
+                        schedule_id, schedule_type, started_at
+                    );
+                }
+                SchedulerEvent::TaskCompleted(result) => {
+                    if result.success {
+                        info!(
+                            "[Scheduler] Task completed: {} ({}) - {}",
+                            result.schedule_id,
+                            result.schedule_type,
+                            result.message.as_deref().unwrap_or("success")
+                        );
+                        if let Some(backup_id) = result.backup_id {
+                            info!("[Scheduler] Backup ID: {}", backup_id);
+                        }
+                    } else {
+                        error!(
+                            "[Scheduler] Task failed: {} ({}) - {}",
+                            result.schedule_id,
+                            result.schedule_type,
+                            result.message.as_deref().unwrap_or("unknown error")
+                        );
+                    }
+                }
+                SchedulerEvent::Error {
+                    schedule_id,
+                    message,
+                } => {
+                    error!(
+                        "[Scheduler] Error{}: {}",
+                        schedule_id
+                            .map(|id| format!(" ({})", id))
+                            .unwrap_or_default(),
+                        message
+                    );
+                }
+            }
+        }
+    });
+
+    // Spawn scheduler if schedules are configured
+    let scheduler_handle = if has_schedules {
+        info!("Schedules configured, starting scheduler...");
+        let scheduler_config = config_for_scheduler.clone();
+        let scheduler_options = SchedulerOptions::default();
+
+        Some(tokio::spawn(async move {
+            if let Err(e) =
+                crate::scheduler::run_scheduler(scheduler_config, scheduler_options, Some(event_tx))
+                    .await
+            {
+                error!("[Scheduler] Scheduler error: {}", e);
+            }
+        }))
+    } else {
+        info!("No schedules configured, scheduler not started");
+        drop(event_tx); // Allow event handler task to exit
+        None
+    };
+
     // Run the daemon until a signal is received
     let result = daemon.start().await;
 
     if let Err(ref e) = result {
         error!("Daemon error: {e}");
     }
+
+    // Abort scheduler if running and wait for clean shutdown
+    if let Some(handle) = scheduler_handle {
+        handle.abort();
+        // Wait for task to fully stop (abort error is expected)
+        let _ = handle.await;
+        info!("Scheduler stopped");
+    }
+
+    // Wait for event handler to finish processing remaining events
+    // The channel will close when scheduler/event_tx is dropped, causing event_handler to exit
+    let _ = event_handler.await;
+    info!("Event handler stopped");
 
     // Perform cleanup
     if let Err(e) = daemon.stop().await {

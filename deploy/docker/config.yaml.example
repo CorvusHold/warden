@@ -1,0 +1,95 @@
+# Warden Configuration Example
+#
+# This file provides default configuration for the Warden agent.
+# Copy and customize for your environment.
+#
+# Environment variables can be referenced using ${VAR_NAME} syntax.
+# Secrets should be provided via environment variables, not hardcoded here.
+
+# Agent configuration
+agent:
+  # Enable/disable the agent (can be toggled via CLI)
+  enabled: true
+  
+  # Log level: trace, debug, info, warn, error
+  log_level: ${WARDEN_LOG_LEVEL:-info}
+
+# Default storage configuration for backups
+# Individual commands can override these settings
+storage_defaults:
+  # Storage provider: s3 or minio
+  provider: ${STORAGE_PROVIDER:-s3}
+  
+  # S3 bucket name
+  bucket: ${STORAGE_BUCKET:-warden-backups}
+  
+  # Key prefix for organizing backups
+  prefix: ${STORAGE_PREFIX:-postgres/}
+  
+  # AWS region (ignored for MinIO)
+  region: ${AWS_REGION:-us-east-1}
+  
+  # Custom endpoint URL (required for MinIO)
+  # For AWS S3, leave empty or set to https://s3.amazonaws.com
+  endpoint: ${AWS_ENDPOINT:-}
+  
+  # Credentials - always use environment variables for secrets
+  # access_key and secret_key are read from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+
+# Default PostgreSQL connection settings
+# Individual commands can override these settings
+postgres_defaults:
+  # Default PostgreSQL user for backups
+  user: ${POSTGRES_USER:-warden_backup}
+  
+  # Default port
+  port: ${POSTGRES_PORT:-5432}
+  
+  # SSL mode: disable, allow, prefer, require, verify-ca, verify-full
+  ssl_mode: ${POSTGRES_SSL_MODE:-prefer}
+  
+  # Default database for connection
+  database: ${POSTGRES_DB:-postgres}
+
+# Backup schedules (optional)
+# Uncomment and configure for automated backups
+# schedules:
+#   default_backup_dir: /var/lib/warden/backups
+#   
+#   storage_profiles:
+#     - name: default
+#       provider: ${STORAGE_PROVIDER:-s3}
+#       bucket: ${STORAGE_BUCKET:-warden-backups}
+#       prefix: postgres/
+#       region: ${AWS_REGION:-us-east-1}
+#       endpoint: ${AWS_ENDPOINT:-}
+#   
+#   backups:
+#     - id: daily-snapshot
+#       name: Daily Snapshot Backup
+#       cron: "0 2 * * *"
+#       target:
+#         host: ${POSTGRES_HOST:-localhost}
+#         port: ${POSTGRES_PORT:-5432}
+#         database: ${POSTGRES_DB:-postgres}
+#         user: ${POSTGRES_USER:-warden_backup}
+#       backup_type: snapshot
+#       storage_profile: default
+#       enabled: true
+#   
+#   retention:
+#     - id: weekly-cleanup
+#       name: Weekly Retention Cleanup
+#       cron: "0 4 * * 0"
+#       storage_profile: default
+#       policy_file: /etc/warden/retention-policy.json
+#       apply: true
+#       enabled: true
+
+# C2/AMQP configuration (optional - for managed deployments)
+# Uncomment if connecting to a control plane
+# c2:
+#   amqp_url: ${AMQP_URL:-}
+#   exchange: warden
+#   reconnect_delay_seconds: 5
+#   heartbeat_interval_seconds: 30

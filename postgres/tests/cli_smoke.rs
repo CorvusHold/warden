@@ -5,7 +5,9 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 fn warden_bin() -> Command {
-    Command::cargo_bin("warden").expect("warden binary should build")
+    let mut cmd = Command::new("cargo");
+    cmd.args(["run", "-q", "-p", "warden", "--"]);
+    cmd
 }
 
 #[test]

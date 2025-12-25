@@ -4,7 +4,7 @@ use crate::manager::PostgresManager;
 use crate::tunnel_keeper::TunnelKeeper;
 use crate::PostgresError;
 use anyhow::{anyhow, Result};
-use log::{error, info};
+use log::{error, info, warn};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -24,7 +24,34 @@ pub async fn restore_full(
     auto_restart: bool,
     ssh: SshOptions,
     storage: StorageOptions,
+    yes: bool,
 ) -> Result<()> {
+    // Safety check: if target directory exists and is not empty, require --yes
+    if target_dir.exists() {
+        let is_empty = match std::fs::read_dir(&target_dir) {
+            Ok(mut entries) => entries.next().is_none(),
+            Err(e) => {
+                return Err(anyhow!(
+                    "Failed to read target directory '{}': {}",
+                    target_dir.display(),
+                    e
+                ))
+            }
+        };
+        if !is_empty && !yes {
+            return Err(anyhow!(
+                "Target directory '{}' is not empty. Use --yes to confirm overwriting existing data.",
+                target_dir.display()
+            ));
+        }
+        if !is_empty {
+            warn!(
+                "Target directory '{}' is not empty. Proceeding with --yes flag.",
+                target_dir.display()
+            );
+        }
+    }
+
     // If restoring from remote storage, download the backup first
     if storage.remote_storage {
         info!("Downloading full backup from remote storage...");

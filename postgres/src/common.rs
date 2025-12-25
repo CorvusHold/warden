@@ -4,6 +4,56 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
+pub fn find_dump_file(
+    backup_path: &std::path::Path,
+    database: Option<&str>,
+) -> anyhow::Result<PathBuf> {
+    if let Some(database) = database {
+        let dump_file = backup_path.join(format!("{}.dump", database));
+        if dump_file.exists() {
+            return Ok(dump_file);
+        }
+    }
+
+    let alt_dump_file = backup_path.join("pg_dump.dump");
+    if alt_dump_file.exists() {
+        return Ok(alt_dump_file);
+    }
+
+    let mut candidates: Vec<(u8, PathBuf)> = Vec::new();
+    for entry in std::fs::read_dir(backup_path)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let rank = match ext {
+            "dump" => Some(0u8),
+            "backup" => Some(1u8),
+            "sql" => Some(2u8),
+            _ => None,
+        };
+
+        if let Some(rank) = rank {
+            candidates.push((rank, path));
+        }
+    }
+
+    candidates.sort_by(|(a_rank, a_path), (b_rank, b_path)| {
+        a_rank
+            .cmp(b_rank)
+            .then_with(|| a_path.to_string_lossy().cmp(&b_path.to_string_lossy()))
+    });
+
+    candidates
+        .into_iter()
+        .next()
+        .map(|(_, p)| p)
+        .ok_or_else(|| anyhow::anyhow!("No dump file found in {:?}", backup_path))
+}
+
 /// Represents a PostgreSQL server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostgresConfig {

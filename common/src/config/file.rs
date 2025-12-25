@@ -5,12 +5,25 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+use crate::config::hold::IntegrationConfig;
+use crate::notifications::NotificationConfig;
+use crate::schedule::ScheduleConfig;
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WardenConfig {
     pub c2_server: String,
     pub c2_auth: C2AuthConfig,
     pub features: FeaturesConfig,
     pub mqtt: Option<MqttConfig>,
+    /// Schedule configuration for automated backup and retention tasks
+    #[serde(default)]
+    pub schedules: Option<ScheduleConfig>,
+    /// Integration configuration for optional control plane connections (HOLD/C2)
+    #[serde(default)]
+    pub integration: IntegrationConfig,
+    /// Notification configuration for alerting operators
+    #[serde(default)]
+    pub notifications: NotificationConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

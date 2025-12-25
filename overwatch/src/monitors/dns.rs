@@ -1,9 +1,9 @@
 use chrono::Utc;
+use hickory_resolver::config::ResolverOpts;
+use hickory_resolver::proto::rr::RecordType;
+use hickory_resolver::Resolver;
 use reqwest::Url;
 use std::time::{Duration, Instant};
-use trust_dns_resolver::config::ResolverOpts;
-use trust_dns_resolver::proto::rr::RecordType;
-use trust_dns_resolver::TokioAsyncResolver;
 
 use crate::error::Error;
 use crate::models::service::{MonitorResult, MonitorType, Service};
@@ -71,8 +71,10 @@ async fn check_dns(service: &Service) -> Result<String, Error> {
     opts.timeout = Duration::from_secs(service.timeout as u64);
 
     // Create the resolver
-    let resolver = TokioAsyncResolver::tokio_from_system_conf()
-        .map_err(|e| Error::DnsResolution(format!("Failed to create resolver: {e}")))?;
+    let resolver = Resolver::builder_tokio()
+        .map_err(|e| Error::DnsResolution(format!("Failed to create resolver: {e}")))?
+        .with_options(opts)
+        .build();
 
     // Perform lookup
     let response = resolver

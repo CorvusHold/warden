@@ -1,0 +1,49 @@
+# Warden Cluster Configuration Example
+#
+# This file describes PostgreSQL cluster topology for HA operations.
+# Copy and customize for your environment.
+#
+# Commands that use this file:
+#   warden postgresql cluster-validate
+#   warden postgresql cluster-show
+#   warden postgresql cluster-nodes
+#   warden postgresql ha-switchover
+#   warden postgresql ha-failover
+#   warden postgresql ha-clone-node
+
+version: "1"
+
+# Cluster definitions
+clusters:
+  - id: "local-dev"
+    name: "Local Development Cluster"
+    environment: "development"
+    labels:
+      team: "platform"
+
+# Node definitions
+nodes:
+  # Single-node setup for development/testing
+  - id: "local-primary"
+    cluster_id: "local-dev"
+    host: "${POSTGRES_HOST:-postgres}"
+    port: ${POSTGRES_PORT:-5432}
+    role: primary
+    labels:
+      instance_type: "docker"
+    connection:
+      user: "${POSTGRES_USER:-warden_backup}"
+      database: "${POSTGRES_DB:-postgres}"
+      ssl_mode: "disable"
+      # Password provided via PGPASSWORD environment variable
+
+# Protection groups - databases to backup together
+protection_groups:
+  - id: "all-databases"
+    name: "All Databases"
+    cluster_id: "local-dev"
+    databases:
+      - "${POSTGRES_DB:-postgres}"
+    preferred_source_role: primary
+    labels:
+      backup_priority: "high"

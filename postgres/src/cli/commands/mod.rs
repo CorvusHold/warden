@@ -1,20 +1,98 @@
 use anyhow::{anyhow, Result};
-use log::{error, info};
-use std::{path::PathBuf, sync::atomic::Ordering};
+use chrono::Utc;
+use log::{error, info, warn};
+use std::collections::HashMap;
+use std::{path::Path, path::PathBuf, sync::atomic::Ordering};
 use uuid::Uuid;
 
 // Import storage module
-use storage::{Metadata, PostgresBackupStorage, StorageProviderType};
+use storage::{
+    BackupMetadata, BackupStatus as StorageBackupStatus, BackupType as StorageBackupType, Metadata,
+    PostgresBackupStorage, StorageProviderType,
+};
 
 use crate::common::PostgresConfig;
 use crate::manager::PostgresManager;
 use crate::tunnel_keeper::TunnelKeeper;
 use crate::PostgresError;
 
+pub mod backups;
+pub mod cluster;
+mod full_restore;
+pub mod ha;
+pub mod migration;
+mod pitr;
 mod restore_full_incremental;
-pub use restore_full_incremental::{restore_full, restore_incremental};
+pub mod retention;
+pub mod schedule;
+pub mod status;
 
-// Helper function to create a storage provider
+pub use cluster::{
+    cluster_nodes, cluster_protection_groups, cluster_show, cluster_validate,
+    format_cluster_overview, format_node_list, format_protection_group_list,
+    format_validation_result, ClusterInfo, ClusterOverview, NodeInfo, NodeList, OutputFormat,
+    ProtectionGroupInfo, ProtectionGroupList, ValidationResult,
+};
+pub use full_restore::full_restore as execute_full_restore;
+pub use full_restore::FullRestoreOptions;
+pub use ha::{execute_ha_clone_node, execute_ha_failover, execute_ha_switchover};
+pub use migration::{
+    discover, format_discovery_result, format_generated_config, format_import_result,
+    generate_config, import_backup, DatabaseInfo, DiscoveryResult, GenerateConfigOptions,
+    GeneratedConfig, ImportBackupOptions, ImportBackupType, ImportResult, ReplicationInfo,
+    SshOptions as MigrationSshOptions, StorageOptions as MigrationStorageOptions,
+};
+pub use pitr::{
+    pitr_list, pitr_plan, pitr_restore, PitrListConfig, PitrPlanConfig, PitrPlanResult,
+    PitrRestoreConfig, PitrStorageOptions,
+};
+pub use restore_full_incremental::{restore_full, restore_incremental};
+pub use retention::{
+    format_retention_plan, retention_apply, retention_init, retention_plan, RetentionOptions,
+    RetentionPlanResult,
+};
+pub use schedule::{schedule_list, schedule_next_runs, schedule_run, schedule_validate};
+pub use status::{
+    execute_backup_status, execute_metrics, execute_pitr_status, execute_status,
+    StatusStorageOptions,
+};
+
+/// Result of a successful snapshot backup operation
+#[derive(Debug, Clone)]
+pub struct SnapshotBackupResult {
+    /// Unique backup identifier (UUID)
+    pub backup_id: String,
+    /// Local path where the backup is stored
+    pub local_path: PathBuf,
+    /// Remote S3 path/key if uploaded to remote storage
+    pub remote_path: Option<String>,
+    /// Database name that was backed up
+    pub database: String,
+    /// Backup start time
+    pub start_time: chrono::DateTime<Utc>,
+    /// Backup end time
+    pub end_time: chrono::DateTime<Utc>,
+    /// Size of the backup in bytes
+    pub size_bytes: u64,
+}
+
+/// Generate a deterministic S3 object key for a backup
+/// Format: {prefix}/{database}/{date}/{backup_id}/
+pub fn generate_backup_s3_key(
+    prefix: Option<&str>,
+    database: &str,
+    backup_id: &str,
+    timestamp: &chrono::DateTime<Utc>,
+) -> String {
+    let date_str = timestamp.format("%Y-%m-%d").to_string();
+    match prefix {
+        Some(p) if !p.is_empty() => {
+            let p = p.trim_end_matches('/');
+            format!("{}/{}/{}/{}", p, database, date_str, backup_id)
+        }
+        _ => format!("{}/{}/{}", database, date_str, backup_id),
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn snapshot_backup(
@@ -27,25 +105,32 @@ pub async fn snapshot_backup(
     backup_dir: PathBuf,
     ssh: SshOptions,
     storage: StorageOptions,
-) -> Result<()> {
-    info!("[CLI] Entering snapshot_backup");
+    labels: HashMap<String, String>,
+) -> Result<SnapshotBackupResult> {
+    let start_time = Utc::now();
+    info!("[snapshot-backup] Starting backup operation");
     info!(
-        "[CLI] Params: host={}, port={}, database={}, user={}, backup_dir={:?}, remote_storage={}",
-        host, port, database, user, backup_dir, storage.remote_storage
+        "[snapshot-backup] Database: {}, Host: {}, Port: {}, Backup dir: {:?}",
+        database, host, port, backup_dir
     );
+
+    // Build PostgresConfig, adjusting for SSH tunnel if needed
+    let effective_host = if ssh.host.is_some() {
+        "localhost".to_string()
+    } else {
+        host.clone()
+    };
+    let effective_port = if ssh.host.is_some() {
+        ssh.local_port.unwrap_or(6969)
+    } else {
+        port
+    };
+
     let config = PostgresConfig {
-        host: if ssh.host.is_some() {
-            "localhost".to_string()
-        } else {
-            host
-        },
-        port: if ssh.host.is_some() {
-            ssh.local_port.unwrap_or(6969)
-        } else {
-            port
-        },
+        host: effective_host,
+        port: effective_port,
         database: database.clone(),
-        user,
+        user: user.clone(),
         password,
         ssl_mode,
         maintenance_db: None,
@@ -57,118 +142,284 @@ pub async fn snapshot_backup(
         ssh_local_port: ssh.local_port,
         ssh_remote_port: ssh.remote_port,
     };
-    let config_clone = config.clone();
+
     // Setup SSH tunnel if needed
     if config.ssh_host.is_some() {
+        info!("[snapshot-backup] Setting up SSH tunnel...");
         let keeper_instance = TunnelKeeper::instance().await;
         let mut keeper = keeper_instance.lock().await;
-        if let Err(e) = keeper.setup(&config_clone).await {
-            error!("[CLI] Failed to setup SSH tunnel: {e}");
-            return Err(anyhow!("Failed to setup SSH tunnel: {}", e));
+        if let Err(e) = keeper.setup(&config).await {
+            error!("[snapshot-backup] Failed to setup SSH tunnel: {e}");
+            return Err(anyhow!("SSH tunnel setup failed: {}", e));
         }
+        info!("[snapshot-backup] SSH tunnel established successfully");
     }
-    let mut manager = PostgresManager::new(config_clone.clone(), backup_dir.clone())?;
-    info!("[CLI] Performing snapshot backup...");
-    let backup_result = manager.snapshot_backup().await;
-    let backup = backup_result.as_ref().map_err(|e| anyhow!(e.to_string()))?;
-    info!("[CLI] Snapshot backup completed: {}", backup.id);
+
+    // Ensure backup directory exists
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| anyhow!("Failed to create backup directory: {}", e))?;
+
+    // Perform the backup
+    info!("[snapshot-backup] Creating backup...");
+    let mut manager = PostgresManager::new(config.clone(), backup_dir.clone())?;
+    let backup = manager
+        .snapshot_backup()
+        .await
+        .map_err(|e| anyhow!("Backup failed: {}", e))?;
+
+    let backup_id = backup.id.to_string();
+    info!("[snapshot-backup] Backup created: {}", backup_id);
+
+    // Find the actual backup directory
+    let actual_backup_path = find_backup_directory(&backup_dir, "snapshot_backup_")?;
+    info!(
+        "[snapshot-backup] Backup directory: {}",
+        actual_backup_path.display()
+    );
+
+    // Calculate backup size
+    let size_bytes = calculate_directory_size(&actual_backup_path)?;
+    info!(
+        "[snapshot-backup] Backup size: {} bytes ({:.2} MB)",
+        size_bytes,
+        size_bytes as f64 / 1024.0 / 1024.0
+    );
+
+    // Prepare result
+    let mut result = SnapshotBackupResult {
+        backup_id: backup_id.clone(),
+        local_path: actual_backup_path.clone(),
+        remote_path: None,
+        database: database.clone(),
+        start_time,
+        end_time: Utc::now(),
+        size_bytes,
+    };
+
+    // Write local metadata file
+    let local_metadata = create_local_metadata(
+        &backup_id,
+        &database,
+        &host,
+        port,
+        start_time,
+        result.end_time,
+        size_bytes,
+        backup.server_version.clone(),
+        &labels,
+    );
+    let metadata_path = actual_backup_path.join("backup_metadata.json");
+    let metadata_json = serde_json::to_string_pretty(&local_metadata)
+        .map_err(|e| anyhow!("Failed to serialize metadata: {}", e))?;
+    std::fs::write(&metadata_path, &metadata_json)
+        .map_err(|e| anyhow!("Failed to write metadata file: {}", e))?;
+    info!(
+        "[snapshot-backup] Metadata written to: {}",
+        metadata_path.display()
+    );
+
+    // Upload to remote storage if configured
     if storage.remote_storage {
-        info!("[CLI] Uploading snapshot backup to remote storage...");
-        let storage_instance = create_storage_provider(&storage).await?;
-        if let Some(storage) = storage_instance {
-            let mut metadata = Metadata::new();
-            metadata.insert("backup_id".to_string(), backup.id.to_string());
-            metadata.insert(
-                "backup_type".to_string(),
-                format!("{:?}", backup.backup_type),
-            );
-            metadata.insert("database".to_string(), database.clone());
-            metadata.insert("start_time".to_string(), backup.start_time.to_string());
-            // Find the actual backup directory (timestamp format)
-            let mut actual_backup_path = PathBuf::new();
-            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir()
-                        && path
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .contains("snapshot_backup_")
-                    {
-                        actual_backup_path = path;
-                        break;
-                    }
-                }
-            }
-            info!(
-                "[CLI] Using backup directory: {}",
-                actual_backup_path.display()
-            );
-            storage
-                .upload_physical_backup(
-                    &backup.id.to_string(),
-                    &actual_backup_path,
-                    Some(metadata.clone()),
-                )
-                .await
-                .map_err(|e| anyhow!("Failed to upload physical backup: {}", e))?;
-            let dump_file = actual_backup_path.join(format!("{database}.dump"));
-            if dump_file.exists() {
+        info!("[snapshot-backup] Uploading to remote storage...");
+        match upload_to_remote_storage(
+            &storage,
+            &backup_id,
+            &database,
+            &actual_backup_path,
+            start_time,
+            &labels,
+            &backup.server_version,
+        )
+        .await
+        {
+            Ok(remote_key) => {
+                result.remote_path = Some(remote_key.clone());
                 info!(
-                    "[CLI] Uploading logical backup from: {}",
-                    dump_file.display()
+                    "[snapshot-backup] Successfully uploaded to remote storage: {}",
+                    remote_key
                 );
-                storage
-                    .upload_logical_backup(
-                        &backup.id.to_string(),
-                        &dump_file,
-                        Some(metadata.clone()),
-                    )
-                    .await
-                    .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
-            } else {
-                info!(
-                    "[CLI] Logical backup file not found at: {}",
-                    dump_file.display()
-                );
-                let alt_dump_file = actual_backup_path.join("pg_dump.dump");
-                if alt_dump_file.exists() {
-                    info!(
-                        "[CLI] Uploading logical backup from alternative location: {}",
-                        alt_dump_file.display()
-                    );
-                    storage
-                        .upload_logical_backup(
-                            &backup.id.to_string(),
-                            &alt_dump_file,
-                            Some(metadata),
-                        )
-                        .await
-                        .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
-                } else {
-                    info!("[CLI] No logical backup file found to upload");
-                }
             }
-            info!("[CLI] Snapshot backup successfully uploaded to remote storage");
+            Err(e) => {
+                // Log error but don't fail the backup - local backup is still valid
+                error!(
+                    "[snapshot-backup] Failed to upload to remote storage: {}. Local backup is still available.",
+                    e
+                );
+                warn!("[snapshot-backup] Backup completed locally but remote upload failed");
+            }
         }
     }
+
     // Close SSH tunnel after all operations
     if config.ssh_host.is_some() {
+        info!("[snapshot-backup] Closing SSH tunnel...");
         let keeper_instance = TunnelKeeper::instance().await;
         let is_active = {
             let keeper = keeper_instance.lock().await;
-            keeper.is_active.load(std::sync::atomic::Ordering::SeqCst)
+            keeper.is_active.load(Ordering::SeqCst)
         };
         if is_active {
             let mut keeper = keeper_instance.lock().await;
             if let Err(e) = keeper.close().await {
-                error!("[CLI] Warning: Error closing SSH tunnel: {e}");
+                warn!("[snapshot-backup] Error closing SSH tunnel: {e}");
+            } else {
+                info!("[snapshot-backup] SSH tunnel closed");
             }
         }
     }
-    info!("[CLI] Exiting snapshot_backup");
-    Ok(())
+
+    info!(
+        "[snapshot-backup] Backup completed successfully. ID: {}, Duration: {}s",
+        result.backup_id,
+        (result.end_time - result.start_time).num_seconds()
+    );
+
+    Ok(result)
+}
+
+/// Find the most recent backup directory matching a prefix
+fn find_backup_directory(backup_dir: &PathBuf, prefix: &str) -> Result<PathBuf> {
+    let entries = std::fs::read_dir(backup_dir)
+        .map_err(|e| anyhow!("Failed to read backup directory: {}", e))?;
+
+    let mut matching_dirs: Vec<_> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir() && e.file_name().to_string_lossy().starts_with(prefix))
+        .collect();
+
+    // Sort by name (which includes timestamp) to get the most recent
+    matching_dirs.sort_by_key(|b| std::cmp::Reverse(b.file_name()));
+
+    matching_dirs
+        .first()
+        .map(|e| e.path())
+        .ok_or_else(|| anyhow!("No backup directory found matching prefix '{}'", prefix))
+}
+
+/// Calculate total size of a directory
+fn calculate_directory_size(path: &PathBuf) -> Result<u64> {
+    let mut total_size = 0u64;
+    for entry in walkdir::WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() {
+            total_size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+        }
+    }
+    Ok(total_size)
+}
+
+/// Create local metadata structure
+#[allow(clippy::too_many_arguments)]
+fn create_local_metadata(
+    backup_id: &str,
+    database: &str,
+    host: &str,
+    port: u16,
+    start_time: chrono::DateTime<Utc>,
+    end_time: chrono::DateTime<Utc>,
+    size_bytes: u64,
+    server_version: String,
+    labels: &HashMap<String, String>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "backup_id": backup_id,
+        "backup_type": "snapshot",
+        "database": database,
+        "host": host,
+        "port": port,
+        "start_time": start_time.to_rfc3339(),
+        "end_time": end_time.to_rfc3339(),
+        "duration_seconds": (end_time - start_time).num_seconds(),
+        "size_bytes": size_bytes,
+        "server_version": server_version,
+        "labels": labels,
+        "created_by": "warden",
+        "version": "1.0"
+    })
+}
+
+/// Upload backup to remote S3-compatible storage
+#[allow(clippy::too_many_arguments)]
+async fn upload_to_remote_storage(
+    storage_opts: &StorageOptions,
+    backup_id: &str,
+    database: &str,
+    backup_path: &PathBuf,
+    timestamp: chrono::DateTime<Utc>,
+    labels: &HashMap<String, String>,
+    server_version: &str,
+) -> Result<String> {
+    let storage = create_storage_provider(storage_opts)
+        .await?
+        .ok_or_else(|| anyhow!("Storage provider not configured"))?;
+
+    // Generate deterministic S3 key
+    let s3_key = generate_backup_s3_key(
+        storage_opts.prefix.as_deref(),
+        database,
+        backup_id,
+        &timestamp,
+    );
+
+    // Build object metadata
+    let mut obj_metadata = Metadata::new();
+    obj_metadata.insert("backup_id".to_string(), backup_id.to_string());
+    obj_metadata.insert("backup_type".to_string(), "snapshot".to_string());
+    obj_metadata.insert("database".to_string(), database.to_string());
+    obj_metadata.insert("timestamp".to_string(), timestamp.to_rfc3339());
+    for (key, value) in labels {
+        obj_metadata.insert(format!("label_{}", key), value.clone());
+    }
+
+    // Find and upload the logical backup file
+    let dump_file = find_dump_file(backup_path, database)?;
+    info!(
+        "[snapshot-backup] Uploading logical backup: {}",
+        dump_file.display()
+    );
+
+    storage
+        .upload_logical_backup(backup_id, &dump_file, Some(obj_metadata.clone()))
+        .await
+        .map_err(|e| anyhow!("Failed to upload logical backup: {}", e))?;
+
+    // Create and upload backup metadata
+    let backup_metadata = BackupMetadata {
+        id: backup_id.to_string(),
+        backup_type: StorageBackupType::Snapshot,
+        status: StorageBackupStatus::Completed,
+        start_time: timestamp,
+        end_time: Some(Utc::now()),
+        base_backup_id: None,
+        wal_start: None,
+        wal_end: None,
+        size_bytes: calculate_directory_size(backup_path)?,
+        server_version: server_version.to_string(),
+        checksum: None,
+        files: vec![],
+        tags: labels.iter().map(|(k, v)| format!("{}={}", k, v)).collect(),
+        pinned: false,
+        encrypted: None, // TODO: Set based on encryption config
+        encryption_algorithm: None,
+    };
+
+    storage
+        .upload_backup_metadata(backup_id, &backup_metadata)
+        .await
+        .map_err(|e| anyhow!("Failed to upload backup metadata: {}", e))?;
+
+    Ok(format!(
+        "s3://{}/{}",
+        storage_opts.bucket.as_deref().unwrap_or("unknown"),
+        s3_key
+    ))
+}
+
+/// Find the dump file in the backup directory
+fn find_dump_file(backup_path: &Path, database: &str) -> Result<PathBuf> {
+    crate::common::find_dump_file(backup_path, Some(database))
 }
 
 #[derive(Clone, Debug, Default)]
@@ -182,6 +433,26 @@ pub struct SshOptions {
     pub remote_port: Option<u16>,
 }
 
+/// Options for multi-tenant storage organization.
+///
+/// These options control the hierarchical key layout in S3/MinIO storage.
+/// When tenant/cluster/protection_group are set, backups are organized as:
+/// `<tenant>/<cluster>/<protection_group>/<database>/<backup_id>/...`
+///
+/// When not set, the legacy flat layout is used:
+/// `<prefix>/<backup_id>/...`
+#[derive(Clone, Debug, Default)]
+pub struct MultiTenantOptions {
+    /// Tenant identifier (organization/project)
+    pub tenant: Option<String>,
+    /// Cluster identifier from cluster.yaml
+    pub cluster: Option<String>,
+    /// Protection group identifier from cluster.yaml
+    pub protection_group: Option<String>,
+    /// Include legacy backups in discovery operations
+    pub include_legacy: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct StorageOptions {
     pub remote_storage: bool,
@@ -192,6 +463,8 @@ pub struct StorageOptions {
     pub endpoint: Option<String>,
     pub access_key: Option<String>,
     pub secret_key: Option<String>,
+    /// Multi-tenant organization options
+    pub multi_tenant: MultiTenantOptions,
 }
 
 async fn create_storage_provider(
@@ -1400,7 +1673,7 @@ pub async fn purge_plan(storage: StorageOptions, format: String) -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&evaluation).unwrap());
         }
         "yaml" => {
-            println!("{}", serde_yaml::to_string(&evaluation).unwrap());
+            println!("{}", serde_yml::to_string(&evaluation).unwrap());
         }
         _ => {
             println!("\n=== Purge Evaluation ===");
@@ -1715,6 +1988,8 @@ pub async fn reconstruct_metadata(
             files,
             tags: vec!["reconstructed".to_string()],
             pinned: false,
+            encrypted: None, // Unknown for reconstructed metadata
+            encryption_algorithm: None,
         };
 
         if dry_run {
@@ -1745,4 +2020,216 @@ pub async fn reconstruct_metadata(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_generate_backup_s3_key_with_prefix() {
+        let timestamp = Utc.with_ymd_and_hms(2025, 12, 6, 14, 30, 0).unwrap();
+        let key = generate_backup_s3_key(Some("postgres/prod"), "mydb", "abc123-uuid", &timestamp);
+        assert_eq!(key, "postgres/prod/mydb/2025-12-06/abc123-uuid");
+    }
+
+    #[test]
+    fn test_generate_backup_s3_key_without_prefix() {
+        let timestamp = Utc.with_ymd_and_hms(2025, 1, 15, 8, 0, 0).unwrap();
+        let key = generate_backup_s3_key(None, "testdb", "backup-id-456", &timestamp);
+        assert_eq!(key, "testdb/2025-01-15/backup-id-456");
+    }
+
+    #[test]
+    fn test_generate_backup_s3_key_with_trailing_slash_prefix() {
+        let timestamp = Utc.with_ymd_and_hms(2025, 6, 1, 12, 0, 0).unwrap();
+        let key = generate_backup_s3_key(Some("backups/"), "database", "id-789", &timestamp);
+        assert_eq!(key, "backups/database/2025-06-01/id-789");
+    }
+
+    #[test]
+    fn test_generate_backup_s3_key_empty_prefix() {
+        let timestamp = Utc.with_ymd_and_hms(2025, 3, 20, 0, 0, 0).unwrap();
+        let key = generate_backup_s3_key(Some(""), "db", "backup", &timestamp);
+        assert_eq!(key, "db/2025-03-20/backup");
+    }
+
+    #[test]
+    fn test_create_local_metadata_structure() {
+        let mut labels = HashMap::new();
+        labels.insert("env".to_string(), "prod".to_string());
+        labels.insert("cluster".to_string(), "primary".to_string());
+
+        let start = Utc.with_ymd_and_hms(2025, 12, 6, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2025, 12, 6, 10, 5, 30).unwrap();
+
+        let metadata = create_local_metadata(
+            "test-backup-id",
+            "mydb",
+            "db.example.com",
+            5432,
+            start,
+            end,
+            1024 * 1024 * 100, // 100 MB
+            "15.2".to_string(),
+            &labels,
+        );
+
+        assert_eq!(metadata["backup_id"], "test-backup-id");
+        assert_eq!(metadata["backup_type"], "snapshot");
+        assert_eq!(metadata["database"], "mydb");
+        assert_eq!(metadata["host"], "db.example.com");
+        assert_eq!(metadata["port"], 5432);
+        assert_eq!(metadata["size_bytes"], 104857600);
+        assert_eq!(metadata["server_version"], "15.2");
+        assert_eq!(metadata["duration_seconds"], 330);
+        assert_eq!(metadata["labels"]["env"], "prod");
+        assert_eq!(metadata["labels"]["cluster"], "primary");
+        assert_eq!(metadata["created_by"], "warden");
+        assert_eq!(metadata["version"], "1.0");
+    }
+
+    #[test]
+    fn test_find_backup_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let backup_dir = temp_dir.path().to_path_buf();
+
+        // Create some test directories
+        std::fs::create_dir(backup_dir.join("snapshot_backup_2025-12-06T10-00-00")).unwrap();
+        std::fs::create_dir(backup_dir.join("snapshot_backup_2025-12-06T11-00-00")).unwrap();
+        std::fs::create_dir(backup_dir.join("full_backup_2025-12-05")).unwrap();
+        std::fs::create_dir(backup_dir.join("other_dir")).unwrap();
+
+        // Should find the most recent snapshot backup
+        let result = find_backup_directory(&backup_dir, "snapshot_backup_").unwrap();
+        assert!(result
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("2025-12-06T11-00-00"));
+
+        // Should find full backup
+        let result = find_backup_directory(&backup_dir, "full_backup_").unwrap();
+        assert!(result
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("full_backup_"));
+
+        // Should fail for non-existent prefix
+        let result = find_backup_directory(&backup_dir, "nonexistent_");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_calculate_directory_size() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path().to_path_buf();
+
+        // Create test files
+        std::fs::write(dir_path.join("file1.txt"), "Hello, World!").unwrap(); // 13 bytes
+        std::fs::write(dir_path.join("file2.txt"), "Test data").unwrap(); // 9 bytes
+        std::fs::create_dir(dir_path.join("subdir")).unwrap();
+        std::fs::write(dir_path.join("subdir/file3.txt"), "Nested file content").unwrap(); // 19 bytes
+
+        let size = calculate_directory_size(&dir_path).unwrap();
+        assert_eq!(size, 13 + 9 + 19);
+    }
+
+    #[test]
+    fn test_find_dump_file_database_specific() {
+        let temp_dir = TempDir::new().unwrap();
+        let backup_path = temp_dir.path().to_path_buf();
+
+        // Create database-specific dump file
+        std::fs::write(backup_path.join("mydb.dump"), "dump content").unwrap();
+
+        let result = find_dump_file(&backup_path, "mydb").unwrap();
+        assert_eq!(result.file_name().unwrap(), "mydb.dump");
+    }
+
+    #[test]
+    fn test_find_dump_file_generic() {
+        let temp_dir = TempDir::new().unwrap();
+        let backup_path = temp_dir.path().to_path_buf();
+
+        // Create generic dump file (no database-specific one)
+        std::fs::write(backup_path.join("pg_dump.dump"), "dump content").unwrap();
+
+        let result = find_dump_file(&backup_path, "mydb").unwrap();
+        assert_eq!(result.file_name().unwrap(), "pg_dump.dump");
+    }
+
+    #[test]
+    fn test_find_dump_file_any_dump() {
+        let temp_dir = TempDir::new().unwrap();
+        let backup_path = temp_dir.path().to_path_buf();
+
+        // Create a dump file with different name
+        std::fs::write(backup_path.join("backup.dump"), "dump content").unwrap();
+
+        let result = find_dump_file(&backup_path, "mydb").unwrap();
+        assert_eq!(result.extension().unwrap(), "dump");
+    }
+
+    #[test]
+    fn test_find_dump_file_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let backup_path = temp_dir.path().to_path_buf();
+
+        // Create non-dump files
+        std::fs::write(backup_path.join("data.txt"), "not a dump").unwrap();
+
+        let result = find_dump_file(&backup_path, "mydb");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No dump file found"));
+    }
+
+    #[test]
+    fn test_ssh_options_default() {
+        let ssh = SshOptions::default();
+        assert!(ssh.host.is_none());
+        assert!(ssh.user.is_none());
+        assert!(ssh.port.is_none());
+        assert!(ssh.password.is_none());
+        assert!(ssh.key_path.is_none());
+        assert!(ssh.local_port.is_none());
+        assert!(ssh.remote_port.is_none());
+    }
+
+    #[test]
+    fn test_storage_options_default() {
+        let storage = StorageOptions::default();
+        assert!(!storage.remote_storage);
+        assert!(storage.provider_type.is_none());
+        assert!(storage.bucket.is_none());
+        assert!(storage.prefix.is_none());
+        assert!(storage.region.is_none());
+        assert!(storage.endpoint.is_none());
+        assert!(storage.access_key.is_none());
+        assert!(storage.secret_key.is_none());
+    }
+
+    #[test]
+    fn test_snapshot_backup_result_structure() {
+        let result = SnapshotBackupResult {
+            backup_id: "test-id".to_string(),
+            local_path: PathBuf::from("/backups/test"),
+            remote_path: Some("s3://bucket/key".to_string()),
+            database: "testdb".to_string(),
+            start_time: Utc::now(),
+            end_time: Utc::now(),
+            size_bytes: 1024,
+        };
+
+        assert_eq!(result.backup_id, "test-id");
+        assert_eq!(result.database, "testdb");
+        assert!(result.remote_path.is_some());
+    }
 }

@@ -1,0 +1,57 @@
+# Warden Metrics Export Service - systemd service unit
+#
+# This service exports Warden metrics in Prometheus format for scraping
+# by node_exporter's textfile collector or similar monitoring systems.
+#
+# Triggered by warden-metrics.timer (default: every 5 minutes)
+#
+# Installation:
+#   sudo cp warden-metrics.service /etc/systemd/system/
+#   sudo cp warden-metrics.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable warden-metrics.timer
+#   sudo systemctl start warden-metrics.timer
+#
+# Output:
+#   Metrics are written to /var/lib/node_exporter/warden.prom
+#   Configure node_exporter with --collector.textfile.directory=/var/lib/node_exporter
+
+[Unit]
+Description=Warden Metrics Export
+Documentation=https://github.com/corvushold/warden
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=warden
+Group=warden
+
+# Environment file for storage credentials
+EnvironmentFile=-/etc/warden/warden.env
+
+# Core environment
+Environment=WARDEN_CONFIG=/etc/warden/config.yaml
+
+# Export metrics to node_exporter textfile directory
+# Adjust paths as needed for your backup directory and WAL archive
+ExecStart=/usr/local/bin/warden postgresql metrics \
+    --backup-dir /var/lib/warden/backups \
+    --output /var/lib/node_exporter/warden.prom \
+    --format prometheus
+
+# Security hardening (same as main service)
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+
+# Allow write to metrics output directory
+ReadWritePaths=/var/lib/node_exporter
+ReadOnlyPaths=/var/lib/warden/backups
+ReadOnlyPaths=/etc/warden
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=warden-metrics

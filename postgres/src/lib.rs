@@ -1,11 +1,21 @@
 pub mod backup;
 pub mod cli;
 pub mod common;
+pub mod datasource;
+pub mod error_codes;
+pub mod ha;
 pub mod manager;
+pub mod pitr;
 pub mod restore;
+pub mod retention;
+pub mod status;
 pub mod tunnel_keeper;
 pub mod user;
 pub mod wrapper;
+
+// Chaos testing module - available for integration tests
+#[cfg(any(test, feature = "chaos-testing"))]
+pub mod chaos;
 
 use ssh::SshError;
 use thiserror::Error;
@@ -70,6 +80,7 @@ pub type Result<T> = std::result::Result<T, PostgresError>;
 pub use common::{
     Backup, BackupCatalog, BackupStatus, BackupType, PostgresConfig, Restore, RestoreStatus,
 };
+pub use datasource::PostgresDataSource;
 pub use manager::PostgresManager;
 
 #[cfg(test)]

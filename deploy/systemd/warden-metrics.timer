@@ -1,0 +1,38 @@
+# Warden Metrics Export Timer - systemd timer unit
+#
+# Triggers warden-metrics.service periodically to export metrics
+# for Prometheus/node_exporter scraping.
+#
+# Default: every 5 minutes
+#
+# Installation:
+#   sudo cp warden-metrics.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable warden-metrics.timer
+#   sudo systemctl start warden-metrics.timer
+#
+# Check timer status:
+#   systemctl list-timers warden-metrics.timer
+
+[Unit]
+Description=Warden Metrics Export Timer
+Documentation=https://github.com/corvushold/warden
+
+[Timer]
+# Run every 5 minutes
+OnCalendar=*:0/5
+
+# Run shortly after boot
+OnBootSec=1min
+
+# Randomize start time slightly to avoid thundering herd
+RandomizedDelaySec=30
+
+# Persist timer across reboots
+Persistent=true
+
+# Accuracy - allow some flexibility for power efficiency
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

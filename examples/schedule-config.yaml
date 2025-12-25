@@ -1,0 +1,112 @@
+# Example Warden Schedule Configuration
+#
+# This file shows how to configure automated backup and retention schedules.
+# Add this to your warden.toml or warden.yaml configuration file.
+
+# Schedule configuration section
+schedules:
+  # Default backup directory for all schedules
+  default_backup_dir: "./backups"
+
+  # Storage profiles define reusable S3/MinIO connection settings
+  storage_profiles:
+    - name: "production-s3"
+      provider: "s3"
+      bucket: "my-backups-prod"
+      prefix: "postgres/"
+      region: "us-east-1"
+      # Use environment variable references for secrets
+      access_key: "env:AWS_ACCESS_KEY_ID"
+      secret_key: "env:AWS_SECRET_ACCESS_KEY"
+
+    - name: "dev-minio"
+      provider: "s3"
+      bucket: "dev-backups"
+      prefix: "postgres/"
+      endpoint: "http://localhost:9000"
+      access_key: "env:MINIO_ACCESS_KEY"
+      secret_key: "env:MINIO_SECRET_KEY"
+
+  # Backup schedules
+  backups:
+    # Daily snapshot backup at 2 AM
+    - id: "daily-snapshot"
+      name: "Daily Snapshot Backup"
+      cron: "0 2 * * *"  # 2:00 AM every day
+      target:
+        host: "localhost"
+        port: 5432
+        database: "myapp"
+        user: "postgres"
+      backup_type: "snapshot"
+      storage_profile: "production-s3"
+      enabled: true
+      labels:
+        environment: "production"
+        team: "platform"
+
+    # Hourly incremental backup during business hours
+    - id: "hourly-incremental"
+      name: "Hourly Incremental Backup"
+      cron: "0 9-17 * * 1-5"  # Every hour 9 AM - 5 PM, Mon-Fri
+      target:
+        host: "localhost"
+        port: 5432
+        database: "myapp"
+        user: "postgres"
+      backup_type: "incremental"
+      storage_profile: "production-s3"
+      enabled: true
+      labels:
+        environment: "production"
+        type: "incremental"
+
+    # Weekly full backup on Sunday at 3 AM
+    - id: "weekly-full"
+      name: "Weekly Full Backup"
+      cron: "0 3 * * 0"  # 3:00 AM every Sunday
+      target:
+        host: "localhost"
+        port: 5432
+        database: "myapp"
+        user: "postgres"
+      backup_type: "full"
+      storage_profile: "production-s3"
+      enabled: true
+      labels:
+        environment: "production"
+        retention: "long-term"
+
+    # Development database backup (disabled by default)
+    - id: "dev-backup"
+      name: "Development Database Backup"
+      cron: "0 6 * * *"  # 6:00 AM every day
+      target:
+        host: "localhost"
+        port: 5432
+        database: "myapp_dev"
+        user: "postgres"
+      backup_type: "snapshot"
+      storage_profile: "dev-minio"
+      enabled: false
+      backup_dir: "./dev-backups"
+
+  # Retention schedules
+  retention:
+    # Daily retention cleanup at 4 AM
+    - id: "daily-retention"
+      name: "Daily Retention Cleanup"
+      cron: "0 4 * * *"  # 4:00 AM every day
+      storage_profile: "production-s3"
+      policy_file: "./retention-policy.json"
+      apply: true  # Actually delete expired backups
+      enabled: true
+
+    # Weekly retention audit (dry-run only)
+    - id: "weekly-audit"
+      name: "Weekly Retention Audit"
+      cron: "0 5 * * 1"  # 5:00 AM every Monday
+      storage_profile: "production-s3"
+      policy_file: "./retention-policy.json"
+      apply: false  # Dry-run only, just log what would be deleted
+      enabled: true

@@ -1,0 +1,91 @@
+# Warden PostgreSQL Data Protection Agent - systemd service unit
+#
+# Installation:
+#   sudo useradd -r -s /bin/false -d /var/lib/warden warden
+#   sudo mkdir -p /var/lib/warden /var/log/warden
+#   sudo chown -R warden:warden /var/lib/warden /var/log/warden
+#   sudo cp warden.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable warden
+#   sudo systemctl start warden
+#
+# Configuration:
+#   - Main config: /etc/warden/config.yaml
+#   - Cluster config: /etc/warden/cluster.yaml (optional)
+#   - Schedules: /etc/warden/schedules.yaml (optional)
+#
+# Environment variables can be set in:
+#   - /etc/warden/warden.env (recommended for secrets)
+#   - Or via systemd drop-in files in /etc/systemd/system/warden.service.d/
+#
+# See README.md in this directory for detailed configuration options.
+
+[Unit]
+Description=Warden PostgreSQL Data Protection Agent
+Documentation=https://github.com/corvushold/warden
+# Remove postgresql.service from After= if PostgreSQL runs remotely
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=warden
+Group=warden
+
+# Working directory for relative paths
+WorkingDirectory=/var/lib/warden
+
+# Main executable - runs daemon in foreground mode
+ExecStart=/usr/local/bin/warden run
+
+# Graceful shutdown
+ExecStop=/bin/kill -SIGTERM $MAINPID
+TimeoutStopSec=30
+
+# Environment file for secrets (AWS keys, DB passwords, etc.)
+EnvironmentFile=-/etc/warden/warden.env
+
+# Core environment variables (can be overridden in warden.env)
+Environment=WARDEN_CONFIG=/etc/warden/config.yaml
+Environment=WARDEN_CLUSTER_CONFIG=/etc/warden/cluster.yaml
+Environment=WARDEN_LOG_LEVEL=info
+# RUST_BACKTRACE disabled by default for security; enable via warden.env for debugging
+# Environment=RUST_BACKTRACE=1
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+
+# Allow write access to specific directories
+ReadWritePaths=/var/lib/warden
+ReadWritePaths=/var/log/warden
+
+# Allow read access to config
+ReadOnlyPaths=/etc/warden
+
+# Logging to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=warden
+
+[Install]
+WantedBy=multi-user.target
