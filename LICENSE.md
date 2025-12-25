@@ -84,6 +84,14 @@ Except for displaying the License Details and identifying us as the origin of
 the Software, you have no right under these Terms and Conditions to use our
 trademarks, trade names, service marks or product names.
 
+### Brand Assets Exclusion
+
+The mascot, logos, icons, and all graphical brand assets located in the
+`/assets/brand/` directory are expressly excluded from this license. These
+assets remain under full copyright protection and are the exclusive
+intellectual property of CorvusHold. See `/TRADEMARK.md` for the complete
+brand and trademark policy.
+
 ## Grant of Future License
 
 We hereby irrevocably grant you an additional license to use the Software under
