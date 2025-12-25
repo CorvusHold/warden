@@ -1,7 +1,7 @@
 //! Notification providers for different channel types.
 
 use async_trait::async_trait;
-use log::{debug, error};
+use log::debug;
 use serde::Serialize;
 use std::time::Duration;
 use thiserror::Error;
