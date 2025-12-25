@@ -1,0 +1,39 @@
+Copyright © 2025 CorvusHold. All Rights Reserved.
+
+PROPRIETARY AND CONFIDENTIAL
+
+The files in this directory contain proprietary brand assets owned exclusively
+by CorvusHold. These assets are NOT covered by the project's open source
+license (FSL-1.1-ALv2) and are subject to full copyright protection.
+
+LIMITED LICENSE FOR FORKS
+
+A limited, non-exclusive, non-transferable license is granted to use these
+assets ONLY within forks of the official Warden repository, subject to the
+following conditions:
+
+YOU MAY:
+- Retain these assets in your fork of the Warden repository
+- Display these assets within the software as originally intended
+- Redistribute these assets as part of an unmodified fork
+
+YOU MAY NOT:
+- Modify, adapt, or create derivative works from these assets
+- Use these assets outside the context of a Warden fork
+- Use these assets in marketing or commercial promotion of your fork
+- Remove or alter any copyright notices
+- Imply endorsement or official affiliation with CorvusHold
+
+ATTRIBUTION REQUIREMENT
+
+If you retain these assets in your fork, you must include the following
+notice in a prominent location (e.g., README or about page):
+
+  "Warden and the Warden mascot are trademarks of CorvusHold.
+   Used with permission under the terms of TRADEMARK.md."
+
+CONTACT
+
+For licensing inquiries: legal@corvushold.com
+
+See /TRADEMARK.md for the complete trademark and brand policy.
