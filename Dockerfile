@@ -66,15 +66,19 @@ ENV APP_USER=warden \
 # Create non-root user with specific UID/GID for consistent permissions
 # Handle cases where the UID/GID may already exist in the base image
 RUN set -eux; \
-    if ! getent group "${APP_GROUP}" >/dev/null; then \
-        groupadd -r -g "${APP_GID}" "${APP_GROUP}"; \
+    # Resolve group: prefer existing group with target GID, else create; fallback to APP_GROUP name
+    EXISTING_GROUP="$(getent group "${APP_GID}" | cut -d: -f1 || true)"; \
+    TARGET_GROUP="${EXISTING_GROUP:-${APP_GROUP}}"; \
+    if ! getent group "${TARGET_GROUP}" >/dev/null; then \
+        groupadd -r -g "${APP_GID}" "${TARGET_GROUP}"; \
     fi; \
-    if ! getent passwd "${APP_USER}" >/dev/null; then \
-        useradd -r -u "${APP_UID}" -g "${APP_GROUP}" -s /sbin/nologin -d /var/lib/warden "${APP_USER}"; \
+    # Resolve user: if exists, update uid/gid; else create
+    if getent passwd "${APP_USER}" >/dev/null; then \
+        usermod -u "${APP_UID}" -g "${TARGET_GROUP}" "${APP_USER}"; \
     else \
-        usermod -u "${APP_UID}" -g "${APP_GROUP}" "${APP_USER}"; \
+        useradd -r -u "${APP_UID}" -g "${TARGET_GROUP}" -s /sbin/nologin -d /var/lib/warden "${APP_USER}"; \
     fi; \
-    mkdir -p /var/lib/warden && chown "${APP_USER}:${APP_GROUP}" /var/lib/warden
+    mkdir -p /var/lib/warden && chown "${APP_USER}:${TARGET_GROUP}" /var/lib/warden
 
 # Create directory structure with proper permissions
 # /etc/warden       - Configuration files (read-only at runtime)
