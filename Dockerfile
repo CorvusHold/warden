@@ -5,6 +5,27 @@
 # Run:   docker run -v /path/to/config:/etc/warden warden:latest
 
 # =============================================================================
+# Stage 0: Build Rust binary
+# =============================================================================
+FROM rust:1.82-bookworm AS builder
+
+WORKDIR /usr/src/warden
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        pkg-config \
+        libssl-dev \
+        clang \
+        cmake \
+        make && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy sources (context trimmed by .dockerignore) and build release binary
+COPY . .
+RUN cargo fetch --locked && \
+    cargo build --locked --release -p warden
+
+# =============================================================================
 # Stage 1: Base image with PostgreSQL client tools
 # =============================================================================
 FROM ubuntu:24.04 AS base
@@ -72,11 +93,20 @@ RUN set -eux; \
     if ! getent group "${TARGET_GROUP}" >/dev/null; then \
         groupadd -r -g "${APP_GID}" "${TARGET_GROUP}"; \
     fi; \
-    # Resolve user: if exists, update uid/gid; else create
+    # Resolve user: prefer requested UID; if UID is taken by another user, create without forcing UID
+    UID_TAKEN_BY="$(getent passwd "${APP_UID}" | cut -d: -f1 || true)"; \
     if getent passwd "${APP_USER}" >/dev/null; then \
-        usermod -u "${APP_UID}" -g "${TARGET_GROUP}" "${APP_USER}"; \
+        if [ -z "${UID_TAKEN_BY}" ] || [ "${UID_TAKEN_BY}" = "${APP_USER}" ]; then \
+            usermod -u "${APP_UID}" -g "${TARGET_GROUP}" "${APP_USER}"; \
+        else \
+            usermod -g "${TARGET_GROUP}" "${APP_USER}"; \
+        fi; \
     else \
-        useradd -r -u "${APP_UID}" -g "${TARGET_GROUP}" -s /sbin/nologin -d /var/lib/warden "${APP_USER}"; \
+        if [ -z "${UID_TAKEN_BY}" ]; then \
+            useradd -r -u "${APP_UID}" -g "${TARGET_GROUP}" -s /sbin/nologin -d /var/lib/warden "${APP_USER}"; \
+        else \
+            useradd -r -g "${TARGET_GROUP}" -s /sbin/nologin -d /var/lib/warden "${APP_USER}"; \
+        fi; \
     fi; \
     mkdir -p /var/lib/warden && chown "${APP_USER}:${TARGET_GROUP}" /var/lib/warden
 
@@ -85,19 +115,22 @@ RUN set -eux; \
 # /var/lib/warden   - Working directory and local backups
 # /var/lib/node_exporter - Metrics output for Prometheus
 # /tmp/warden       - Temporary files with proper cleanup
-RUN mkdir -p \
+RUN set -eux; \
+    EXISTING_GROUP="$(getent group "${APP_GID}" | cut -d: -f1 || true)"; \
+    TARGET_GROUP="${EXISTING_GROUP:-${APP_GROUP}}"; \
+    mkdir -p \
         /etc/warden \
         /var/lib/warden/backups \
         /var/lib/warden/wal \
         /var/lib/warden/logs \
         /var/lib/node_exporter \
-        /tmp/warden && \
-    chown -R ${APP_USER}:${APP_GROUP} \
+        /tmp/warden; \
+    chown -R "${APP_USER}:${TARGET_GROUP}" \
         /var/lib/warden \
         /var/lib/node_exporter \
-        /tmp/warden && \
-    chmod 755 /etc/warden && \
-    chmod 750 /var/lib/warden /var/lib/warden/backups /var/lib/warden/wal /var/lib/warden/logs && \
+        /tmp/warden; \
+    chmod 755 /etc/warden; \
+    chmod 750 /var/lib/warden /var/lib/warden/backups /var/lib/warden/wal /var/lib/warden/logs; \
     chmod 1777 /tmp/warden
 
 # Copy default configuration files
@@ -106,8 +139,8 @@ COPY --chown=root:${APP_GROUP} deploy/docker/config.yaml.example /etc/warden/con
 COPY --chown=root:${APP_GROUP} deploy/docker/cluster.yaml.example /etc/warden/cluster.yaml
 RUN chmod 640 /etc/warden/*.yaml
 
-# Copy the warden binary and verify it's executable
-COPY --chown=root:root warden /usr/local/bin/warden
+# Copy the warden binary from builder and verify it's executable
+COPY --from=builder --chown=root:root /usr/src/warden/target/release/warden /usr/local/bin/warden
 RUN chmod 755 /usr/local/bin/warden && \
     # Verify binary is functional and not corrupted
     /usr/local/bin/warden --version

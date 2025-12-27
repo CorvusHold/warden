@@ -1,0 +1,42 @@
+# Build artifacts and dependencies
+target/
+Cargo.lock
+
+# Git and version control
+.git/
+.gitignore
+.github/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.code-workspace
+
+# Documentation and examples
+docs/
+examples/
+*.md
+!README.md
+
+# Docker and deployment files (not needed in image)
+docker-compose.yml
+docker-compose.yaml
+.dockerignore
+
+# CI/CD and build scripts
+.gitlab-ci.yml
+.github/workflows/
+Makefile
+build.sh
+
+# Testing and coverage
+coverage/
+.coverage
+*.profdata
+
+# Node modules (if any)
+node_modules/
