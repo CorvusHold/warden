@@ -7,7 +7,7 @@
 # =============================================================================
 # Stage 0: Build Rust binary
 # =============================================================================
-FROM rust:1.82-bookworm AS builder
+FROM rust:bookworm AS builder
 
 WORKDIR /usr/src/warden
 
@@ -22,8 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy sources (context trimmed by .dockerignore) and build release binary
 COPY . .
-RUN cargo fetch --locked && \
-    cargo build --locked --release -p warden
+RUN cargo build --release -p warden
 
 # =============================================================================
 # Stage 1: Base image with PostgreSQL client tools
