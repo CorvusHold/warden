@@ -259,6 +259,17 @@ impl PostgresBackupStorage {
             let file_path = file.path();
             if file_path.is_file() {
                 let file_name = file.file_name().to_string_lossy().to_string();
+
+                // Skip .dump files - they are uploaded separately via upload_logical_backup()
+                // to avoid storing duplicate data under different names
+                if file_name.ends_with(".dump") {
+                    info!(
+                        "Skipping {} (will be uploaded via upload_logical_backup)",
+                        file_name
+                    );
+                    continue;
+                }
+
                 info!("Uploading file: {} ({})", file_name, file_path.display());
                 match self
                     .upload_backup_stream(backup_id, &file_name, &file_path, metadata.clone())
