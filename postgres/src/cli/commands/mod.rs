@@ -1,8 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::{path::Path, path::PathBuf, sync::atomic::Ordering};
+use tempfile::TempDir;
 use uuid::Uuid;
 
 // Import storage module
@@ -74,6 +75,22 @@ pub struct SnapshotBackupResult {
     pub end_time: chrono::DateTime<Utc>,
     /// Size of the backup in bytes
     pub size_bytes: u64,
+}
+
+/// Resolve the working backup directory.
+///
+/// When remote storage is enabled, we create a temporary working directory
+/// in the system temp area to avoid using the local ./backups path.
+fn resolve_backup_dir(
+    backup_dir: PathBuf,
+    remote_storage: bool,
+) -> Result<(PathBuf, Option<TempDir>)> {
+    if remote_storage {
+        let temp = tempfile::tempdir().context("Failed to create temporary backup directory")?;
+        Ok((temp.path().to_path_buf(), Some(temp)))
+    } else {
+        Ok((backup_dir, None))
+    }
 }
 
 /// Generate a deterministic S3 object key for a backup
@@ -155,13 +172,16 @@ pub async fn snapshot_backup(
         info!("[snapshot-backup] SSH tunnel established successfully");
     }
 
+    // Resolve working backup directory (use temp dir when remote storage is enabled)
+    let (working_backup_dir, _temp_guard) = resolve_backup_dir(backup_dir.clone(), storage.remote_storage)?;
+
     // Ensure backup directory exists
-    std::fs::create_dir_all(&backup_dir)
+    std::fs::create_dir_all(&working_backup_dir)
         .map_err(|e| anyhow!("Failed to create backup directory: {}", e))?;
 
     // Perform the backup
     info!("[snapshot-backup] Creating backup...");
-    let mut manager = PostgresManager::new(config.clone(), backup_dir.clone())?;
+    let mut manager = PostgresManager::new(config.clone(), working_backup_dir.clone())?;
     let backup = manager
         .snapshot_backup()
         .await
@@ -171,7 +191,7 @@ pub async fn snapshot_backup(
     info!("[snapshot-backup] Backup created: {}", backup_id);
 
     // Find the actual backup directory
-    let actual_backup_path = find_backup_directory(&backup_dir, "snapshot_backup_")?;
+    let actual_backup_path = find_backup_directory(&working_backup_dir, "snapshot_backup_")?;
     info!(
         "[snapshot-backup] Backup directory: {}",
         actual_backup_path.display()
@@ -553,7 +573,8 @@ pub async fn full_backup(
             return Err(anyhow!("Failed to setup SSH tunnel: {}", e));
         }
     }
-    let mut manager = PostgresManager::new(config_clone.clone(), backup_dir.clone())?;
+    let (working_backup_dir, _temp_guard) = resolve_backup_dir(backup_dir.clone(), storage.remote_storage)?;
+    let mut manager = PostgresManager::new(config_clone.clone(), working_backup_dir.clone())?;
     log::info!("Performing full backup...");
     let backup_result = manager.full_backup().await;
     let backup = backup_result.as_ref().map_err(|e| anyhow!(e.to_string()))?;
@@ -572,7 +593,7 @@ pub async fn full_backup(
             metadata.insert("start_time".to_string(), backup.start_time.to_string());
             // Find the actual backup directory (timestamp format)
             let mut actual_backup_path = PathBuf::new();
-            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+            if let Ok(entries) = std::fs::read_dir(&working_backup_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.is_dir()
@@ -692,7 +713,8 @@ pub async fn incremental_backup(
             return Err(anyhow!("Failed to setup SSH tunnel: {}", e));
         }
     }
-    let mut manager = PostgresManager::new(config_clone.clone(), backup_dir.clone())?;
+    let (working_backup_dir, _temp_guard) = resolve_backup_dir(backup_dir.clone(), storage.remote_storage)?;
+    let mut manager = PostgresManager::new(config_clone.clone(), working_backup_dir.clone())?;
     info!("Performing incremental backup...");
     let backup_result = manager.incremental_backup().await;
     let backup = backup_result.as_ref().map_err(|e| anyhow!(e.to_string()))?;
@@ -711,7 +733,7 @@ pub async fn incremental_backup(
             metadata.insert("start_time".to_string(), backup.start_time.to_string());
             // Find the actual backup directory (timestamp format)
             let mut actual_backup_path = PathBuf::new();
-            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+            if let Ok(entries) = std::fs::read_dir(&working_backup_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.is_dir()
