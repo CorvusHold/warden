@@ -1,7 +1,7 @@
 [package]
 name = "warden"
 description = "warden"
-version = "0.3.2-beta.6"
+version = "0.3.2-beta.7"
 edition = "2021"
 
 
