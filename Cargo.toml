@@ -1,6 +1,6 @@
 [package]
 name = "warden"
-description = "The worker daemon for Corvus"
+description = "warden"
 version = "0.3.2-beta.6"
 edition = "2021"
 
@@ -11,7 +11,7 @@ opt-level = "z"
 codegen-units = 1
 
 [workspace]
-members = ["common", "console", "daemon", "overwatch", "postgres", "ssh", "storage", "db_faker"]
+members = ["common", "console", "postgres", "ssh", "storage", "db_faker"]
 
 [dependencies]
 anyhow = "1.0.98"
@@ -24,14 +24,12 @@ log = "0.4.27"
 sentry = "0.41.0"
 sentry-log = "0.41.0"
 console = { path = "./console" }
-daemon = { path = "./daemon" }
 postgres = { path = "./postgres" }
 ssh = { path = "./ssh" }
 common = { path = "./common" }
 uuid = { version = "1.17.0", features = ["v4", "serde"] }
 chrono = { version = "0.4.41", features = ["serde"] }
 storage = { path = "./storage" }
-overwatch = { path = "./overwatch" }
 
 [dev-dependencies]
 assert_cmd = "2.0.17"

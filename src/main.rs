@@ -75,28 +75,6 @@ enum Commands {
         command: SshCommands,
     },
 
-    /// Start the warden daemon in the background
-    ///
-    /// Starts the daemon process which handles scheduled backups,
-    /// retention policies, and C2 communication.
-    Start,
-
-    /// Stop the warden daemon
-    ///
-    /// Gracefully stops the running daemon process.
-    Stop,
-
-    /// Restart the warden daemon
-    ///
-    /// Stops and then starts the daemon process.
-    Restart,
-
-    /// Run the warden daemon in the foreground
-    ///
-    /// Runs the daemon in the current terminal session.
-    /// Useful for debugging or running in containers.
-    Run,
-
     /// Generate shell completion scripts
     ///
     /// Outputs completion scripts for various shells.
@@ -2097,25 +2075,6 @@ async fn main() -> Result<()> {
             command: SshCommands::Forward { cmd },
         } => {
             ssh::cli::forward::forward(cmd).await?;
-        }
-        Commands::Run => {
-            log::info!("Running warden daemon in the foreground...");
-            daemon::cli::run::execute().await?;
-        }
-        Commands::Start => {
-            log::info!("Starting daemonization process...");
-            daemon::cli::start::execute().await?;
-        }
-        Commands::Stop => {
-            log::info!("Stopping warden daemon...");
-            daemon::cli::stop::execute().await?;
-        }
-        Commands::Restart => {
-            log::info!("Restarting warden daemon...");
-            // First stop the daemon
-            daemon::cli::stop::execute().await?;
-            // Then start it again
-            daemon::cli::start::execute().await?;
         }
         Commands::Completions { shell, install } => {
             let shell: Shell = shell.into();
